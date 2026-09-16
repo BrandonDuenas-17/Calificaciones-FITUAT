@@ -23,6 +23,7 @@
       </div>
 
       <div class="header-actions">
+        <div id="cloudStatusContainer"></div>
         <div id="teacherProfileContainer"></div>
         <button id="themeToggleBtn" class="header-btn-ghost" onclick="App.toggleTheme()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
@@ -230,9 +231,12 @@
   <!-- Contenedor de Notificaciones Toast -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- Scripts -->
+  <!-- Firebase SDKs (Compat v10 para navegador) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+  <script src="firebase_service.js"></script>
   <script src="sample_data.js"></script>
-  <script src="exporter.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="exporter.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

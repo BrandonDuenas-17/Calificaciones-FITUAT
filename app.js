@@ -16,11 +16,91 @@ const App = {
     return this.currentUser && this.currentUser.role === 'admin';
   },
 
-  init: function() {
-    this.loadData();
+  init: async function() {
     this.initTheme();
     this.setupEventListeners();
+    this.loadData();
     this.render();
+
+    // Inicializar sincronización en la nube con Firebase Firestore
+    if (typeof FirebaseService !== "undefined") {
+      await FirebaseService.init();
+      this.updateCloudStatusBadge();
+      await this.syncWithFirebase();
+    }
+  },
+
+  syncWithFirebase: async function() {
+    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) return;
+
+    try {
+      const cloudTeachers = await FirebaseService.fetchTeachers();
+      if (cloudTeachers === null) {
+        // Modo sin conexión o error de red
+        return;
+      }
+
+      if (cloudTeachers.length === 0) {
+        // Firestore está vacío: sembrar con datos locales iniciales
+        console.log("Sincronizando datos locales hacia Firestore por primera vez...");
+        await FirebaseService.seedInitialDataIfEmpty(this.teachers);
+      } else {
+        // Hay datos en Firestore: actualizar estado local con la nube
+        this.teachers = cloudTeachers;
+        this.saveTeachers();
+
+        // Re-enlazar usuario actual si está activo
+        if (this.currentUser) {
+          const fresh = this.teachers.find(t => t.id === this.currentUser.id);
+          if (fresh) {
+            this.currentUser = fresh;
+            if (this.currentUser.data) this.data = this.currentUser.data;
+          }
+        }
+        this.render();
+      }
+      this.updateCloudStatusBadge();
+    } catch (e) {
+      console.warn("Error en sincronización con Firebase:", e);
+    }
+  },
+
+  updateCloudStatusBadge: function() {
+    const container = document.getElementById("cloudStatusContainer");
+    if (!container) return;
+
+    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) {
+      container.innerHTML = `
+        <div class="cloud-status-badge offline" title="Operando en modo local (sin conexión a Firestore)">
+          <span class="cloud-status-dot"></span>
+          <span>Modo Local</span>
+        </div>
+      `;
+      return;
+    }
+
+    if (FirebaseService.status === "connected") {
+      container.innerHTML = `
+        <div class="cloud-status-badge connected" title="Conectado a Firebase Firestore en tiempo real">
+          <span class="cloud-status-dot"></span>
+          <span>Nube Sincronizada</span>
+        </div>
+      `;
+    } else if (FirebaseService.status === "offline") {
+      container.innerHTML = `
+        <div class="cloud-status-badge offline" title="Sin conexión a internet. Los cambios se guardan localmente y se sincronizarán al volver a conectar.">
+          <span class="cloud-status-dot"></span>
+          <span>Sin Conexión</span>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="cloud-status-badge connecting" title="Conectando con Firestore...">
+          <span class="cloud-status-dot"></span>
+          <span>Conectando...</span>
+        </div>
+      `;
+    }
   },
 
   // Carga de catálogo de profesores y datos del docente activo
@@ -99,6 +179,9 @@ const App = {
     if (this.currentUser) {
       this.currentUser.data = this.data;
       this.saveTeachers();
+      if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
+        FirebaseService.saveTeacher(this.currentUser);
+      }
     }
   },
 
@@ -295,6 +378,7 @@ const App = {
   render: function() {
     this.renderTeacherProfile();
     this.renderSupervisionBanner();
+    this.updateCloudStatusBadge();
     const nav = document.getElementById("navTabs");
     const container = document.getElementById("tabContentContainer");
     if (!container) return;
@@ -1861,6 +1945,9 @@ const App = {
 
     this.teachers.push(newTeacher);
     this.saveTeachers();
+    if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
+      FirebaseService.saveTeacher(newTeacher);
+    }
     this.quickLogin(newTeacher.id);
     this.showToast(`¡Bienvenido, ${nombre}! Tu espacio docente ha sido creado.`);
   },
@@ -1907,6 +1994,9 @@ const App = {
   },
 
   logout: function() {
+    if (typeof FirebaseService !== "undefined") {
+      FirebaseService.stopListening();
+    }
     this.currentUser = null;
     this.isSupervising = false;
     this.supervisingTeacherId = null;
@@ -1935,9 +2025,28 @@ const App = {
     this.activeTab = "gradebook";
     this.render();
     this.showToast(`Modo Supervisión: Auditando a ${teacher.nombre}`);
+
+    // Suscripción en tiempo real a Firestore para ver las notas del profesor en vivo
+    if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
+      FirebaseService.listenToTeacher(teacherId, (updated) => {
+        if (this.isSupervising && this.supervisingTeacherId === teacherId) {
+          const idx = this.teachers.findIndex(t => t.id === teacherId);
+          if (idx !== -1) this.teachers[idx] = updated;
+          this.data = updated.data;
+          this.saveTeachers();
+          if (this.activeTab === "gradebook") {
+            const container = document.getElementById("tabContentContainer");
+            if (container) this.renderGradebook(container);
+          }
+        }
+      });
+    }
   },
 
   exitSupervision: function() {
+    if (typeof FirebaseService !== "undefined") {
+      FirebaseService.stopListening();
+    }
     this.isSupervising = false;
     this.supervisingTeacherId = null;
     this.data = this.currentUser.data || null;
@@ -2240,6 +2349,9 @@ const App = {
 
     this.teachers.push(newTeacher);
     this.saveTeachers();
+    if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
+      FirebaseService.saveTeacher(newTeacher);
+    }
     this.closeRegisterTeacherModal();
     this.quickLogin(newTeacher.id);
     this.showToast(`Profesor ${nombre} registrado con éxito.`);
