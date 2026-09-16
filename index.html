@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Calificaciones • Facultad de Ingeniería Tampico (FIUAT - UAT)</title>
+  <meta name="description" content="Plataforma docente oficial de la Facultad de Ingeniería Tampico (UAT) para evaluación de Álgebra Lineal y Cálculo Integral.">
+  <link rel="stylesheet" href="styles.css">
+  <!-- SheetJS para generación de archivos Excel (.xlsx) nativos -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <!-- Barra Superior Institucional FIT - UAT -->
+  <header class="notion-header">
+    <div class="notion-topbar">
+      <div class="workspace-badge">
+        <div class="workspace-icon">FI</div>
+        <div>
+          <span class="workspace-title-main">Facultad de Ingeniería Tampico</span>
+          <span class="workspace-title-sub">Universidad Autónoma de Tamaulipas • Control Docente</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div id="teacherProfileContainer"></div>
+        <button id="themeToggleBtn" class="header-btn-ghost" onclick="App.toggleTheme()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          Modo Oscuro
+        </button>
+      </div>
+    </div>
+
+    <!-- Pestañas de Navegación -->
+    <nav class="nav-tabs" id="navTabs">
+      <!-- Generado dinámicamente por app.js -->
+    </nav>
+  </header>
+
+  <!-- Banner Flotante de Modo Supervisión (Admin) -->
+  <div id="supervisionBannerContainer"></div>
+
+  <!-- Contenedor de Contenido Principal -->
+  <main class="main-content" id="tabContentContainer">
+    <!-- El contenido de las pestañas se renderiza aquí reactivamente -->
+  </main>
+
+  <!-- Modal de Importación Masiva desde Excel / Teams -->
+  <div class="modal-backdrop" id="bulkImportModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📋 Pegar Lista de Alumnos desde Excel</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeBulkImportModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+          Copia las dos columnas (<b>Matrícula</b> y <b>Nombre Completo</b>) directamente desde tu archivo de Excel o lista oficial de Teams y pégalas aquí.
+        </p>
+        <div class="form-group">
+          <label>Datos copiados (Matrícula [TAB] Nombre Completo):</label>
+          <textarea id="bulkImportTextarea" class="form-control" rows="8" placeholder="2171275010	HERNANDEZ GUTIERREZ ALAN
+2183207005	CASTILLO LUCAS YULISSA
+2183228140	TORRES PEGO NICOLAS"></textarea>
+        </div>
+        <p style="font-size: 12px; color: var(--text-tertiary);">
+          Nota: Los alumnos se registrarán automáticamente en el <b>Directorio Maestro</b> y quedarán inscritos en la materia actual con sus relaciones Rollup activas.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="App.closeBulkImportModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.processBulkImport()">Importar Alumnos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Nueva Materia / Grupo -->
+  <div class="modal-backdrop" id="newCourseModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>➕ Crear Nueva Materia / Grupo</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeNewCourseModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+          Crea una lista independiente para calificar una materia o un grupo adicional.
+        </p>
+        <div class="form-group">
+          <label>Nombre de la Materia:</label>
+          <input type="text" id="newCourseNombre" class="form-control" list="materiasFrecuentes" placeholder="Ej. Álgebra Lineal" />
+          <datalist id="materiasFrecuentes">
+            <option value="Álgebra Lineal">
+            <option value="Cálculo Integral">
+            <option value="Cálculo Diferencial">
+            <option value="Cálculo Vectorial">
+            <option value="Ecuaciones Diferenciales">
+            <option value="Métodos Numéricos">
+            <option value="Física General">
+            <option value="Probabilidad y Estadística">
+          </datalist>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label>Grupo:</label>
+            <input type="text" id="newCourseGrupo" class="form-control" placeholder="Ej. Grupo A, Grupo B, 1A" value="Grupo A" />
+          </div>
+          <div class="form-group">
+            <label>Periodo Escolar:</label>
+            <input type="text" id="newCoursePeriodo" class="form-control" placeholder="Ej. 2026-1" value="2026-1" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Número de Unidades a Evaluar:</label>
+          <input type="number" id="newCourseUnidades" class="form-control" min="1" max="10" value="5" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="App.closeNewCourseModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.submitCreateCourse()">Crear Lista</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Administración de Lista / Grupo Actual -->
+  <div class="modal-backdrop" id="manageCourseModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⚙️ Ajustes de la Lista Actual</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeManageCourseModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre de la Materia:</label>
+          <input type="text" id="editCourseNombre" class="form-control" />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label>Grupo:</label>
+            <input type="text" id="editCourseGrupo" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Periodo Escolar:</label>
+            <input type="text" id="editCoursePeriodo" class="form-control" />
+          </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 18px 0;" />
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <label style="font-size: 12.5px; font-weight: 600; color: var(--text-secondary);">Acciones Rápidas:</label>
+          <button class="btn btn-default" style="justify-content: flex-start;" onclick="App.duplicateCurrentCourse()">
+            📋 Duplicar estructura para otro Grupo (Mismos topes de firmas)
+          </button>
+          <button class="btn btn-default" style="justify-content: flex-start; color: var(--fiuat-red);" onclick="App.deleteCurrentCourse()">
+            🗑️ Eliminar esta Lista / Grupo
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="App.closeManageCourseModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.submitEditCourse()">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para Cambiar de Profesor -->
+  <div class="modal-backdrop" id="switchTeacherModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>👥 Cambiar de Profesor / Espacio Docente</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSwitchTeacherModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+          Selecciona la cuenta del docente al que deseas cambiarte. Cada profesor tiene sus materias y alumnos totalmente separados.
+        </p>
+        <div id="switchTeacherList" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Generado dinámicamente -->
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button class="btn btn-default" onclick="App.openRegisterTeacherModal()">
+          + Registrar Nuevo Docente
+        </button>
+        <button class="btn btn-default" onclick="App.closeSwitchTeacherModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para Registrar Nuevo Docente -->
+  <div class="modal-backdrop" id="registerTeacherModal">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>👨‍🏫 Alta de Nuevo Profesor</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeRegisterTeacherModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+          Registra un nuevo profesor con su propia base de datos limpia para capturar calificaciones.
+        </p>
+        <div class="form-group">
+          <label>Nombre Completo con Título:</label>
+          <input type="text" id="regTeacherNombre" class="form-control" placeholder="Ej. Ing. Carlos Pérez Rivera" />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label>Usuario:</label>
+            <input type="text" id="regTeacherUsuario" class="form-control" placeholder="Ej. cperez" />
+          </div>
+          <div class="form-group">
+            <label>Contraseña:</label>
+            <input type="password" id="regTeacherPassword" class="form-control" placeholder="Contraseña de acceso" value="123" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Correo Institucional:</label>
+          <input type="email" id="regTeacherCorreo" class="form-control" placeholder="Ej. cperez@docentes.uat.edu.mx" />
+        </div>
+        <div class="form-group">
+          <label>Departamento / Academia:</label>
+          <input type="text" id="regTeacherDepto" class="form-control" placeholder="Ej. Ciencias Básicas / Sistemas / Mecatrónica" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="App.closeRegisterTeacherModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.submitRegisterTeacher()">Registrar y Entrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contenedor de Notificaciones Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="sample_data.js"></script>
+  <script src="exporter.js?v=3"></script>
+  <script src="app.js?v=3"></script>
+</body>
+</html>

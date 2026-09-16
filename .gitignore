@@ -1,0 +1,14 @@
+# Archivos de entorno y configuración de IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Archivos temporales de Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs
+*.log
