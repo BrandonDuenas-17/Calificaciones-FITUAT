@@ -35,16 +35,12 @@ const FirebaseService = {
 
       this.db = firebase.firestore();
 
-      // Habilitar persistencia offline en el navegador
+      // Habilitar persistencia offline en el navegador (sin bloqueo de pestañas)
       try {
-        await this.db.enablePersistence({ synchronizeTabs: true });
+        await this.db.enablePersistence();
         console.log("Persistencia offline de Firestore activada.");
       } catch (err) {
-        if (err.code === "failed-precondition") {
-          console.warn("Persistencia falló: múltiples pestañas abiertas simultáneamente.");
-        } else if (err.code === "unimplemented") {
-          console.warn("El navegador actual no soporta persistencia offline.");
-        }
+        console.warn("Persistencia offline no disponible en esta sesión:", err.code || err.message);
       }
 
       this.isInitialized = true;
@@ -169,7 +165,9 @@ const FirebaseService = {
 
     try {
       this.activeListenerUnsubscribe = this.db.collection("teachers").doc(teacherId)
-        .onSnapshot((doc) => {
+        .onSnapshot({ includeMetadataChanges: true }, (doc) => {
+          // Ignorar cambios locales que este mismo navegador acaba de escribir
+          if (doc.metadata && doc.metadata.hasPendingWrites) return;
           if (doc.exists && onUpdate) {
             const data = doc.data();
             onUpdate({ id: doc.id, ...data });

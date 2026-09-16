@@ -170,6 +170,7 @@ const App = {
   },
 
   saveTimer: null,
+  cloudSaveTimer: null,
 
   saveData: function() {
     if (this.saveTimer) {
@@ -179,9 +180,6 @@ const App = {
     if (this.currentUser) {
       this.currentUser.data = this.data;
       this.saveTeachers();
-      if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
-        FirebaseService.saveTeacher(this.currentUser);
-      }
     }
   },
 
@@ -189,7 +187,15 @@ const App = {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       this.saveData();
-    }, 300);
+    }, 250);
+
+    // Guardado en Firestore desacoplado para no saturar la red ni la memoria durante el tipeo
+    if (this.cloudSaveTimer) clearTimeout(this.cloudSaveTimer);
+    this.cloudSaveTimer = setTimeout(() => {
+      if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized && this.currentUser) {
+        FirebaseService.saveTeacher(this.currentUser);
+      }
+    }, 1200);
   },
 
   resetToDefault: function() {
@@ -598,6 +604,7 @@ const App = {
             <div class="firmas-cell-content">
               <input type="number" min="0" max="99" class="firmas-num-input" value="${val}" 
                 placeholder="-" data-col="firmas-${uKey}"
+                onfocus="this.select()"
                 oninput="App.updateFirmas('${rec.matricula}', '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
               <svg class="progress-ring" viewBox="0 0 20 20">
@@ -625,6 +632,7 @@ const App = {
             <div class="progress-bar-wrap">
               <input type="number" min="0" max="100" class="cell-input" style="width: 48px; text-align: right; font-weight: 500;" 
                 value="${val}" placeholder="-" data-col="examenes-${uKey}"
+                onfocus="this.select()"
                 oninput="App.updateExamen('${rec.matricula}', '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
               <div class="progress-track">
@@ -688,11 +696,13 @@ const App = {
           ${evalCells}
           <td class="col-number-input">
             <input type="number" min="0" max="100" class="cell-input" value="${rec.proyecto ?? ''}" placeholder="-" data-col="proyecto"
+              onfocus="this.select()"
               oninput="App.updateProyecto('${rec.matricula}', this.value)"
               onkeydown="App.handleCellKeydown(event, this)" />
           </td>
           <td class="col-number-input">
             <input type="number" min="0" max="10" class="cell-input" value="${rec.puntosExtra || 0}" placeholder="0" data-col="puntosExtra"
+              onfocus="this.select()"
               oninput="App.updatePuntosExtra('${rec.matricula}', this.value)"
               onkeydown="App.handleCellKeydown(event, this)" />
           </td>
@@ -2035,8 +2045,11 @@ const App = {
           this.data = updated.data;
           this.saveTeachers();
           if (this.activeTab === "gradebook") {
-            const container = document.getElementById("tabContentContainer");
-            if (container) this.renderGradebook(container);
+            const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+            if (!isTyping) {
+              const container = document.getElementById("tabContentContainer");
+              if (container) this.renderGradebook(container);
+            }
           }
         }
       });
