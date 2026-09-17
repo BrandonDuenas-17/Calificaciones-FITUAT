@@ -672,6 +672,7 @@ const App = {
         <tr id="row-${rec.matricula}" data-matricula="${rec.matricula}" data-search="${searchData}" style="display: ${isMatch ? '' : 'none'};">
           <td class="col-matricula">
             <input type="text" class="cell-input" value="${rec.matricula}" 
+              onfocus="this.select()"
               onchange="App.updateMatricula(${index}, this.value)" />
           </td>
           <td class="col-rollup" title="Obtenido automáticamente de la base de alumnos (Rollup)">
@@ -789,41 +790,41 @@ const App = {
       </div>
 
       <div class="notion-table-wrapper">
-        <table class="notion-table">
+        <table class="notion-table notion-table-gradebook">
           <thead>
             <tr>
-              <th><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
-              <th><div class="th-content"><span class="th-icon">Q</span> Alumno (Rollup)</div></th>
-              <th><div class="th-content"><span class="th-icon">Σ</span> Evaluación Final</div></th>
+              <th style="width: 130px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
+              <th style="width: 270px;"><div class="th-content"><span class="th-icon">Q</span> Alumno (Rollup)</div></th>
+              <th style="width: 160px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación Final</div></th>
               
               <!-- Firmas U1-U5 -->
-              <th><div class="th-content"><span class="th-icon">#</span> Firmas U1</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Firmas U2</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Firmas U3</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Firmas U4</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Firmas U5</div></th>
+              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U1</div></th>
+              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U2</div></th>
+              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U3</div></th>
+              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U4</div></th>
+              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U5</div></th>
 
               <!-- Exámenes U1-U5 -->
-              <th><div class="th-content"><span class="th-icon">#</span> Examen U1</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Examen U2</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Examen U3</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Examen U4</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Examen U5</div></th>
+              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U1</div></th>
+              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U2</div></th>
+              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U3</div></th>
+              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U4</div></th>
+              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U5</div></th>
 
               <!-- Evaluaciones Calculadas U1-U5 -->
-              <th><div class="th-content"><span class="th-icon">Σ</span> Evaluación U1</div></th>
-              <th><div class="th-content"><span class="th-icon">Σ</span> Evaluación U2</div></th>
-              <th><div class="th-content"><span class="th-icon">Σ</span> Evaluación U3</div></th>
-              <th><div class="th-content"><span class="th-icon">Σ</span> Evaluación U4</div></th>
-              <th><div class="th-content"><span class="th-icon">Σ</span> Evaluación U5</div></th>
+              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U1</div></th>
+              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U2</div></th>
+              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U3</div></th>
+              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U4</div></th>
+              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U5</div></th>
 
-              <th><div class="th-content"><span class="th-icon">#</span> Proyecto Final</div></th>
-              <th><div class="th-content"><span class="th-icon">#</span> Puntos Extra</div></th>
-              <th style="width: 40px;"></th>
+              <th style="width: 95px;"><div class="th-content"><span class="th-icon">#</span> Proyecto Final</div></th>
+              <th style="width: 95px;"><div class="th-content"><span class="th-icon">#</span> Puntos Extra</div></th>
+              <th style="width: 45px;"></th>
             </tr>
           </thead>
           <tbody id="gradebookTableBody">
-            ${rowsHtml || `<tr><td colspan="19" style="text-align: center; padding: 24px; color: var(--text-tertiary);">No se encontraron alumnos registrados.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="21" style="text-align: center; padding: 24px; color: var(--text-tertiary);">No se encontraron alumnos registrados.</td></tr>`}
           </tbody>
           <tfoot>
             <tr class="notion-table-footer">
@@ -878,14 +879,17 @@ const App = {
         <tr>
           <td class="col-matricula">
             <input type="text" class="cell-input" value="${s.matricula}" 
+              onfocus="this.select()"
               onchange="App.updateDirectoryStudent(${idx}, 'matricula', this.value)" />
           </td>
           <td>
             <input type="text" class="cell-input" value="${s.nombre}" style="font-weight: 500;"
+              onfocus="this.select()"
               onchange="App.updateDirectoryStudent(${idx}, 'nombre', this.value)" />
           </td>
           <td>
             <input type="text" class="cell-input" value="${s.carrera || 'Ingeniería'}" 
+              onfocus="this.select()"
               onchange="App.updateDirectoryStudent(${idx}, 'carrera', this.value)" />
           </td>
           <td style="text-align: center; width: 40px;">
@@ -920,13 +924,13 @@ const App = {
       </div>
 
       <div class="notion-table-wrapper">
-        <table class="notion-table">
+        <table class="notion-table" style="table-layout: fixed;">
           <thead>
             <tr>
               <th style="width: 180px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula (Clave Relacional)</div></th>
               <th><div class="th-content"><span class="th-icon">Aa</span> Nombre Completo del Alumno</div></th>
               <th style="width: 220px;"><div class="th-content"><span class="th-icon">#</span> Carrera / Programa</div></th>
-              <th style="width: 40px;"></th>
+              <th style="width: 45px;"></th>
             </tr>
           </thead>
           <tbody>

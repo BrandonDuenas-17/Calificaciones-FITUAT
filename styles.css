@@ -500,6 +500,16 @@ body {
   text-align: left;
 }
 
+.notion-table-fixed {
+  table-layout: fixed;
+}
+
+.notion-table-gradebook {
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+}
+
 /* Encabezados de Tabla */
 .notion-table th {
   background: var(--bg-secondary);
@@ -616,6 +626,20 @@ body {
   background: var(--bg-primary);
   border-color: var(--uat-orange);
   box-shadow: 0 0 0 2px rgba(224, 126, 51, 0.2);
+}
+
+/* Ocultar flechas numéricas nativas para estética limpia tipo Excel */
+.cell-input[type="number"]::-webkit-outer-spin-button,
+.cell-input[type="number"]::-webkit-inner-spin-button,
+.firmas-num-input::-webkit-outer-spin-button,
+.firmas-num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cell-input[type="number"],
+.firmas-num-input {
+  -moz-appearance: textfield;
 }
 
 /* Anillos circulares de firmas */
