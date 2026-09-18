@@ -183,31 +183,53 @@ body {
   letter-spacing: 0.2px;
 }
 
-.workspace-icon {
-  width: 34px;
-  height: 34px;
+.workspace-logo-container {
+  background: #ffffff;
+  padding: 4px 10px;
   border-radius: 7px;
-  background: linear-gradient(135deg, var(--uat-orange), var(--uat-orange-dark));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  font-size: 16px;
-  font-weight: 900;
-  box-shadow: 0 2px 6px rgba(224, 126, 51, 0.4);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  height: 38px;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.workspace-logo-container:hover {
+  transform: scale(1.02);
+}
+
+.workspace-logo-img {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+
+.workspace-brand-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.workspace-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
 }
 
 .workspace-title-main {
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 700;
-  display: block;
+  color: #ffffff;
+  letter-spacing: 0.2px;
 }
 
 .workspace-title-sub {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 400;
-  color: #e0dff2;
-  display: block;
+  color: var(--uat-orange-light);
+  opacity: 0.95;
 }
 
 .header-actions {
@@ -1268,20 +1290,26 @@ textarea.form-control {
 }
 
 .teacher-avatar {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: var(--uat-orange);
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 800;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  letter-spacing: 0.5px;
   flex-shrink: 0;
-  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border: 1.5px solid var(--uat-orange);
   user-select: none;
+  overflow: hidden;
+  padding: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.teacher-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .teacher-info-mini {
@@ -1342,20 +1370,26 @@ textarea.form-control {
 }
 
 .teacher-avatar-large {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: var(--uat-blue-night);
-  color: #ffffff;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  font-weight: 800;
   border: 2px solid var(--uat-orange);
   flex-shrink: 0;
-  letter-spacing: 0.5px;
   user-select: none;
+  overflow: hidden;
+  padding: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.teacher-avatar-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .teacher-name-full {
@@ -1642,20 +1676,26 @@ textarea.form-control {
 }
 
 .demo-avatar {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: var(--uat-blue-night);
-  color: #ffffff;
-  border: 1.5px solid var(--uat-orange);
+  background: #ffffff;
+  border: 2px solid var(--uat-orange);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13.5px;
-  font-weight: 800;
   flex-shrink: 0;
-  letter-spacing: 0.5px;
   user-select: none;
+  overflow: hidden;
+  padding: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.demo-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .demo-name {
@@ -1878,17 +1918,23 @@ textarea.form-control {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: var(--uat-blue-night);
-  color: #ffffff;
+  background: #ffffff;
   border: 2px solid var(--uat-orange);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  font-weight: 800;
   flex-shrink: 0;
-  letter-spacing: 0.5px;
   user-select: none;
+  overflow: hidden;
+  padding: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.admin-teacher-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .admin-teacher-name {

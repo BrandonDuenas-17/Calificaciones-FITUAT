@@ -491,11 +491,14 @@ const App = {
     const isAdmin = this.isAdmin();
     const coursesCount = (t.data && t.data.courses) ? t.data.courses.length : 0;
     const studentsCount = (t.data && t.data.students) ? t.data.students.length : 0;
+    const avatarImg = isAdmin
+      ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
+      : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
 
     container.innerHTML = `
       <div class="teacher-profile-wrap">
         <button type="button" class="teacher-profile-btn" onclick="App.toggleTeacherDropdown(event)" title="Cuenta activa">
-          <span class="teacher-avatar">${isAdmin ? 'DIR' : this.getTeacherInitials(t.nombre)}</span>
+          <span class="teacher-avatar">${avatarImg}</span>
           <div class="teacher-info-mini">
             <span class="teacher-name-mini">${t.nombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</span>
             <span class="teacher-depto-mini">${t.departamento || 'FIUAT'}</span>
@@ -504,7 +507,7 @@ const App = {
         </button>
         <div class="teacher-dropdown" id="teacherDropdown">
           <div class="teacher-dropdown-header">
-            <div class="teacher-avatar-large">${isAdmin ? 'DIR' : this.getTeacherInitials(t.nombre)}</div>
+            <div class="teacher-avatar-large">${avatarImg}</div>
             <div>
               <div class="teacher-name-full">${t.nombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</div>
               <div class="teacher-email-full">${t.correo || t.usuario}</div>
@@ -1934,12 +1937,12 @@ const App = {
       <div class="login-page-container">
         <div class="login-card">
           <div class="login-header">
-            <div class="login-institution-badge">
-              Facultad de Ingeniería Tampico • UAT
+            <div style="display: flex; justify-content: center; margin-bottom: 14px;">
+              <img src="Logos/fiuat-2024.png" alt="Facultad de Ingeniería Tampico" style="height: 52px; width: auto; object-fit: contain;" />
             </div>
             <h1 class="login-title">Acceso Docente</h1>
             <p class="login-subtitle">
-              Ingresa con tu cuenta institucional para gestionar tus materias, actas y calificaciones protegidas.
+              Portal Oficial de Evaluación • Universidad Autónoma de Tamaulipas
             </p>
           </div>
 
@@ -1987,10 +1990,13 @@ const App = {
                   Cuentas de Demostración (Acceso con 1 Clic):
                 </div>
                 ${this.teachers.map(t => {
+                  const avatarCard = t.role === 'admin'
+                    ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
+                    : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
                   if (t.role === 'admin') {
                     return `
                       <div class="demo-teacher-card" style="border: 1.5px solid var(--uat-orange); background: rgba(224, 126, 51, 0.08);" onclick="App.quickLogin('${t.id}')">
-                        <div class="demo-avatar">DIR</div>
+                        <div class="demo-avatar">${avatarCard}</div>
                         <div style="flex: 1;">
                           <div class="demo-name" style="color: var(--uat-orange-dark);">${t.nombre} <span class="badge-role-admin">PERFIL MAESTRO</span></div>
                           <div class="demo-sub">Supervisión general de todos los profesores, materias y calificaciones</div>
@@ -2000,10 +2006,9 @@ const App = {
                     `;
                   }
                   const subjectNames = (t.data && t.data.courses) ? t.data.courses.map(c => c.nombre).slice(0, 2).join(', ') : 'Sin materias';
-                  const initials = this.getTeacherInitials(t.nombre);
                   return `
                     <div class="demo-teacher-card" onclick="App.quickLogin('${t.id}')">
-                      <div class="demo-avatar">${initials}</div>
+                      <div class="demo-avatar">${avatarCard}</div>
                       <div style="flex: 1;">
                         <div class="demo-name">${t.nombre}</div>
                         <div class="demo-sub">${t.departamento} • ${subjectNames}</div>
@@ -2299,14 +2304,16 @@ const App = {
       }
 
       const coursesSearchStr = courses.map(c => c.nombre + ' ' + (c.grupo || '')).join(' ').toLowerCase();
-      const initialsDisplay = t.role === 'admin' ? 'DIR' : this.getTeacherInitials(t.nombre);
+      const cardAvatar = t.role === 'admin'
+        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
+        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
       const deptoDisplay = (t.departamento && !t.departamento.includes("Ã")) ? t.departamento : "Facultad de Ingeniería Tampico";
 
       teachersGridHtml += `
         <div class="admin-teacher-card" data-teacher-name="${t.nombre.toLowerCase()}" data-teacher-courses="${coursesSearchStr}">
           <div>
             <div class="admin-teacher-header">
-              <div class="admin-teacher-avatar">${initialsDisplay}</div>
+              <div class="admin-teacher-avatar">${cardAvatar}</div>
               <div style="flex: 1; min-width: 0;">
                 <div class="admin-teacher-name">${t.nombre}</div>
                 <div class="admin-teacher-email">${t.correo || t.usuario}</div>
@@ -2342,16 +2349,21 @@ const App = {
     container.innerHTML = `
       <div class="admin-dashboard-container">
         <div class="admin-header-area">
-          <div>
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-              <h1 style="font-size: 22px; font-weight: 800; color: var(--text-primary);">
-                Panel Central de Control y Supervisión Docente
-              </h1>
-              <span class="badge-role-admin">DIRECCIÓN FIUAT</span>
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="background: #ffffff; padding: 6px 12px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); border: 1px solid var(--border-color); flex-shrink: 0;">
+              <img src="Logos/FI-COLOR-HORIZONTAL-trim.png" alt="FIUAT" style="height: 38px; width: auto; display: block;" />
             </div>
-            <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 800px;">
-              Supervisión de actas, avance de firmas y calificaciones de todos los profesores de la <b>Facultad de Ingeniería Tampico</b>.
-            </p>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <h1 style="font-size: 20px; font-weight: 800; color: var(--text-primary);">
+                  Panel Central de Control y Supervisión Docente
+                </h1>
+                <span class="badge-role-admin">DIRECCIÓN FIUAT</span>
+              </div>
+              <p style="font-size: 13px; color: var(--text-secondary); max-width: 800px;">
+                Supervisión de actas, avance de firmas y calificaciones de todos los profesores de la <b>Facultad de Ingeniería Tampico</b>.
+              </p>
+            </div>
           </div>
 
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -2554,10 +2566,12 @@ const App = {
       const isCurrent = this.currentUser && this.currentUser.id === t.id;
       const coursesCount = (t.data && t.data.courses) ? t.data.courses.length : 0;
       const studentsCount = (t.data && t.data.students) ? t.data.students.length : 0;
-      const initials = t.role === 'admin' ? 'DIR' : this.getTeacherInitials(t.nombre);
+      const cardAvatar = t.role === 'admin'
+        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
+        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
       return `
         <div class="demo-teacher-card" style="margin-bottom: 0; ${isCurrent ? 'border-color: var(--uat-orange); background: var(--bg-hover);' : ''}" onclick="App.switchTeacher('${t.id}')">
-          <div class="demo-avatar">${initials}</div>
+          <div class="demo-avatar">${cardAvatar}</div>
           <div style="flex: 1; min-width: 0;">
             <div class="demo-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               ${t.nombre} ${isCurrent ? '<span style="color: var(--uat-orange); font-size: 11px;">(Activo)</span>' : ''}
