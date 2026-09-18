@@ -19,50 +19,137 @@ const App = {
   init: async function() {
     this.initTheme();
     this.setupEventListeners();
-    this.loadData();
-    this.render();
 
-    // Inicializar sincronización en la nube con Firebase Firestore
+    // Limpiar restos de almacenamiento local de versiones anteriores
+    try {
+      localStorage.removeItem("notion_teachers_db");
+      localStorage.removeItem("notion_grades_data");
+    } catch (e) {}
+
+    // Mostrar estado de carga mientras se conecta a la nube
+    this.renderLoadingState();
+
+    // Inicializar sincronización 100% en la nube con Firebase Firestore
     if (typeof FirebaseService !== "undefined") {
       await FirebaseService.init();
       this.updateCloudStatusBadge();
-      await this.syncWithFirebase();
+      await this.loadDataFromCloud();
+    } else {
+      console.warn("FirebaseService no detectado. Cargando datos de respaldo.");
+      this.loadFallbackData();
+    }
+
+    this.render();
+  },
+
+  renderLoadingState: function() {
+    const container = document.getElementById("tabContentContainer");
+    if (!container) return;
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; gap: 16px; text-align: center;">
+        <div class="cloud-save-dot" style="width: 22px; height: 22px; border-radius: 50%; background: var(--uat-orange); animation: pulse-cloud 0.8s infinite alternate ease-in-out;"></div>
+        <div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+            Conectando con Firebase Firestore
+          </div>
+          <div style="font-size: 13px; color: var(--text-tertiary);">
+            Cargando catálogo docente y calificaciones 100% en la nube...
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  sanitizeTeacher: function(t) {
+    if (!t) return t;
+    if (t.departamento && (t.departamento.includes("Ã") || t.departamento.includes("Ingenier"))) {
+      t.departamento = "Facultad de Ingeniería Tampico";
+    }
+    if (!t.avatar || t.avatar.length > 5 || t.avatar.includes("ð") || t.avatar.includes("â") || t.avatar.charCodeAt(0) === 0x00F0) {
+      t.avatar = t.role === 'admin' ? '🏛️' : '👨‍🏫';
+    }
+    return t;
+  },
+
+  loadDataFromCloud: async function() {
+    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) return;
+
+    try {
+      let cloudTeachers = await FirebaseService.fetchTeachers();
+
+      // Si Firestore está vacío por primera vez, sembramos el catálogo inicial
+      if (!cloudTeachers || cloudTeachers.length === 0) {
+        console.log("Firestore vacío. Sembrando catálogo inicial en la nube...");
+        const seeds = [];
+        if (typeof INITIAL_ADMIN !== 'undefined') seeds.push(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
+        if (typeof INITIAL_TEACHERS !== 'undefined') {
+          INITIAL_TEACHERS.forEach(t => seeds.push(JSON.parse(JSON.stringify(t))));
+        }
+        await FirebaseService.seedInitialDataIfEmpty(seeds);
+        cloudTeachers = await FirebaseService.fetchTeachers();
+      }
+
+      this.teachers = (cloudTeachers || []).map(t => this.sanitizeTeacher(t));
+
+      // Asegurar que la cuenta maestra de Administración/Coordinación esté en Firestore
+      if (typeof INITIAL_ADMIN !== 'undefined' && !this.teachers.some(t => t.id === INITIAL_ADMIN.id || t.role === 'admin')) {
+        const adminDoc = JSON.parse(JSON.stringify(INITIAL_ADMIN));
+        this.teachers.unshift(adminDoc);
+        await FirebaseService.saveTeacher(adminDoc);
+      }
+
+      // 2. Cargar usuario/profesor activo desde la sesión (sessionStorage)
+      const savedTeacherId = sessionStorage.getItem("notion_active_teacher_id") || localStorage.getItem("notion_active_teacher_id");
+      if (savedTeacherId) {
+        this.currentUser = this.teachers.find(t => t.id === savedTeacherId) || null;
+      }
+      if (!this.currentUser) {
+        this.currentUser = this.teachers.find(t => t.role === 'admin') || this.teachers[0] || null;
+        if (this.currentUser) {
+          sessionStorage.setItem("notion_active_teacher_id", this.currentUser.id);
+        }
+      }
+
+      // 3. Enlazar datos de trabajo del profesor actual
+      if (this.currentUser && this.currentUser.data) {
+        this.data = this.currentUser.data;
+        if (this.data.courses) {
+          this.data.courses.forEach((c, idx) => {
+            if (!c.grupo) c.grupo = "Grupo " + String.fromCharCode(65 + (idx % 26));
+            if (!c.id) c.id = "curso-" + Date.now() + "-" + idx;
+          });
+          if (!this.data.courses.some(c => c.id === this.activeCourseId)) {
+            this.activeCourseId = this.data.courses[0] ? this.data.courses[0].id : "";
+          }
+        }
+      } else {
+        this.data = null;
+      }
+
+      this.updateCloudStatusBadge();
+    } catch (e) {
+      console.error("Error al cargar datos desde Firestore:", e);
+      this.loadFallbackData();
+    }
+  },
+
+  loadFallbackData: function() {
+    this.teachers = (typeof INITIAL_TEACHERS !== 'undefined') ? JSON.parse(JSON.stringify(INITIAL_TEACHERS)) : [];
+    if (typeof INITIAL_ADMIN !== 'undefined' && !this.teachers.some(t => t.role === 'admin')) {
+      this.teachers.unshift(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
+    }
+    this.currentUser = this.teachers.find(t => t.role === 'admin') || this.teachers[0] || null;
+    if (this.currentUser && this.currentUser.data) {
+      this.data = this.currentUser.data;
+      if (this.data.courses && this.data.courses[0]) {
+        this.activeCourseId = this.data.courses[0].id;
+      }
     }
   },
 
   syncWithFirebase: async function() {
-    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) return;
-
-    try {
-      const cloudTeachers = await FirebaseService.fetchTeachers();
-      if (cloudTeachers === null) {
-        // Modo sin conexión o error de red
-        return;
-      }
-
-      if (cloudTeachers.length === 0) {
-        // Firestore está vacío: sembrar con datos locales iniciales
-        console.log("Sincronizando datos locales hacia Firestore por primera vez...");
-        await FirebaseService.seedInitialDataIfEmpty(this.teachers);
-      } else {
-        // Hay datos en Firestore: actualizar estado local con la nube
-        this.teachers = cloudTeachers;
-        this.saveTeachers();
-
-        // Re-enlazar usuario actual si está activo
-        if (this.currentUser) {
-          const fresh = this.teachers.find(t => t.id === this.currentUser.id);
-          if (fresh) {
-            this.currentUser = fresh;
-            if (this.currentUser.data) this.data = this.currentUser.data;
-          }
-        }
-        this.render();
-      }
-      this.updateCloudStatusBadge();
-    } catch (e) {
-      console.warn("Error en sincronización con Firebase:", e);
-    }
+    await this.loadDataFromCloud();
+    this.render();
   },
 
   updateCloudStatusBadge: function() {
@@ -71,9 +158,9 @@ const App = {
 
     if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) {
       container.innerHTML = `
-        <div class="cloud-status-badge offline" title="Operando en modo local (sin conexión a Firestore)">
+        <div class="cloud-status-badge offline" title="Sin conexión a Firebase Firestore">
           <span class="cloud-status-dot"></span>
-          <span>Modo Local</span>
+          <span>Sin Conexión</span>
         </div>
       `;
       return;
@@ -81,21 +168,21 @@ const App = {
 
     if (FirebaseService.status === "connected") {
       container.innerHTML = `
-        <div class="cloud-status-badge connected" title="Conectado a Firebase Firestore en tiempo real">
+        <div class="cloud-status-badge connected" title="Conectado a Firebase Firestore en tiempo real (100% en la nube)">
           <span class="cloud-status-dot"></span>
           <span>Nube Sincronizada</span>
         </div>
       `;
     } else if (FirebaseService.status === "offline") {
       container.innerHTML = `
-        <div class="cloud-status-badge offline" title="Sin conexión a internet. Los cambios se guardan localmente y se sincronizarán al volver a conectar.">
+        <div class="cloud-status-badge offline" title="Sin conexión a internet. Verifique su red para sincronizar con Firestore.">
           <span class="cloud-status-dot"></span>
           <span>Sin Conexión</span>
         </div>
       `;
     } else {
       container.innerHTML = `
-        <div class="cloud-status-badge connecting" title="Conectando con Firestore...">
+        <div class="cloud-status-badge connecting" title="Conectando con Firestore en la nube...">
           <span class="cloud-status-dot"></span>
           <span>Conectando...</span>
         </div>
@@ -103,99 +190,54 @@ const App = {
     }
   },
 
-  // Carga de catálogo de profesores y datos del docente activo
-  loadData: function() {
-    // 1. Cargar catálogo de profesores
-    const savedTeachers = localStorage.getItem("notion_teachers_db");
-    if (savedTeachers) {
-      try {
-        this.teachers = JSON.parse(savedTeachers);
-      } catch (e) {
-        console.error("Error al cargar profesores:", e);
-        this.teachers = (typeof INITIAL_TEACHERS !== 'undefined') ? JSON.parse(JSON.stringify(INITIAL_TEACHERS)) : [];
-      }
-    } else {
-      this.teachers = (typeof INITIAL_TEACHERS !== 'undefined') ? JSON.parse(JSON.stringify(INITIAL_TEACHERS)) : [];
-      
-      // Migración si existían datos anteriores guardados en notion_grades_data
-      const legacyGrades = localStorage.getItem("notion_grades_data");
-      if (legacyGrades && this.teachers.length > 0) {
-        try {
-          const parsed = JSON.parse(legacyGrades);
-          if (parsed && (parsed.courses || parsed.students)) {
-            this.teachers[0].data = parsed;
-          }
-        } catch(e) {}
-      }
-      this.saveTeachers();
-    }
+  setCloudSaveStatus: function(status, detail) {
+    const indicator = document.getElementById("cloudSaveStatusIndicator");
+    const textElem = document.getElementById("cloudSaveStatusText");
+    if (!indicator || !textElem) return;
 
-    // Asegurar que la cuenta maestra de Administración/Coordinación esté siempre disponible
-    if (typeof INITIAL_ADMIN !== 'undefined' && !this.teachers.some(t => t.id === INITIAL_ADMIN.id || t.role === 'admin')) {
-      this.teachers.unshift(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
-      this.saveTeachers();
-    }
+    indicator.classList.remove("saving", "saved", "error");
 
-    // 2. Cargar usuario/profesor activo desde la sesión
-    const savedTeacherId = localStorage.getItem("notion_active_teacher_id");
-    if (savedTeacherId) {
-      this.currentUser = this.teachers.find(t => t.id === savedTeacherId) || null;
-    } else {
-      // Por defecto iniciamos con la Coordinación o con el primer docente disponible
-      this.currentUser = this.teachers.find(t => t.role === 'admin') || this.teachers[0] || null;
-      if (this.currentUser) {
-        localStorage.setItem("notion_active_teacher_id", this.currentUser.id);
-      }
-    }
-
-    // 3. Enlazar datos de trabajo del profesor actual
-    if (this.currentUser && this.currentUser.data) {
-      this.data = this.currentUser.data;
-      if (this.data.courses) {
-        this.data.courses.forEach((c, idx) => {
-          if (!c.grupo) c.grupo = "Grupo " + String.fromCharCode(65 + (idx % 26));
-          if (!c.id) c.id = "curso-" + Date.now() + "-" + idx;
-        });
-        if (!this.data.courses.some(c => c.id === this.activeCourseId)) {
-          this.activeCourseId = this.data.courses[0] ? this.data.courses[0].id : "";
-        }
-      }
-    } else {
-      this.data = null;
+    if (status === "saving") {
+      indicator.classList.add("saving");
+      textElem.textContent = "Guardando cambios en la nube...";
+    } else if (status === "saved") {
+      indicator.classList.add("saved");
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      textElem.textContent = `Sincronizado en la nube (Firestore) · ${timeStr}`;
+    } else if (status === "error") {
+      indicator.classList.add("error");
+      textElem.textContent = detail ? `Error en la nube: ${detail}` : "Error de sincronización en la nube";
     }
   },
 
   saveTeachers: function() {
-    localStorage.setItem("notion_teachers_db", JSON.stringify(this.teachers));
+    // Obsoleto en arquitectura 100% Cloud: no se usa almacenamiento local
   },
 
   saveTimer: null,
-  cloudSaveTimer: null,
 
-  saveData: function() {
+  // Guardado directo e inmediato a Firebase Firestore (100% en la nube)
+  saveData: async function() {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
     if (this.currentUser) {
       this.currentUser.data = this.data;
-      this.saveTeachers();
+      if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
+        await FirebaseService.saveTeacher(this.currentUser);
+      }
     }
   },
 
+  // Guardado optimizado con debounce para escritura fluida en celdas (directo a Firestore)
   debouncedSave: function() {
+    this.setCloudSaveStatus("saving");
     if (this.saveTimer) clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      this.saveData();
-    }, 250);
-
-    // Guardado en Firestore desacoplado para no saturar la red ni la memoria durante el tipeo
-    if (this.cloudSaveTimer) clearTimeout(this.cloudSaveTimer);
-    this.cloudSaveTimer = setTimeout(() => {
-      if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized && this.currentUser) {
-        FirebaseService.saveTeacher(this.currentUser);
-      }
-    }, 1200);
+    this.saveTimer = setTimeout(async () => {
+      await this.saveData();
+    }, 500);
   },
 
   resetToDefault: function() {
@@ -231,16 +273,17 @@ const App = {
   },
 
   initTheme: function() {
-    const savedTheme = localStorage.getItem("notion_theme") || "light";
+    const savedTheme = sessionStorage.getItem("notion_theme") || localStorage.getItem("notion_theme") || "light";
     this.theme = savedTheme;
     document.documentElement.setAttribute("data-theme", this.theme);
     this.updateThemeButton();
+    try { localStorage.removeItem("notion_theme"); } catch(e) {}
   },
 
   toggleTheme: function() {
     this.theme = this.theme === "light" ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", this.theme);
-    localStorage.setItem("notion_theme", this.theme);
+    sessionStorage.setItem("notion_theme", this.theme);
     this.updateThemeButton();
   },
 
@@ -602,7 +645,7 @@ const App = {
         firmasCells += `
           <td class="col-number-input">
             <div class="firmas-cell-content">
-              <input type="number" min="0" max="99" class="firmas-num-input" value="${val}" 
+              <input type="number" min="0" max="99" class="cell-input firmas-num-input" value="${val}" 
                 placeholder="-" data-col="firmas-${uKey}"
                 onfocus="this.select()"
                 oninput="App.updateFirmas('${rec.matricula}', '${uKey}', this.value)"
@@ -754,6 +797,9 @@ const App = {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Nueva Lista
             </button>
+            <button class="btn btn-default" onclick="App.openMaxFirmasModal()" title="Configurar metas de firmas para todas las unidades de esta materia">
+              <span style="font-size: 13px;">🎯</span> Metas de Firmas
+            </button>
             <button class="btn btn-default btn-course-pair" onclick="App.openManageCourseModal()" title="Ajustes de esta lista (renombrar, duplicar grupo, eliminar)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               Ajustes
@@ -797,12 +843,12 @@ const App = {
               <th style="width: 270px;"><div class="th-content"><span class="th-icon">Q</span> Alumno (Rollup)</div></th>
               <th style="width: 160px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación Final</div></th>
               
-              <!-- Firmas U1-U5 -->
-              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U1</div></th>
-              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U2</div></th>
-              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U3</div></th>
-              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U4</div></th>
-              <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Firmas U5</div></th>
+              <!-- Firmas U1-U5 con Acceso a Ajustes -->
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U1 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U2 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U3 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U4 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U5 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
 
               <!-- Exámenes U1-U5 -->
               <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U1</div></th>
@@ -831,12 +877,62 @@ const App = {
               <td colspan="2"><span class="summary-chip"><span class="summary-label">TOTAL:</span> <span class="summary-value">${course.records.length} ALUMNOS</span></span></td>
               <td><span class="summary-chip"><span class="summary-label">AVERAGE:</span> <span id="stat-avg-final" class="summary-value">${stats.avgFinal}</span></span></td>
               
-              <!-- Max Firmas -->
-              <td><span class="summary-chip"><span class="summary-label">MAX:</span> <span id="stat-max-firmas-u1" class="summary-value">${stats.maxFirmas.u1 || maxFirmasConfig.u1 || 0}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">MAX:</span> <span id="stat-max-firmas-u2" class="summary-value">${stats.maxFirmas.u2 || maxFirmasConfig.u2 || 0}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">MAX:</span> <span id="stat-max-firmas-u3" class="summary-value">${stats.maxFirmas.u3 || maxFirmasConfig.u3 || 0}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">MAX:</span> <span id="stat-max-firmas-u4" class="summary-value">${stats.maxFirmas.u4 || maxFirmasConfig.u4 || 0}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">MAX:</span> <span id="stat-max-firmas-u5" class="summary-value">${stats.maxFirmas.u5 || maxFirmasConfig.u5 || 0}</span></span></td>
+              <!-- Max Firmas con Edición Directa en Pie de Tabla -->
+              <td>
+                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 1">
+                  <span class="summary-label">MAX:</span>
+                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
+                    id="footer-max-u1" 
+                    value="${maxFirmasConfig.u1 || 10}" 
+                    onfocus="this.select()"
+                    onchange="App.updateMaxFirmasConfig('u1', this.value)"
+                    title="Haz clic para cambiar el máximo de firmas de la Unidad 1" />
+                </div>
+              </td>
+              <td>
+                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 2">
+                  <span class="summary-label">MAX:</span>
+                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
+                    id="footer-max-u2" 
+                    value="${maxFirmasConfig.u2 || 10}" 
+                    onfocus="this.select()"
+                    onchange="App.updateMaxFirmasConfig('u2', this.value)"
+                    title="Haz clic para cambiar el máximo de firmas de la Unidad 2" />
+                </div>
+              </td>
+              <td>
+                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 3">
+                  <span class="summary-label">MAX:</span>
+                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
+                    id="footer-max-u3" 
+                    value="${maxFirmasConfig.u3 || 10}" 
+                    onfocus="this.select()"
+                    onchange="App.updateMaxFirmasConfig('u3', this.value)"
+                    title="Haz clic para cambiar el máximo de firmas de la Unidad 3" />
+                </div>
+              </td>
+              <td>
+                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 4">
+                  <span class="summary-label">MAX:</span>
+                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
+                    id="footer-max-u4" 
+                    value="${maxFirmasConfig.u4 || 10}" 
+                    onfocus="this.select()"
+                    onchange="App.updateMaxFirmasConfig('u4', this.value)"
+                    title="Haz clic para cambiar el máximo de firmas de la Unidad 4" />
+                </div>
+              </td>
+              <td>
+                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 5">
+                  <span class="summary-label">MAX:</span>
+                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
+                    id="footer-max-u5" 
+                    value="${maxFirmasConfig.u5 || 10}" 
+                    onfocus="this.select()"
+                    onchange="App.updateMaxFirmasConfig('u5', this.value)"
+                    title="Haz clic para cambiar el máximo de firmas de la Unidad 5" />
+                </div>
+              </td>
 
               <!-- Promedio Exámenes -->
               <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-exam-u1" class="summary-value">${stats.avgExamenes.u1}</span></span></td>
@@ -861,9 +957,10 @@ const App = {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo alumno a la lista
           </button>
-          <span style="font-size: 11.5px; color: var(--text-tertiary);">
-            Auto-guardado activo en almacenamiento local
-          </span>
+          <div id="cloudSaveStatusIndicator" class="cloud-save-status-indicator saved" title="Todos los cambios se almacenan directamente en Firebase Firestore en la nube">
+            <span class="cloud-save-dot"></span>
+            <span id="cloudSaveStatusText">Sincronizado en la nube (Firestore)</span>
+          </div>
         </div>
       </div>
     `;
@@ -1381,13 +1478,52 @@ const App = {
     }
   },
 
-  updateMaxFirmasConfig: function(uKey, val) {
+  // Configuración de Máximo de Firmas
+  openMaxFirmasModal: function() {
     const course = this.getActiveCourse();
+    if (!course) return;
+    const maxF = course.firmasMaxConfig || { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 };
+    const nameEl = document.getElementById("maxFirmasModalCourseName");
+    if (nameEl) nameEl.textContent = `${course.nombre} (${course.grupo || 'Grupo A'})`;
+    for (let u = 1; u <= 5; u++) {
+      const inp = document.getElementById(`modalMaxF_u${u}`);
+      if (inp) inp.value = maxF[`u${u}`] || 10;
+    }
+    const modal = document.getElementById("maxFirmasModal");
+    if (modal) modal.classList.add("open");
+  },
+
+  closeMaxFirmasModal: function() {
+    const modal = document.getElementById("maxFirmasModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  saveMaxFirmasModal: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
     if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
-    course.firmasMaxConfig[uKey] = Number(val) || 10;
+    for (let u = 1; u <= 5; u++) {
+      const inp = document.getElementById(`modalMaxF_u${u}`);
+      if (inp) {
+        const val = Math.max(1, Number(inp.value) || 10);
+        course.firmasMaxConfig[`u${u}`] = val;
+      }
+    }
     this.saveData();
     this.render();
-    this.showToast(`Máximo de firmas de ${uKey.toUpperCase()} actualizado a ${val}`);
+    this.closeMaxFirmasModal();
+    this.showToast(`🎯 Metas de firmas actualizadas y sincronizadas en la nube`);
+  },
+
+  updateMaxFirmasConfig: function(uKey, val) {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
+    const num = Math.max(1, Number(val) || 10);
+    course.firmasMaxConfig[uKey] = num;
+    this.saveData();
+    this.render();
+    this.showToast(`🎯 Meta de ${uKey.toUpperCase()} actualizada a ${num} firmas`);
   },
 
   // Filtrado instantáneo en vivo (DOM Directo sin destruir la tabla)
@@ -1958,19 +2094,19 @@ const App = {
     };
 
     this.teachers.push(newTeacher);
-    this.saveTeachers();
     if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
       FirebaseService.saveTeacher(newTeacher);
     }
     this.quickLogin(newTeacher.id);
-    this.showToast(`¡Bienvenido, ${nombre}! Tu espacio docente ha sido creado.`);
+    this.showToast(`¡Bienvenido, ${nombre}! Tu espacio docente ha sido creado en la nube.`);
   },
 
   quickLogin: function(teacherId) {
     const teacher = this.teachers.find(t => t.id === teacherId);
     if (teacher) {
       this.currentUser = teacher;
-      localStorage.setItem("notion_active_teacher_id", teacher.id);
+      sessionStorage.setItem("notion_active_teacher_id", teacher.id);
+      try { localStorage.removeItem("notion_active_teacher_id"); } catch(e) {}
       this.isSupervising = false;
       this.supervisingTeacherId = null;
 
@@ -2015,7 +2151,8 @@ const App = {
     this.isSupervising = false;
     this.supervisingTeacherId = null;
     this.data = null;
-    localStorage.removeItem("notion_active_teacher_id");
+    sessionStorage.removeItem("notion_active_teacher_id");
+    try { localStorage.removeItem("notion_active_teacher_id"); } catch(e) {}
     const dropdown = document.getElementById("teacherDropdown");
     if (dropdown) dropdown.classList.remove("open");
     const banner = document.getElementById("supervisionBannerContainer");
@@ -2047,7 +2184,6 @@ const App = {
           const idx = this.teachers.findIndex(t => t.id === teacherId);
           if (idx !== -1) this.teachers[idx] = updated;
           this.data = updated.data;
-          this.saveTeachers();
           if (this.activeTab === "gradebook") {
             const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
             if (!isTyping) {
@@ -2147,15 +2283,19 @@ const App = {
         }
       }
 
+      const coursesSearchStr = courses.map(c => c.nombre + ' ' + (c.grupo || '')).join(' ').toLowerCase();
+      const avatarDisplay = (t.avatar && t.avatar.length <= 5 && !t.avatar.includes("ð") && !t.avatar.includes("â")) ? t.avatar : (t.role === 'admin' ? '🏛️' : '👨‍🏫');
+      const deptoDisplay = (t.departamento && !t.departamento.includes("Ã")) ? t.departamento : "Facultad de Ingeniería Tampico";
+
       teachersGridHtml += `
-        <div class="admin-teacher-card">
+        <div class="admin-teacher-card" data-teacher-name="${t.nombre.toLowerCase()}" data-teacher-courses="${coursesSearchStr}">
           <div>
             <div class="admin-teacher-header">
-              <div class="admin-teacher-avatar">${t.avatar || '👨‍🏫'}</div>
+              <div class="admin-teacher-avatar">${avatarDisplay}</div>
               <div style="flex: 1; min-width: 0;">
                 <div class="admin-teacher-name">${t.nombre}</div>
                 <div class="admin-teacher-email">${t.correo || t.usuario}</div>
-                <span class="admin-teacher-depto">${t.departamento}</span>
+                <span class="admin-teacher-depto">${deptoDisplay}</span>
               </div>
             </div>
 
@@ -2200,13 +2340,16 @@ const App = {
             </p>
           </div>
 
-          <div style="display: flex; gap: 10px;">
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-primary" style="background: var(--uat-orange); border-color: var(--uat-orange); font-weight: 700;" onclick="App.openSyncRosterModal()">
+              ☁️ Sincronizar Roster Oficial (153 Docentes)
+            </button>
             <button class="btn btn-default" onclick="App.downloadAllFacultyBackup()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Respaldo General (.json)
+              Respaldo (.json)
             </button>
-            <button class="btn btn-primary" onclick="App.openRegisterTeacherModal()">
-              + Dar de Alta Nuevo Docente
+            <button class="btn btn-default" onclick="App.openRegisterTeacherModal()">
+              + Nuevo Docente
             </button>
           </div>
         </div>
@@ -2246,19 +2389,113 @@ const App = {
           </div>
         </div>
 
-        <!-- Directorio de Docentes para Supervisión -->
-        <div class="admin-section-title">
-          <span>👨‍🏫 Profesores y Cuentas Docentes (${teachersList.length})</span>
+        <!-- Barra de Búsqueda de Docentes -->
+        <div class="admin-section-title" style="margin-bottom: 8px;">
+          <span>👨‍🏫 Directorio de Docentes (${teachersList.length})</span>
           <span style="font-size: 12.5px; font-weight: 500; color: var(--text-tertiary);">
-            Haz clic en "Supervisar" en cualquier docente para auditar sus listas y actas oficiales
+            Haz clic en "Supervisar" en cualquier docente para auditar sus listas en vivo
           </span>
         </div>
 
-        <div class="admin-teachers-grid">
+        <div style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center;">
+          <input type="text" id="adminTeacherSearch" class="form-control" 
+            placeholder="🔍 Buscar docente por nombre o materia (ej. Treviño, Estructuras, Cálculo)..." 
+            oninput="App.filterAdminTeachers(this.value)" autocomplete="off" 
+            style="font-size: 14px; padding: 10px 14px; border-radius: var(--radius-md);" />
+          <span id="adminTeacherCountBadge" style="font-size: 12.5px; color: var(--text-secondary); font-weight: 600; white-space: nowrap;">
+            Mostrando ${teachersList.length} profesores
+          </span>
+        </div>
+
+        <div class="admin-teachers-grid" id="adminTeachersGrid">
           ${teachersGridHtml}
         </div>
       </div>
     `;
+  },
+
+  filterAdminTeachers: function(query) {
+    const term = (query || "").trim().toLowerCase();
+    const cards = document.querySelectorAll("#adminTeachersGrid .admin-teacher-card");
+    let visible = 0;
+    cards.forEach(card => {
+      const name = card.getAttribute("data-teacher-name") || "";
+      const courses = card.getAttribute("data-teacher-courses") || "";
+      const matches = !term || name.includes(term) || courses.includes(term);
+      card.style.display = matches ? "" : "none";
+      if (matches) visible++;
+    });
+    const badge = document.getElementById("adminTeacherCountBadge");
+    if (badge) badge.textContent = `Mostrando ${visible} profesores`;
+  },
+
+  // Modal de sincronización del Roster Oficial
+  openSyncRosterModal: function() {
+    const modal = document.getElementById("syncRosterModal");
+    if (modal) {
+      modal.classList.add("open");
+      const progressWrap = document.getElementById("syncRosterProgressWrap");
+      if (progressWrap) progressWrap.style.display = "none";
+      const startBtn = document.getElementById("btnStartSync");
+      if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.textContent = "Iniciar Sincronización a la Nube";
+      }
+      const cancelBtn = document.getElementById("btnCancelSync");
+      if (cancelBtn) cancelBtn.disabled = false;
+    }
+  },
+
+  closeSyncRosterModal: function() {
+    const modal = document.getElementById("syncRosterModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  executeOfficialRosterSync: async function() {
+    if (typeof FACULTY_ROSTER === "undefined" || !FACULTY_ROSTER.length) {
+      alert("No se encontró el archivo compilado FACULTY_ROSTER.");
+      return;
+    }
+
+    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) {
+      alert("No hay conexión activa con Firebase Firestore.");
+      return;
+    }
+
+    const progressWrap = document.getElementById("syncRosterProgressWrap");
+    const bar = document.getElementById("syncRosterProgressBar");
+    const statusText = document.getElementById("syncRosterStatusText");
+    const startBtn = document.getElementById("btnStartSync");
+    const cancelBtn = document.getElementById("btnCancelSync");
+
+    if (progressWrap) progressWrap.style.display = "block";
+    if (startBtn) startBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
+
+    // Asegurar que el Administrador siempre esté incluido
+    const fullRosterWithAdmin = [...FACULTY_ROSTER];
+    if (typeof INITIAL_ADMIN !== 'undefined' && !fullRosterWithAdmin.some(t => t.id === INITIAL_ADMIN.id || t.role === 'admin')) {
+      fullRosterWithAdmin.unshift(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
+    }
+
+    const success = await FirebaseService.syncFullFacultyRoster(fullRosterWithAdmin, (current, total) => {
+      const pct = Math.round((current / total) * 100);
+      if (bar) bar.style.width = pct + "%";
+      if (statusText) statusText.textContent = `Sincronizando a la nube: ${current} de ${total} profesores (${pct}%)...`;
+    });
+
+    if (success) {
+      if (statusText) statusText.textContent = "✅ ¡153 Profesores y 18,702 inscripciones sincronizadas en Firestore!";
+      await this.loadDataFromCloud();
+      this.render();
+      setTimeout(() => {
+        this.closeSyncRosterModal();
+        this.showToast("Roster Oficial de 153 profesores activo en Firestore");
+      }, 1200);
+    } else {
+      if (statusText) statusText.textContent = "❌ Ocurrió un error al sincronizar con Firestore.";
+      if (cancelBtn) cancelBtn.disabled = false;
+    }
   },
 
   downloadAllFacultyBackup: async function() {
@@ -2277,29 +2514,52 @@ const App = {
     const dropdown = document.getElementById("teacherDropdown");
     if (dropdown) dropdown.classList.remove("open");
 
-    const list = document.getElementById("switchTeacherList");
-    if (list) {
-      list.innerHTML = this.teachers.map(t => {
-        const isCurrent = this.currentUser && this.currentUser.id === t.id;
-        const coursesCount = (t.data && t.data.courses) ? t.data.courses.length : 0;
-        const studentsCount = (t.data && t.data.students) ? t.data.students.length : 0;
-        return `
-          <div class="demo-teacher-card" style="margin-bottom: 0; ${isCurrent ? 'border-color: var(--uat-orange); background: var(--bg-hover);' : ''}" onclick="App.switchTeacher('${t.id}')">
-            <div class="demo-avatar">${t.avatar || '👨‍🏫'}</div>
-            <div style="flex: 1;">
-              <div class="demo-name">${t.nombre} ${isCurrent ? '<span style="color: var(--uat-orange); font-size: 11px;">(Activo)</span>' : ''}</div>
-              <div class="demo-sub">${t.departamento} • ${coursesCount} materias • ${studentsCount} alumnos</div>
-            </div>
-            <button class="btn btn-default btn-sm" style="pointer-events: none;">
-              ${isCurrent ? 'Seleccionado' : 'Cambiar'}
-            </button>
-          </div>
-        `;
-      }).join('');
-    }
+    const searchInput = document.getElementById("switchTeacherSearch");
+    if (searchInput) searchInput.value = "";
+
+    this.renderSwitchTeacherList(this.teachers);
 
     const modal = document.getElementById("switchTeacherModal");
     if (modal) modal.classList.add("open");
+  },
+
+  renderSwitchTeacherList: function(teachers) {
+    const list = document.getElementById("switchTeacherList");
+    if (!list) return;
+
+    list.innerHTML = teachers.map(t => {
+      const isCurrent = this.currentUser && this.currentUser.id === t.id;
+      const coursesCount = (t.data && t.data.courses) ? t.data.courses.length : 0;
+      const studentsCount = (t.data && t.data.students) ? t.data.students.length : 0;
+      const avatarDisplay = (t.avatar && t.avatar.length <= 5 && !t.avatar.includes("ð") && !t.avatar.includes("â")) ? t.avatar : (t.role === 'admin' ? '🏛️' : '👨‍🏫');
+      return `
+        <div class="demo-teacher-card" style="margin-bottom: 0; ${isCurrent ? 'border-color: var(--uat-orange); background: var(--bg-hover);' : ''}" onclick="App.switchTeacher('${t.id}')">
+          <div class="demo-avatar">${avatarDisplay}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div class="demo-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${t.nombre} ${isCurrent ? '<span style="color: var(--uat-orange); font-size: 11px;">(Activo)</span>' : ''}
+            </div>
+            <div class="demo-sub">
+              ${t.role === 'admin' ? 'Coordinación y Dirección' : `${t.usuario} • ${coursesCount} materias • ${studentsCount} alumnos`}
+            </div>
+          </div>
+          <button class="btn btn-default btn-sm" style="pointer-events: none;">
+            ${isCurrent ? 'Activo' : 'Entrar'}
+          </button>
+        </div>
+      `;
+    }).join('');
+  },
+
+  filterSwitchTeacherList: function(query) {
+    const term = (query || "").trim().toLowerCase();
+    const filtered = this.teachers.filter(t => 
+      !term || 
+      t.nombre.toLowerCase().includes(term) || 
+      t.usuario.toLowerCase().includes(term) ||
+      (t.departamento && t.departamento.toLowerCase().includes(term))
+    );
+    this.renderSwitchTeacherList(filtered);
   },
 
   closeSwitchTeacherModal: function() {
@@ -2365,7 +2625,6 @@ const App = {
     };
 
     this.teachers.push(newTeacher);
-    this.saveTeachers();
     if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
       FirebaseService.saveTeacher(newTeacher);
     }

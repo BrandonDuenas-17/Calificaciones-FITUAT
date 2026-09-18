@@ -171,10 +171,13 @@
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSwitchTeacherModal()">✕</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
-          Selecciona la cuenta del docente al que deseas cambiarte. Cada profesor tiene sus materias y alumnos totalmente separados.
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+          Selecciona la cuenta del docente al que deseas cambiarte.
         </p>
-        <div id="switchTeacherList" style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="margin-bottom: 12px;">
+          <input type="text" id="switchTeacherSearch" class="form-control" placeholder="🔍 Buscar por nombre o usuario..." oninput="App.filterSwitchTeacherList(this.value)" autocomplete="off" />
+        </div>
+        <div id="switchTeacherList" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
           <!-- Generado dinámicamente -->
         </div>
       </div>
@@ -187,6 +190,79 @@
     </div>
   </div>
 
+  <!-- Modal de Sincronización del Roster Oficial a Firestore -->
+  <div class="modal-backdrop" id="syncRosterModal">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>☁️ Sincronizar Roster Oficial a Firestore</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSyncRosterModal()">✕</button>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 24px;">
+        <div style="font-size: 38px; margin-bottom: 12px;">🏛️</div>
+        <h4 style="font-size: 16px; margin-bottom: 8px; font-weight: 700;">Roster Oficial de la Facultad de Ingeniería</h4>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
+          Se importarán <b>153 Profesores</b>, <b>353 Materias/Grupos</b> y <b>18,702 Inscripciones</b> directamente a Firebase Firestore.
+        </p>
+        <div id="syncRosterProgressWrap" style="display: none; margin-bottom: 16px;">
+          <div style="background: var(--border-color); border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 8px;">
+            <div id="syncRosterProgressBar" style="width: 0%; height: 100%; background: var(--uat-orange); transition: width 0.2s ease;"></div>
+          </div>
+          <div id="syncRosterStatusText" style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">Iniciando...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCancelSync" class="btn btn-default" onclick="App.closeSyncRosterModal()">Cerrar</button>
+        <button id="btnStartSync" class="btn btn-primary" onclick="App.executeOfficialRosterSync()">Iniciar Sincronización a la Nube</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para Configurar Máximo de Firmas de la Materia -->
+  <div class="modal-backdrop" id="maxFirmasModal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">🎯</span> Meta de Firmas por Unidad
+        </h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeMaxFirmasModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+          Define cuántas firmas equivalen al <b>100% de firmas (50% de la calificación)</b> en cada unidad para <b id="maxFirmasModalCourseName" style="color: var(--uat-blue-night);">esta materia</b>:
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px;">
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U1</label>
+            <input type="number" min="1" max="100" id="modalMaxF_u1" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U2</label>
+            <input type="number" min="1" max="100" id="modalMaxF_u2" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U3</label>
+            <input type="number" min="1" max="100" id="modalMaxF_u3" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U4</label>
+            <input type="number" min="1" max="100" id="modalMaxF_u4" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U5</label>
+            <input type="number" min="1" max="100" id="modalMaxF_u5" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
+          </div>
+        </div>
+        <div style="background: var(--bg-secondary); padding: 12px; border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+          💡 <b>Cálculo oficial UAT:</b> Si fijas la meta en <b>10 firmas</b> y un alumno entrega <b>8</b>, obtiene el 80% de las firmas (<b>40 puntos</b>). Al examen (50 pts) se le suman estos 40 pts para obtener la nota final de la unidad.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="App.closeMaxFirmasModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.saveMaxFirmasModal()">Guardar y Aplicar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal para Registrar Nuevo Docente -->
   <div class="modal-backdrop" id="registerTeacherModal">
     <div class="modal-content" style="max-width: 480px;">
@@ -195,26 +271,21 @@
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeRegisterTeacherModal()">✕</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
-          Registra un nuevo profesor con su propia base de datos limpia para capturar calificaciones.
-        </p>
         <div class="form-group">
-          <label>Nombre Completo con Título:</label>
-          <input type="text" id="regTeacherNombre" class="form-control" placeholder="Ej. Ing. Carlos Pérez Rivera" />
+          <label>Nombre Completo:</label>
+          <input type="text" id="regTeacherNombre" class="form-control" placeholder="Ej. Dr. Armando Garza Treviño" />
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div class="form-group">
-            <label>Usuario:</label>
-            <input type="text" id="regTeacherUsuario" class="form-control" placeholder="Ej. cperez" />
-          </div>
-          <div class="form-group">
-            <label>Contraseña:</label>
-            <input type="password" id="regTeacherPassword" class="form-control" placeholder="Contraseña de acceso" value="123" />
-          </div>
+        <div class="form-group">
+          <label>Usuario Institucional (para inicio de sesión):</label>
+          <input type="text" id="regTeacherUsuario" class="form-control" placeholder="Ej. agarza" />
         </div>
         <div class="form-group">
           <label>Correo Institucional:</label>
-          <input type="email" id="regTeacherCorreo" class="form-control" placeholder="Ej. cperez@docentes.uat.edu.mx" />
+          <input type="email" id="regTeacherCorreo" class="form-control" placeholder="Ej. agarza@docentes.uat.edu.mx" />
+        </div>
+        <div class="form-group">
+          <label>Contraseña:</label>
+          <input type="password" id="regTeacherPassword" class="form-control" placeholder="Mínimo 3 caracteres (ej. 123)" value="123" />
         </div>
         <div class="form-group">
           <label>Departamento / Academia:</label>
@@ -235,8 +306,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
   <script src="firebase_service.js"></script>
+  <script src="faculty_roster.js"></script>
   <script src="sample_data.js"></script>
-  <script src="exporter.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="exporter.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

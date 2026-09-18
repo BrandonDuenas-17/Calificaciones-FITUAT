@@ -125,34 +125,52 @@ const FirebaseService = {
     }
   },
 
-  // Guardar o actualizar un profesor en Firestore
+  // Guardar o actualizar un profesor en Firestore (100% Cloud)
   saveTeacher: async function(teacher) {
-    if (!this.isInitialized || !this.db || !teacher || !teacher.id) return;
+    if (!this.isInitialized || !this.db || !teacher || !teacher.id) return false;
 
     try {
+      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+        App.setCloudSaveStatus("saving");
+      }
+
       const cleanTeacher = JSON.parse(JSON.stringify(teacher));
       cleanTeacher.updatedAt = new Date().toISOString();
 
       await this.db.collection("teachers").doc(teacher.id).set(cleanTeacher, { merge: true });
       this.status = "connected";
       this.notifyStatusChange();
+
+      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+        App.setCloudSaveStatus("saved");
+      }
+      return true;
     } catch (error) {
-      console.warn("No se pudo sincronizar con Firestore (guardado en caché local):", error);
+      console.error("Error al sincronizar directamente en Firestore:", error);
       if (!navigator.onLine) {
         this.status = "offline";
-        this.notifyStatusChange();
+      } else {
+        this.status = "error";
       }
+      this.notifyStatusChange();
+
+      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+        App.setCloudSaveStatus("error", error.message);
+      }
+      return false;
     }
   },
 
   // Eliminar un profesor de Firestore
   deleteTeacher: async function(teacherId) {
-    if (!this.isInitialized || !this.db || !teacherId) return;
+    if (!this.isInitialized || !this.db || !teacherId) return false;
 
     try {
       await this.db.collection("teachers").doc(teacherId).delete();
+      return true;
     } catch (error) {
       console.error("Error al eliminar profesor de Firestore:", error);
+      return false;
     }
   },
 
@@ -188,6 +206,38 @@ const FirebaseService = {
     if (this.activeListenerUnsubscribe) {
       this.activeListenerUnsubscribe();
       this.activeListenerUnsubscribe = null;
+    }
+  },
+
+  // Sincronizar el Roster Oficial completo en lotes (batch) a Firestore
+  syncFullFacultyRoster: async function(roster, onProgress) {
+    if (!this.isInitialized || !this.db || !roster || roster.length === 0) return false;
+
+    try {
+      const batchSize = 25;
+      let totalSaved = 0;
+
+      for (let i = 0; i < roster.length; i += batchSize) {
+        const chunk = roster.slice(i, i + batchSize);
+        const batch = this.db.batch();
+
+        chunk.forEach(teacher => {
+          const docRef = this.db.collection("teachers").doc(teacher.id);
+          const cleanTeacher = JSON.parse(JSON.stringify(teacher));
+          cleanTeacher.updatedAt = new Date().toISOString();
+          batch.set(docRef, cleanTeacher, { merge: true });
+        });
+
+        await batch.commit();
+        totalSaved += chunk.length;
+        if (onProgress) {
+          onProgress(totalSaved, roster.length);
+        }
+      }
+      return true;
+    } catch (e) {
+      console.error("Error al sincronizar roster oficial en Firestore:", e);
+      return false;
     }
   }
 };
