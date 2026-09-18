@@ -50,7 +50,7 @@
   <div class="modal-backdrop" id="bulkImportModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>📋 Pegar Lista de Alumnos desde Excel</h3>
+        <h3>Pegar Lista de Alumnos desde Excel</h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeBulkImportModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -78,7 +78,7 @@
   <div class="modal-backdrop" id="newCourseModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>➕ Crear Nueva Materia / Grupo</h3>
+        <h3>Crear Nueva Materia / Grupo</h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeNewCourseModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -125,7 +125,7 @@
   <div class="modal-backdrop" id="manageCourseModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>⚙️ Ajustes de la Lista Actual</h3>
+        <h3>Ajustes de la Lista Actual</h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeManageCourseModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -149,10 +149,10 @@
         <div style="display: flex; flex-direction: column; gap: 10px;">
           <label style="font-size: 12.5px; font-weight: 600; color: var(--text-secondary);">Acciones Rápidas:</label>
           <button class="btn btn-default" style="justify-content: flex-start;" onclick="App.duplicateCurrentCourse()">
-            📋 Duplicar estructura para otro Grupo (Mismos topes de firmas)
+            Duplicar estructura para otro Grupo (Mismos topes de firmas)
           </button>
           <button class="btn btn-default" style="justify-content: flex-start; color: var(--fiuat-red);" onclick="App.deleteCurrentCourse()">
-            🗑️ Eliminar esta Lista / Grupo
+            Eliminar esta Lista / Grupo
           </button>
         </div>
       </div>
@@ -167,7 +167,7 @@
   <div class="modal-backdrop" id="switchTeacherModal">
     <div class="modal-content" style="max-width: 500px;">
       <div class="modal-header">
-        <h3>👥 Cambiar de Profesor / Espacio Docente</h3>
+        <h3>Cambiar de Profesor / Espacio Docente</h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSwitchTeacherModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -175,7 +175,7 @@
           Selecciona la cuenta del docente al que deseas cambiarte.
         </p>
         <div style="margin-bottom: 12px;">
-          <input type="text" id="switchTeacherSearch" class="form-control" placeholder="🔍 Buscar por nombre o usuario..." oninput="App.filterSwitchTeacherList(this.value)" autocomplete="off" />
+          <input type="text" id="switchTeacherSearch" class="form-control" placeholder="Buscar por nombre o usuario..." oninput="App.filterSwitchTeacherList(this.value)" autocomplete="off" />
         </div>
         <div id="switchTeacherList" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
           <!-- Generado dinámicamente -->
@@ -194,11 +194,13 @@
   <div class="modal-backdrop" id="syncRosterModal">
     <div class="modal-content" style="max-width: 480px;">
       <div class="modal-header">
-        <h3>☁️ Sincronizar Roster Oficial a Firestore</h3>
+        <h3>Sincronizar Roster Oficial a Firestore</h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSyncRosterModal()">✕</button>
       </div>
       <div class="modal-body" style="text-align: center; padding: 24px;">
-        <div style="font-size: 38px; margin-bottom: 12px;">🏛️</div>
+        <div style="display: flex; justify-content: center; margin-bottom: 12px; color: var(--uat-blue-night);">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M3 10h18M5 10v11M19 10v11M9 10v11M14 10v11M12 2 2 7h20L12 2z"/></svg>
+        </div>
         <h4 style="font-size: 16px; margin-bottom: 8px; font-weight: 700;">Roster Oficial de la Facultad de Ingeniería</h4>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
           Se importarán <b>153 Profesores</b>, <b>353 Materias/Grupos</b> y <b>18,702 Inscripciones</b> directamente a Firebase Firestore.
@@ -222,7 +224,8 @@
     <div class="modal-content" style="max-width: 450px;">
       <div class="modal-header">
         <h3 style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 18px;">🎯</span> Meta de Firmas por Unidad
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--uat-orange);"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          Meta de Firmas por Unidad
         </h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeMaxFirmasModal()">✕</button>
       </div>
@@ -253,7 +256,7 @@
           </div>
         </div>
         <div style="background: var(--bg-secondary); padding: 12px; border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-          💡 <b>Cálculo oficial UAT:</b> Si fijas la meta en <b>10 firmas</b> y un alumno entrega <b>8</b>, obtiene el 80% de las firmas (<b>40 puntos</b>). Al examen (50 pts) se le suman estos 40 pts para obtener la nota final de la unidad.
+          <b>Cálculo oficial UAT:</b> Si fijas la meta en <b>10 firmas</b> y un alumno entrega <b>8</b>, obtiene el 80% de las firmas (<b>40 puntos</b>). Al examen (50 pts) se le suman estos 40 pts para obtener la nota final de la unidad.
         </div>
       </div>
       <div class="modal-footer">
@@ -267,7 +270,7 @@
   <div class="modal-backdrop" id="registerTeacherModal">
     <div class="modal-content" style="max-width: 480px;">
       <div class="modal-header">
-        <h3>👨‍🏫 Alta de Nuevo Profesor</h3>
+        <h3>Alta de Nuevo Profesor</h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeRegisterTeacherModal()">✕</button>
       </div>
       <div class="modal-body">

@@ -66,9 +66,19 @@ const App = {
       t.departamento = "Facultad de Ingeniería Tampico";
     }
     if (!t.avatar || t.avatar.length > 5 || t.avatar.includes("ð") || t.avatar.includes("â") || t.avatar.charCodeAt(0) === 0x00F0) {
-      t.avatar = t.role === 'admin' ? '🏛️' : '👨‍🏫';
+      t.avatar = t.role === 'admin' ? 'DIR' : this.getTeacherInitials(t.nombre);
     }
     return t;
+  },
+
+  getTeacherInitials: function(name) {
+    if (!name) return "DOC";
+    const clean = name.replace(/^(ING\.|DRA\.|DR\.|LIC\.|MTRO\.|MTRA\.|PROF\.)\s+/i, '').trim();
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return clean.substring(0, 2).toUpperCase();
   },
 
   loadDataFromCloud: async function() {
@@ -485,7 +495,7 @@ const App = {
     container.innerHTML = `
       <div class="teacher-profile-wrap">
         <button type="button" class="teacher-profile-btn" onclick="App.toggleTeacherDropdown(event)" title="Cuenta activa">
-          <span class="teacher-avatar">${t.avatar || (isAdmin ? '🏛️' : '👨‍🏫')}</span>
+          <span class="teacher-avatar">${isAdmin ? 'DIR' : this.getTeacherInitials(t.nombre)}</span>
           <div class="teacher-info-mini">
             <span class="teacher-name-mini">${t.nombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</span>
             <span class="teacher-depto-mini">${t.departamento || 'FIUAT'}</span>
@@ -494,7 +504,7 @@ const App = {
         </button>
         <div class="teacher-dropdown" id="teacherDropdown">
           <div class="teacher-dropdown-header">
-            <div class="teacher-avatar-large">${t.avatar || (isAdmin ? '🏛️' : '👨‍🏫')}</div>
+            <div class="teacher-avatar-large">${isAdmin ? 'DIR' : this.getTeacherInitials(t.nombre)}</div>
             <div>
               <div class="teacher-name-full">${t.nombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</div>
               <div class="teacher-email-full">${t.correo || t.usuario}</div>
@@ -502,7 +512,7 @@ const App = {
             </div>
           </div>
           <div style="padding: 10px 16px; font-size: 12px; color: var(--text-secondary); background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);">
-            ${isAdmin ? `🏛️ <b>Acceso Maestro</b>: Supervisión general de toda la facultad` : `📚 <b>${coursesCount}</b> Materias / Grupos asignados<br>👥 <b>${studentsCount}</b> Alumnos en su Directorio`}
+            ${isAdmin ? `<b>Acceso Maestro</b>: Supervisión general de toda la facultad` : `<b>${coursesCount}</b> Materias / Grupos asignados • <b>${studentsCount}</b> Alumnos en su Directorio`}
           </div>
           ${isAdmin ? `
             <button class="dropdown-item" onclick="App.exitSupervision()">
@@ -542,7 +552,7 @@ const App = {
       nav.innerHTML = `
         <button class="nav-tab-btn active" onclick="App.switchTab('admin_dashboard')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          🏛️ Panel de Control Maestro (Supervisión)
+          Panel de Control Maestro (Supervisión)
           <span class="nav-tab-badge">${regularTeachers.length} profesores</span>
         </button>
         <button class="nav-tab-btn" style="margin-left: auto; color: var(--uat-orange); font-weight: 700;" onclick="App.openRegisterTeacherModal()">
@@ -560,8 +570,9 @@ const App = {
     let adminBackBtn = "";
     if (this.isAdmin() && this.isSupervising) {
       adminBackBtn = `
-        <button class="nav-tab-btn" style="background: rgba(224, 126, 51, 0.15); color: var(--uat-orange); font-weight: 700; border: 1px solid var(--uat-orange); margin-right: 6px;" onclick="App.exitSupervision()">
-          ↩️ Volver al Panel Maestro
+        <button class="nav-tab-btn" style="background: rgba(224, 126, 51, 0.15); color: var(--uat-orange); font-weight: 700; border: 1px solid var(--uat-orange); margin-right: 6px; display: inline-flex; align-items: center; gap: 6px;" onclick="App.exitSupervision()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          Volver al Panel Maestro
         </button>
       `;
     }
@@ -767,7 +778,7 @@ const App = {
 
     let selectHtml = "";
     Object.keys(coursesBySubject).forEach(subject => {
-      selectHtml += `<optgroup label="📚 ${subject}">`;
+      selectHtml += `<optgroup label="${subject}">`;
       coursesBySubject[subject].forEach(c => {
         const count = (c.records || []).length;
         selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${c.grupo || 'Grupo'} (${count} alumnos)</option>`;
@@ -780,7 +791,7 @@ const App = {
         <div class="page-title-row">
           <div>
             <h1 class="page-title">
-              <span>📐</span> ${course.nombre}
+              ${course.nombre}
               <span style="font-size: 13.5px; font-weight: 700; background: var(--uat-orange-light); color: var(--uat-orange-dark); padding: 3px 12px; border-radius: 12px; border: 1px solid rgba(224, 126, 51, 0.3); margin-left: 6px;">
                 ${course.grupo || 'Grupo A'}
               </span>
@@ -798,7 +809,8 @@ const App = {
               Nueva Lista
             </button>
             <button class="btn btn-default" onclick="App.openMaxFirmasModal()" title="Configurar metas de firmas para todas las unidades de esta materia">
-              <span style="font-size: 13px;">🎯</span> Metas de Firmas
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              Metas de Firmas
             </button>
             <button class="btn btn-default btn-course-pair" onclick="App.openManageCourseModal()" title="Ajustes de esta lista (renombrar, duplicar grupo, eliminar)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -844,11 +856,11 @@ const App = {
               <th style="width: 160px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación Final</div></th>
               
               <!-- Firmas U1-U5 con Acceso a Ajustes -->
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U1 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U2 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U3 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U4 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U5 <span style="font-size: 9px; opacity: 0.6;">⚙️</span></div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U1</div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U2</div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U3</div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U4</div></th>
+              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U5</div></th>
 
               <!-- Exámenes U1-U5 -->
               <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U1</div></th>
@@ -1002,7 +1014,7 @@ const App = {
         <div class="page-title-row">
           <div>
             <h1 class="page-title">
-              <span>👥</span> Directorio Maestro de Alumnos
+              Directorio Maestro de Alumnos
             </h1>
             <p class="page-desc">
               Base de datos relacional de estudiantes. Al registrar aquí la matrícula y nombre, cualquier materia (Álgebra Lineal o Cálculo Integral) obtiene el nombre automáticamente mediante <b>Rollup</b>.
@@ -1053,7 +1065,7 @@ const App = {
     container.innerHTML = `
       <div class="page-title-area">
         <h1 class="page-title">
-          <span>📤</span> Publicación de Calificaciones para Teams
+          Publicación de Calificaciones para Teams
         </h1>
         <p class="page-desc">
           Opciones para compartir y publicar las calificaciones con tus alumnos de manera profesional, con celdas de solo lectura y protección contra edición.
@@ -1130,7 +1142,7 @@ const App = {
 
       <!-- Módulo de Consulta Rápida por Matrícula (Para Proyector o Alumno) -->
       <div class="student-search-box">
-        <h3 style="margin-bottom: 6px;">🔍 Consulta Rápida por Matrícula</h3>
+        <h3 style="margin-bottom: 6px;">Consulta Rápida por Matrícula</h3>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
           Ingresa una matrícula para ver su desglose individual en pantalla sin mostrar las calificaciones del resto:
         </p>
@@ -1151,7 +1163,7 @@ const App = {
     container.innerHTML = `
       <div class="page-title-area">
         <h1 class="page-title">
-          <span>⚙️</span> Configuración de Fórmulas y Ponderaciones
+          Configuración de Fórmulas y Ponderaciones
         </h1>
         <p class="page-desc">
           Ajusta los máximos de firmas por unidad y revisa las fórmulas matemáticas activas.
@@ -1512,7 +1524,7 @@ const App = {
     this.saveData();
     this.render();
     this.closeMaxFirmasModal();
-    this.showToast(`🎯 Metas de firmas actualizadas y sincronizadas en la nube`);
+    this.showToast(`Metas de firmas actualizadas y sincronizadas en la nube`);
   },
 
   updateMaxFirmasConfig: function(uKey, val) {
@@ -1523,7 +1535,7 @@ const App = {
     course.firmasMaxConfig[uKey] = num;
     this.saveData();
     this.render();
-    this.showToast(`🎯 Meta de ${uKey.toUpperCase()} actualizada a ${num} firmas`);
+    this.showToast(`Meta de ${uKey.toUpperCase()} actualizada a ${num} firmas`);
   },
 
   // Filtrado instantáneo en vivo (DOM Directo sin destruir la tabla)
@@ -1923,7 +1935,7 @@ const App = {
         <div class="login-card">
           <div class="login-header">
             <div class="login-institution-badge">
-              <span>🏛️</span> Facultad de Ingeniería Tampico • UAT
+              Facultad de Ingeniería Tampico • UAT
             </div>
             <h1 class="login-title">Acceso Docente</h1>
             <p class="login-subtitle">
@@ -1978,7 +1990,7 @@ const App = {
                   if (t.role === 'admin') {
                     return `
                       <div class="demo-teacher-card" style="border: 1.5px solid var(--uat-orange); background: rgba(224, 126, 51, 0.08);" onclick="App.quickLogin('${t.id}')">
-                        <div class="demo-avatar">${t.avatar || '🏛️'}</div>
+                        <div class="demo-avatar">DIR</div>
                         <div style="flex: 1;">
                           <div class="demo-name" style="color: var(--uat-orange-dark);">${t.nombre} <span class="badge-role-admin">PERFIL MAESTRO</span></div>
                           <div class="demo-sub">Supervisión general de todos los profesores, materias y calificaciones</div>
@@ -1988,9 +2000,10 @@ const App = {
                     `;
                   }
                   const subjectNames = (t.data && t.data.courses) ? t.data.courses.map(c => c.nombre).slice(0, 2).join(', ') : 'Sin materias';
+                  const initials = this.getTeacherInitials(t.nombre);
                   return `
                     <div class="demo-teacher-card" onclick="App.quickLogin('${t.id}')">
-                      <div class="demo-avatar">${t.avatar || '👨‍🏫'}</div>
+                      <div class="demo-avatar">${initials}</div>
                       <div style="flex: 1;">
                         <div class="demo-name">${t.nombre}</div>
                         <div class="demo-sub">${t.departamento} • ${subjectNames}</div>
@@ -2076,7 +2089,7 @@ const App = {
       correo: correo,
       password: password,
       departamento: depto,
-      avatar: "👨‍🏫",
+      avatar: "",
       data: {
         students: [],
         courses: [
@@ -2220,7 +2233,9 @@ const App = {
       container.innerHTML = `
         <div class="supervision-banner">
           <div class="supervision-banner-info">
-            <span class="supervision-pulse-icon">👁️</span>
+            <span class="supervision-pulse-icon" style="display: inline-flex; align-items: center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
             <span><b>Modo Supervisión Activo:</b> Auditando listas y calificaciones de <u>${name}</u> (${depto})</span>
           </div>
           <button type="button" class="btn-exit-supervision" onclick="App.exitSupervision()">
@@ -2273,7 +2288,7 @@ const App = {
         courses.slice(0, 3).forEach(c => {
           coursesHtml += `
             <div class="admin-course-pill">
-              <span>📐 ${c.nombre} (${c.grupo || 'Grupo A'})</span>
+              <span>${c.nombre} (${c.grupo || 'Grupo A'})</span>
               <span style="color: var(--text-secondary); font-size: 11px;">${(c.records || []).length} alumnos</span>
             </div>
           `;
@@ -2284,14 +2299,14 @@ const App = {
       }
 
       const coursesSearchStr = courses.map(c => c.nombre + ' ' + (c.grupo || '')).join(' ').toLowerCase();
-      const avatarDisplay = (t.avatar && t.avatar.length <= 5 && !t.avatar.includes("ð") && !t.avatar.includes("â")) ? t.avatar : (t.role === 'admin' ? '🏛️' : '👨‍🏫');
+      const initialsDisplay = t.role === 'admin' ? 'DIR' : this.getTeacherInitials(t.nombre);
       const deptoDisplay = (t.departamento && !t.departamento.includes("Ã")) ? t.departamento : "Facultad de Ingeniería Tampico";
 
       teachersGridHtml += `
         <div class="admin-teacher-card" data-teacher-name="${t.nombre.toLowerCase()}" data-teacher-courses="${coursesSearchStr}">
           <div>
             <div class="admin-teacher-header">
-              <div class="admin-teacher-avatar">${avatarDisplay}</div>
+              <div class="admin-teacher-avatar">${initialsDisplay}</div>
               <div style="flex: 1; min-width: 0;">
                 <div class="admin-teacher-name">${t.nombre}</div>
                 <div class="admin-teacher-email">${t.correo || t.usuario}</div>
@@ -2316,7 +2331,7 @@ const App = {
               <span>Estado: <b style="color: var(--color-green);">Activo</b></span>
             </div>
             <button type="button" class="btn-supervise" onclick="App.superviseTeacher('${t.id}')">
-              <span>👁️ Supervisar / Auditar Calificaciones</span>
+              <span>Supervisar / Auditar Calificaciones</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2329,7 +2344,6 @@ const App = {
         <div class="admin-header-area">
           <div>
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-              <span style="font-size: 20px;">🏛️</span>
               <h1 style="font-size: 22px; font-weight: 800; color: var(--text-primary);">
                 Panel Central de Control y Supervisión Docente
               </h1>
@@ -2341,8 +2355,9 @@ const App = {
           </div>
 
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button class="btn btn-primary" style="background: var(--uat-orange); border-color: var(--uat-orange); font-weight: 700;" onclick="App.openSyncRosterModal()">
-              ☁️ Sincronizar Roster Oficial (153 Docentes)
+            <button class="btn btn-primary" style="background: var(--uat-orange); border-color: var(--uat-orange); font-weight: 700; display: inline-flex; align-items: center; gap: 7px;" onclick="App.openSyncRosterModal()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+              Sincronizar Roster Oficial (153 Docentes)
             </button>
             <button class="btn btn-default" onclick="App.downloadAllFacultyBackup()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -2357,7 +2372,9 @@ const App = {
         <!-- Métricas Generales de la Facultad -->
         <div class="admin-stats-grid">
           <div class="admin-stat-card">
-            <div class="admin-stat-icon">👥</div>
+            <div class="admin-stat-icon" style="color: var(--uat-blue-night);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
             <div>
               <div class="admin-stat-value">${teachersList.length}</div>
               <div class="admin-stat-label">Profesores Registrados</div>
@@ -2365,7 +2382,9 @@ const App = {
           </div>
 
           <div class="admin-stat-card">
-            <div class="admin-stat-icon">📚</div>
+            <div class="admin-stat-icon" style="color: var(--uat-orange);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            </div>
             <div>
               <div class="admin-stat-value">${totalMaterias}</div>
               <div class="admin-stat-label">Grupos y Materias Activas</div>
@@ -2373,7 +2392,9 @@ const App = {
           </div>
 
           <div class="admin-stat-card">
-            <div class="admin-stat-icon">🎓</div>
+            <div class="admin-stat-icon" style="color: #2b7a78;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+            </div>
             <div>
               <div class="admin-stat-value">${totalAlumnosMatriculados}</div>
               <div class="admin-stat-label">Estudiantes Registrados</div>
@@ -2381,7 +2402,9 @@ const App = {
           </div>
 
           <div class="admin-stat-card">
-            <div class="admin-stat-icon">⭐</div>
+            <div class="admin-stat-icon" style="color: var(--uat-orange);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+            </div>
             <div>
               <div class="admin-stat-value">${promedioGeneral} pts</div>
               <div class="admin-stat-label">Promedio General Facultad</div>
@@ -2391,7 +2414,7 @@ const App = {
 
         <!-- Barra de Búsqueda de Docentes -->
         <div class="admin-section-title" style="margin-bottom: 8px;">
-          <span>👨‍🏫 Directorio de Docentes (${teachersList.length})</span>
+          <span>Directorio Oficial de Docentes (${teachersList.length})</span>
           <span style="font-size: 12.5px; font-weight: 500; color: var(--text-tertiary);">
             Haz clic en "Supervisar" en cualquier docente para auditar sus listas en vivo
           </span>
@@ -2399,7 +2422,7 @@ const App = {
 
         <div style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center;">
           <input type="text" id="adminTeacherSearch" class="form-control" 
-            placeholder="🔍 Buscar docente por nombre o materia (ej. Treviño, Estructuras, Cálculo)..." 
+            placeholder="Buscar docente por nombre o materia (ej. Treviño, Estructuras, Cálculo)..." 
             oninput="App.filterAdminTeachers(this.value)" autocomplete="off" 
             style="font-size: 14px; padding: 10px 14px; border-radius: var(--radius-md);" />
           <span id="adminTeacherCountBadge" style="font-size: 12.5px; color: var(--text-secondary); font-weight: 600; white-space: nowrap;">
@@ -2485,7 +2508,7 @@ const App = {
     });
 
     if (success) {
-      if (statusText) statusText.textContent = "✅ ¡153 Profesores y 18,702 inscripciones sincronizadas en Firestore!";
+      if (statusText) statusText.textContent = "¡153 Profesores y 18,702 inscripciones sincronizadas en Firestore!";
       await this.loadDataFromCloud();
       this.render();
       setTimeout(() => {
@@ -2493,7 +2516,7 @@ const App = {
         this.showToast("Roster Oficial de 153 profesores activo en Firestore");
       }, 1200);
     } else {
-      if (statusText) statusText.textContent = "❌ Ocurrió un error al sincronizar con Firestore.";
+      if (statusText) statusText.textContent = "Ocurrió un error al sincronizar con Firestore.";
       if (cancelBtn) cancelBtn.disabled = false;
     }
   },
@@ -2531,10 +2554,10 @@ const App = {
       const isCurrent = this.currentUser && this.currentUser.id === t.id;
       const coursesCount = (t.data && t.data.courses) ? t.data.courses.length : 0;
       const studentsCount = (t.data && t.data.students) ? t.data.students.length : 0;
-      const avatarDisplay = (t.avatar && t.avatar.length <= 5 && !t.avatar.includes("ð") && !t.avatar.includes("â")) ? t.avatar : (t.role === 'admin' ? '🏛️' : '👨‍🏫');
+      const initials = t.role === 'admin' ? 'DIR' : this.getTeacherInitials(t.nombre);
       return `
         <div class="demo-teacher-card" style="margin-bottom: 0; ${isCurrent ? 'border-color: var(--uat-orange); background: var(--bg-hover);' : ''}" onclick="App.switchTeacher('${t.id}')">
-          <div class="demo-avatar">${avatarDisplay}</div>
+          <div class="demo-avatar">${initials}</div>
           <div style="flex: 1; min-width: 0;">
             <div class="demo-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               ${t.nombre} ${isCurrent ? '<span style="color: var(--uat-orange); font-size: 11px;">(Activo)</span>' : ''}
@@ -2607,7 +2630,7 @@ const App = {
       correo: correo,
       password: password,
       departamento: depto,
-      avatar: "👨‍🏫",
+      avatar: "",
       data: {
         students: [],
         courses: [

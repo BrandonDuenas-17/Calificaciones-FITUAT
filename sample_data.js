@@ -182,7 +182,7 @@ const INITIAL_ADMIN = {
   password: "admin",
   departamento: "Dirección y Gestión Docente",
   role: "admin",
-  avatar: "🏛️"
+  avatar: "DIR"
 };
 
 // Catálogo inicial de profesores con sus materias y directorios aislados
@@ -195,7 +195,7 @@ const INITIAL_TEACHERS = [
     password: "123",
     departamento: "Ciencias Básicas (FIUAT)",
     role: "docente",
-    avatar: "👨‍🏫",
+    avatar: "RG",
     data: INITIAL_DATA
   },
   {
@@ -206,7 +206,7 @@ const INITIAL_TEACHERS = [
     password: "123",
     departamento: "Ingeniería en Sistemas",
     role: "docente",
-    avatar: "👩‍🏫",
+    avatar: "MS",
     data: {
       students: [
         { matricula: "2213301101", nombre: "CRUZ MORALES SEBASTIAN", carrera: "Ing. en Sistemas" },
