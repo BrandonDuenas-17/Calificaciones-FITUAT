@@ -172,9 +172,9 @@ const App = {
 
     if (!cloud || !cloud.isInitialized) {
       container.innerHTML = `
-        <div class="cloud-status-badge offline" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Haz clic para configurar tu conexión a Supabase">
+        <div class="cloud-status-badge offline" title="Sin conexión al servidor institucional en la nube">
           <span class="cloud-status-dot"></span>
-          <span>Configurar Supabase</span>
+          <span>Sin Conexión</span>
         </div>
       `;
       return;
@@ -182,23 +182,23 @@ const App = {
 
     if (cloud.status === "connected") {
       container.innerHTML = `
-        <div class="cloud-status-badge connected" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Conectado a Supabase en tiempo real (PostgreSQL). Haz clic para ver credenciales.">
+        <div class="cloud-status-badge connected" title="Conexión institucional activa. Calificaciones sincronizadas en tiempo real.">
           <span class="cloud-status-dot"></span>
-          <span>Supabase Conectado</span>
+          <span>Nube Conectada</span>
         </div>
       `;
     } else if (cloud.status === "offline") {
       container.innerHTML = `
-        <div class="cloud-status-badge offline" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Sin conexión a internet o credenciales pendientes. Haz clic para configurar.">
+        <div class="cloud-status-badge offline" title="Modo local sin internet. Los cambios se guardan en tu equipo.">
           <span class="cloud-status-dot"></span>
-          <span>Sin Conexión</span>
+          <span>Modo Local</span>
         </div>
       `;
     } else {
       container.innerHTML = `
-        <div class="cloud-status-badge connecting" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Conectando con Supabase...">
+        <div class="cloud-status-badge connecting" title="Conectando con el servidor institucional...">
           <span class="cloud-status-dot"></span>
-          <span>Conectando...</span>
+          <span>Sincronizando...</span>
         </div>
       `;
     }
@@ -2622,8 +2622,7 @@ const App = {
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
 
     if (!cloud) {
-      alert("No hay conexión activa con Supabase. Haz clic en el indicador superior para ingresar tu URL y Anon Key.");
-      this.openSupabaseConfigModal();
+      alert("No hay conexión activa con el servidor institucional en la nube.");
       return;
     }
 
@@ -2800,43 +2799,6 @@ const App = {
     this.showToast(`Profesor ${nombre} registrado con éxito.`);
   },
 
-  openSupabaseConfigModal: function() {
-    const modal = document.getElementById("supabaseConfigModal");
-    if (modal) {
-      const urlInput = document.getElementById("supabaseUrlInput");
-      const keyInput = document.getElementById("supabaseKeyInput");
-      if (urlInput) urlInput.value = localStorage.getItem("supabase_url") || "";
-      if (keyInput) keyInput.value = localStorage.getItem("supabase_anon_key") || "";
-      modal.classList.add("open");
-    }
-  },
-
-  closeSupabaseConfigModal: function() {
-    const modal = document.getElementById("supabaseConfigModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  saveSupabaseCredentials: async function() {
-    const url = document.getElementById("supabaseUrlInput")?.value.trim();
-    const key = document.getElementById("supabaseKeyInput")?.value.trim();
-    if (!url || !key) {
-      alert("Por favor ingresa tanto el Project URL como el Anon Key de Supabase.");
-      return;
-    }
-    this.closeSupabaseConfigModal();
-    this.showToast("Conectando con Supabase...");
-    if (typeof SupabaseService !== "undefined") {
-      const ok = await SupabaseService.setCredentials(url, key);
-      this.updateCloudStatusBadge();
-      if (ok) {
-        await this.loadDataFromCloud();
-        this.render();
-        this.showToast("¡Conectado exitosamente a Supabase!");
-      } else {
-        this.showToast("Aviso: No se pudo verificar la conexión con Supabase. Revisa tus credenciales.");
-      }
-    }
-  },
 
   setupEventListeners: function() {
     document.addEventListener("keydown", (e) => {
@@ -2846,7 +2808,6 @@ const App = {
         this.closeManageCourseModal();
         this.closeSwitchTeacherModal();
         this.closeRegisterTeacherModal();
-        this.closeSupabaseConfigModal();
       }
     });
 
