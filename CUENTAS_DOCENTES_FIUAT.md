@@ -38,24 +38,24 @@
 | 19 | **BERMEA BARRIOS JUAN ENRIQUE** | bbarrios | 123 | bbarrios@docentes.uat.edu.mx |
 | 20 | **BETANCOURT NUÑEZ ALFONSO** | bnuez | 123 | bnuez@docentes.uat.edu.mx |
 | 21 | **BORJAS POLANCO MIGUEL ANGEL** | bpolanco | 123 | bpolanco@docentes.uat.edu.mx |
-| 22 | **CABRERA CRUZ RENE BERNARDO ELIAS** | ccruz | 123 | ccruz@docentes.uat.edu.mx |
+| 22 | **CABRERA CRUZ RENE BERNARDO ELIAS** | rcabrera | 123 | rcabrera@docentes.uat.edu.mx |
 | 23 | **CANTU DAVILA JOSE FRANCISCO** | cdavila | 123 | cdavila@docentes.uat.edu.mx |
 | 24 | **CARDONA HONDALL ROSA CARMINA** | chondall | 123 | chondall@docentes.uat.edu.mx |
 | 25 | **CARMONA ESQUEDA ROBERTO** | cesqueda | 123 | cesqueda@docentes.uat.edu.mx |
-| 26 | **CASTAN ROCHA EMILIO** | crocha | 123 | crocha@docentes.uat.edu.mx |
-| 27 | **CASTAN ROCHA JOSE ANTONIO** | crocha | 123 | crocha@docentes.uat.edu.mx |
+| 26 | **CASTAN ROCHA EMILIO** | ecastan | 123 | ecastan@docentes.uat.edu.mx |
+| 27 | **CASTAN ROCHA JOSE ANTONIO** | jacastan | 123 | jacastan@docentes.uat.edu.mx |
 | 28 | **CASTELLANOS DIAZ VERONICA** | cdiaz | 123 | cdiaz@docentes.uat.edu.mx |
 | 29 | **CASTILLO ESTRADA MERCEDES ELENA** | cestrada | 123 | cestrada@docentes.uat.edu.mx |
 | 30 | **CAVAZOS MATSUMOTO ADHARA ALEJANDRA** | cmatsumoto | 123 | cmatsumoto@docentes.uat.edu.mx |
 | 31 | **CAZARES VIDAL EMMANUEL** | cvidal | 123 | cvidal@docentes.uat.edu.mx |
 | 32 | **CERVANTES CHIRINOS ERICK EMMANUEL** | cchirinos | 123 | cchirinos@docentes.uat.edu.mx |
 | 33 | **CHAVIRA JUAREZ GABRIEL** | cjuarez | 123 | cjuarez@docentes.uat.edu.mx |
-| 34 | **CHONG CRUZ VERONICA** | ccruz | 123 | ccruz@docentes.uat.edu.mx |
-| 35 | **DE LA LLATA RAMOS JUAN ANTONIO** | dla | 123 | dla@docentes.uat.edu.mx |
-| 36 | **DE LA TORRE GUZMAN LUIS EDUARDO** | dla | 123 | dla@docentes.uat.edu.mx |
+| 34 | **CHONG CRUZ VERONICA** | vchong | 123 | vchong@docentes.uat.edu.mx |
+| 35 | **DE LA LLATA RAMOS JUAN ANTONIO** | jllata | 123 | jllata@docentes.uat.edu.mx |
+| 36 | **DE LA TORRE GUZMAN LUIS EDUARDO** | ltorre | 123 | ltorre@docentes.uat.edu.mx |
 | 37 | **DEANTES PEREZ JOSE AGUSTIN** | dperez | 123 | dperez@docentes.uat.edu.mx |
-| 38 | **DEL ANGEL GOMEZ ERIK JAVIER** | dangel | 123 | dangel@docentes.uat.edu.mx |
-| 39 | **DEL ANGEL MORA BRENDA BERENICE** | dangel | 123 | dangel@docentes.uat.edu.mx |
+| 38 | **DEL ANGEL GOMEZ ERIK JAVIER** | edangel | 123 | edangel@docentes.uat.edu.mx |
+| 39 | **DEL ANGEL MORA BRENDA BERENICE** | bdangel | 123 | bdangel@docentes.uat.edu.mx |
 | 40 | **DIAZ JUAREZ JOSE LUIS** | djuarez | 123 | djuarez@docentes.uat.edu.mx |
 | 41 | **FERNANDEZ IZAGUIRRE PAULINA** | fizaguirre | 123 | fizaguirre@docentes.uat.edu.mx |
 | 42 | **FRANCO PEREZ BRENDA YUDITH** | fperez | 123 | fperez@docentes.uat.edu.mx |
@@ -74,9 +74,9 @@
 | 55 | **GONZALEZ DEL ANGEL LUIS JONAS** | gdel | 123 | gdel@docentes.uat.edu.mx |
 | 56 | **GONZALEZ DURAN NORA HILDA** | gduran | 123 | gduran@docentes.uat.edu.mx |
 | 57 | **GONZALEZ HERNANDEZ ANDRES** | ghernandez | 123 | ghernandez@docentes.uat.edu.mx |
-| 58 | **GONZALEZ TURRUBIATES ALEJANDRO** | gturrubiates | 123 | gturrubiates@docentes.uat.edu.mx |
-| 59 | **GONZALEZ TURRUBIATES DORA MARIA ESTHER** | gturrubiates | 123 | gturrubiates@docentes.uat.edu.mx |
-| 60 | **GONZALEZ TURRUBIATES JOSE GABRIEL** | gturrubiates | 123 | gturrubiates@docentes.uat.edu.mx |
+| 58 | **GONZALEZ TURRUBIATES ALEJANDRO** | agturrubiates | 123 | agturrubiates@docentes.uat.edu.mx |
+| 59 | **GONZALEZ TURRUBIATES DORA MARIA ESTHER** | dgturrubiates | 123 | dgturrubiates@docentes.uat.edu.mx |
+| 60 | **GONZALEZ TURRUBIATES JOSE GABRIEL** | jgturrubiates | 123 | jgturrubiates@docentes.uat.edu.mx |
 | 61 | **GRACIA GUZMAN MARIA DOLORES** | gguzman | 123 | gguzman@docentes.uat.edu.mx |
 | 62 | **GUILLEN VAZQUEZ ZAYRA ITZZEL** | gvazquez | 123 | gvazquez@docentes.uat.edu.mx |
 | 63 | **GUTIERREZ VEGA GUILLERMO ADRIAN** | gvega | 123 | gvega@docentes.uat.edu.mx |
@@ -84,8 +84,8 @@
 | 65 | **GUZMAN OBANDO JAVIER** | gobando | 123 | gobando@docentes.uat.edu.mx |
 | 66 | **HERNANDEZ MARIN JUAN CARLOS** | hmarin | 123 | hmarin@docentes.uat.edu.mx |
 | 67 | **HERNANDEZ RAMIREZ LEO** | hramirez | 123 | hramirez@docentes.uat.edu.mx |
-| 68 | **HERNANDEZ REJON ELDA MARGARITA** | hrejon | 123 | hrejon@docentes.uat.edu.mx |
-| 69 | **HERNANDEZ REJON ROSA MARIA** | hrejon | 123 | hrejon@docentes.uat.edu.mx |
+| 68 | **HERNANDEZ REJON ELDA MARGARITA** | ehernandez | 123 | ehernandez@docentes.uat.edu.mx |
+| 69 | **HERNANDEZ REJON ROSA MARIA** | rmhernandez | 123 | rmhernandez@docentes.uat.edu.mx |
 | 70 | **HERRERA BARAJAS LUIS ANGEL** | hbarajas | 123 | hbarajas@docentes.uat.edu.mx |
 | 71 | **HURTADO MORA HYASSELINY ALEJANDRA** | hmora | 123 | hmora@docentes.uat.edu.mx |
 | 72 | **IBARRA MARTINEZ SALVADOR** | imartinez | 123 | imartinez@docentes.uat.edu.mx |
@@ -101,8 +101,8 @@
 | 82 | **LOPEZ GUZMAN GRISELDA EDITH** | lguzman | 123 | lguzman@docentes.uat.edu.mx |
 | 83 | **LOPEZ LEDEZMA ARMANDO** | lledezma | 123 | lledezma@docentes.uat.edu.mx |
 | 84 | **LOPEZ VAZQUEZ DIOCELINA** | lvazquez | 123 | lvazquez@docentes.uat.edu.mx |
-| 85 | **LOREDO HERNANDEZ CARLOS ALFREDO** | lhernandez | 123 | lhernandez@docentes.uat.edu.mx |
-| 86 | **LOREDO HERNANDEZ ROCIO ANABELL** | lhernandez | 123 | lhernandez@docentes.uat.edu.mx |
+| 85 | **LOREDO HERNANDEZ CARLOS ALFREDO** | cloredo | 123 | cloredo@docentes.uat.edu.mx |
+| 86 | **LOREDO HERNANDEZ ROCIO ANABELL** | rloredo | 123 | rloredo@docentes.uat.edu.mx |
 | 87 | **MALDONADO ROBERT SUSAN MARGARITA** | mrobert | 123 | mrobert@docentes.uat.edu.mx |
 | 88 | **MAR ORTIZ JULIO** | mortiz | 123 | mortiz@docentes.uat.edu.mx |
 | 89 | **MARES LOPEZ OLGA LETICIA** | mlopez | 123 | mlopez@docentes.uat.edu.mx |
@@ -134,10 +134,10 @@
 | 115 | **PICHARDO RAMIREZ ROBERTO** | pramirez | 123 | pramirez@docentes.uat.edu.mx |
 | 116 | **RANGEL GONZALEZ JAVIER ALBERTO** | rgonzalez | 123 | rgonzalez@docentes.uat.edu.mx |
 | 117 | **REYNOSO MARTINEZ JORGE OCTAVIO** | rmartinez | 123 | rmartinez@docentes.uat.edu.mx |
-| 118 | **RIVERA PEREZ CARLOS ALBERTO** | rperez | 123 | rperez@docentes.uat.edu.mx |
-| 119 | **RODRIGUEZ PEREZ ROBERTO** | rperez | 123 | rperez@docentes.uat.edu.mx |
-| 120 | **ROLON AGUILAR ELVIRA** | raguilar | 123 | raguilar@docentes.uat.edu.mx |
-| 121 | **ROLON AGUILAR JULIO CESAR** | raguilar | 123 | raguilar@docentes.uat.edu.mx |
+| 118 | **RIVERA PEREZ CARLOS ALBERTO** | crivera | 123 | crivera@docentes.uat.edu.mx |
+| 119 | **RODRIGUEZ PEREZ ROBERTO** | rrodriguez | 123 | rrodriguez@docentes.uat.edu.mx |
+| 120 | **ROLON AGUILAR ELVIRA** | erolon | 123 | erolon@docentes.uat.edu.mx |
+| 121 | **ROLON AGUILAR JULIO CESAR** | jrolon | 123 | jrolon@docentes.uat.edu.mx |
 | 122 | **RUIZ DEL ANGEL EDGAR OMAR** | rdel | 123 | rdel@docentes.uat.edu.mx |
 | 123 | **RUIZ VELAZQUEZ MIGUEL** | rvelazquez | 123 | rvelazquez@docentes.uat.edu.mx |
 | 124 | **SALDAÑA MELO JOSE ISRAEL** | smelo | 123 | smelo@docentes.uat.edu.mx |

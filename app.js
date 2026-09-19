@@ -11,9 +11,45 @@ const App = {
   loginTab: "login", // "login" o "register"
   isSupervising: false,
   supervisingTeacherId: null,
+  failedLoginAttempts: 0,
+  lockoutUntil: 0,
+  inactivityTimer: null,
+  inactivityTimeoutMs: 20 * 60 * 1000, // 20 minutos de inactividad
 
   isAdmin: function() {
     return this.currentUser && this.currentUser.role === 'admin';
+  },
+
+  startInactivityTimer: function() {
+    this.stopInactivityTimer();
+    if (!this.currentUser) return;
+    this.inactivityTimer = setTimeout(() => {
+      this.handleInactivityTimeout();
+    }, this.inactivityTimeoutMs);
+  },
+
+  resetInactivityTimer: function() {
+    if (!this.currentUser) return;
+    if (this.inactivityTimer) {
+      clearTimeout(this.inactivityTimer);
+    }
+    this.inactivityTimer = setTimeout(() => {
+      this.handleInactivityTimeout();
+    }, this.inactivityTimeoutMs);
+  },
+
+  stopInactivityTimer: function() {
+    if (this.inactivityTimer) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
+  },
+
+  handleInactivityTimeout: function() {
+    if (this.currentUser) {
+      this.logout();
+      alert("Tu sesión se ha cerrado automáticamente tras 20 minutos de inactividad para proteger tus calificaciones.");
+    }
   },
 
   init: async function() {
@@ -131,6 +167,7 @@ const App = {
             this.activeCourseId = this.data.courses[0] ? this.data.courses[0].id : "";
           }
         }
+        this.startInactivityTimer();
       } else {
         this.data = null;
       }
@@ -687,6 +724,7 @@ const App = {
       let firmasCells = "";
       for (let u = 1; u <= 5; u++) {
         const uKey = `u${u}`;
+        const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
         const val = rec.firmas ? (rec.firmas[uKey] ?? "") : "";
         const maxF = maxFirmasConfig[uKey] || 10;
         const pct = val !== "" && val !== null ? Math.min(100, Math.round((Number(val) / maxF) * 100)) : 0;
@@ -696,8 +734,9 @@ const App = {
         firmasCells += `
           <td class="col-number-input">
             <div class="firmas-cell-content">
-              <input type="number" min="0" max="99" class="cell-input firmas-num-input" value="${val}" 
+              <input type="number" min="0" max="99" class="cell-input firmas-num-input ${isLocked ? 'cell-locked' : ''}" value="${val}" 
                 placeholder="-" data-col="firmas-${uKey}"
+                ${isLocked ? 'readonly title="Unidad bloqueada (Solo Lectura)"' : ''}
                 onfocus="this.select()"
                 oninput="App.updateFirmas('${rec.matricula}', '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
@@ -715,6 +754,7 @@ const App = {
       let examenesCells = "";
       for (let u = 1; u <= 5; u++) {
         const uKey = `u${u}`;
+        const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
         const val = rec.examenes ? (rec.examenes[uKey] ?? "") : "";
         const numVal = val !== "" && val !== null ? Number(val) : null;
         let barColor = "var(--color-green)";
@@ -724,8 +764,9 @@ const App = {
         examenesCells += `
           <td style="min-width: 110px;">
             <div class="progress-bar-wrap">
-              <input type="number" min="0" max="100" class="cell-input" style="width: 48px; text-align: right; font-weight: 500;" 
+              <input type="number" min="0" max="100" class="cell-input ${isLocked ? 'cell-locked' : ''}" style="width: 48px; text-align: right; font-weight: 500;" 
                 value="${val}" placeholder="-" data-col="examenes-${uKey}"
+                ${isLocked ? 'readonly title="Unidad bloqueada (Solo Lectura)"' : ''}
                 onfocus="this.select()"
                 oninput="App.updateExamen('${rec.matricula}', '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
@@ -839,6 +880,38 @@ const App = {
       selectHtml += `</optgroup>`;
     });
 
+    let firmasHeadersHtml = "";
+    for (let u = 1; u <= 5; u++) {
+      const uKey = `u${u}`;
+      const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
+      firmasHeadersHtml += `
+        <th style="width: 95px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas">
+          <div class="th-content" style="justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 3px;">
+              <span class="th-icon">#</span> Firmas U${u}
+            </div>
+            <span class="unit-lock-btn ${isLocked ? 'locked' : ''}" onclick="event.stopPropagation(); App.toggleUnitLock('${uKey}')" title="${isLocked ? `Unidad ${u} bloqueada (Solo Lectura). Haz clic para desbloquear` : `Bloquear Unidad ${u} para congelar calificaciones`}">${isLocked ? '🔒' : '🔓'}</span>
+          </div>
+        </th>
+      `;
+    }
+
+    let examenesHeadersHtml = "";
+    for (let u = 1; u <= 5; u++) {
+      const uKey = `u${u}`;
+      const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
+      examenesHeadersHtml += `
+        <th style="width: 115px;">
+          <div class="th-content" style="justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 3px;">
+              <span class="th-icon">#</span> Examen U${u}
+            </div>
+            <span class="unit-lock-btn ${isLocked ? 'locked' : ''}" onclick="event.stopPropagation(); App.toggleUnitLock('${uKey}')" title="${isLocked ? `Unidad ${u} bloqueada (Solo Lectura). Haz clic para desbloquear` : `Bloquear Unidad ${u} para congelar calificaciones`}">${isLocked ? '🔒' : '🔓'}</span>
+          </div>
+        </th>
+      `;
+    }
+
     container.innerHTML = `
       <div class="page-title-area">
         <div class="page-title-row">
@@ -908,19 +981,11 @@ const App = {
               <th style="width: 270px;"><div class="th-content"><span class="th-icon">Q</span> Alumno (Rollup)</div></th>
               <th style="width: 160px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación Final</div></th>
               
-              <!-- Firmas U1-U5 con Acceso a Ajustes -->
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U1</div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U2</div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U3</div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U4</div></th>
-              <th style="width: 85px; cursor: pointer;" onclick="App.openMaxFirmasModal()" title="Haz clic para configurar la meta máxima de firmas"><div class="th-content"><span class="th-icon">#</span> Firmas U5</div></th>
+              <!-- Firmas U1-U5 con Candado de Bloqueo -->
+              ${firmasHeadersHtml}
 
-              <!-- Exámenes U1-U5 -->
-              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U1</div></th>
-              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U2</div></th>
-              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U3</div></th>
-              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U4</div></th>
-              <th style="width: 110px;"><div class="th-content"><span class="th-icon">#</span> Examen U5</div></th>
+              <!-- Exámenes U1-U5 con Candado de Bloqueo -->
+              ${examenesHeadersHtml}
 
               <!-- Evaluaciones Calculadas U1-U5 -->
               <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U1</div></th>
@@ -1252,9 +1317,31 @@ const App = {
     `;
   },
 
+  // BLOQUEO Y CONGELAMIENTO DE UNIDADES (PROTECCIÓN CONTRA CAMBIOS ACCIDENTALES)
+  toggleUnitLock: function(uKey) {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    if (!course.lockedUnits) course.lockedUnits = {};
+    const newState = !course.lockedUnits[uKey];
+    course.lockedUnits[uKey] = newState;
+    this.saveData();
+    this.render();
+    const uNum = uKey.replace('u', '');
+    if (newState) {
+      this.showToast(`🔒 Unidad ${uNum} congelada (Solo Lectura). Edición bloqueada.`, "info");
+    } else {
+      this.showToast(`🔓 Unidad ${uNum} desbloqueada para registrar calificaciones.`, "success");
+    }
+  },
+
   // ACCIONES Y ACTUALIZACIONES QUIRÚRGICAS DE DATOS (ULTRA FLUIDEZ < 1MS)
   updateFirmas: function(matricula, uKey, val) {
     const course = this.getActiveCourse();
+    if (!course) return;
+    if (course.lockedUnits && course.lockedUnits[uKey]) {
+      this.showToast(`⚠️ La Unidad ${uKey.replace('u', '')} está bloqueada. Desbloquéala para editar calificaciones.`, "warning");
+      return;
+    }
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
       if (!rec.firmas) rec.firmas = {};
@@ -1273,6 +1360,11 @@ const App = {
 
   updateExamen: function(matricula, uKey, val) {
     const course = this.getActiveCourse();
+    if (!course) return;
+    if (course.lockedUnits && course.lockedUnits[uKey]) {
+      this.showToast(`⚠️ La Unidad ${uKey.replace('u', '')} está bloqueada. Desbloquéala para editar calificaciones.`, "warning");
+      return;
+    }
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
       if (!rec.examenes) rec.examenes = {};
@@ -2236,32 +2328,87 @@ const App = {
         this.activeCourseId = (teacher.data && teacher.data.courses && teacher.data.courses[0]) ? teacher.data.courses[0].id : "";
         this.activeTab = "gradebook";
       }
+      this.startInactivityTimer();
       this.render();
       this.showToast(`Sesión iniciada como ${teacher.nombre}`);
     }
   },
 
-  login: function(identifier, password) {
-    const term = identifier.trim().toLowerCase();
-    const teacher = this.teachers.find(t => 
-      (t.usuario && t.usuario.toLowerCase() === term) || 
-      (t.correo && t.correo.toLowerCase() === term)
-    );
-
-    if (!teacher) {
-      alert("No se encontró ningún usuario o correo institucional registrado.");
+  login: async function(identifier, password) {
+    const now = Date.now();
+    if (this.lockoutUntil && now < this.lockoutUntil) {
+      const remainingSecs = Math.ceil((this.lockoutUntil - now) / 1000);
+      alert(`Acceso temporalmente bloqueado por múltiples intentos fallidos. Intenta de nuevo en ${remainingSecs} segundos.`);
       return;
     }
 
-    if (teacher.password && password && teacher.password !== password) {
-      alert("Contraseña incorrecta. Por favor verifica tus credenciales o contacta a Coordinación.");
+    const term = (identifier || "").trim().toLowerCase();
+    if (!term) {
+      alert("Por favor ingresa tu usuario o correo institucional.");
       return;
     }
 
-    this.quickLogin(teacher.id);
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
+    let authSuccess = false;
+    let targetTeacherId = null;
+
+    if (cloud) {
+      const res = await cloud.verifyCredentials(term, password);
+      if (res && res.success) {
+        authSuccess = true;
+        targetTeacherId = res.teacherId;
+      } else if (res && res.reason === "wrong_password") {
+        this.failedLoginAttempts = (this.failedLoginAttempts || 0) + 1;
+        if (this.failedLoginAttempts >= 5) {
+          this.lockoutUntil = Date.now() + 60000;
+          this.failedLoginAttempts = 0;
+          alert("Has superado el límite de 5 intentos incorrectos. El acceso se ha bloqueado por 60 segundos por seguridad.");
+          return;
+        }
+        alert(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - this.failedLoginAttempts}.`);
+        return;
+      } else {
+        alert("No se encontró ningún usuario o correo institucional registrado.");
+        return;
+      }
+    } else {
+      // Modo local / respaldo
+      const teacher = this.teachers.find(t => 
+        (t.usuario && t.usuario.toLowerCase() === term) || 
+        (t.correo && t.correo.toLowerCase() === term)
+      );
+
+      if (!teacher) {
+        alert("No se encontró ningún usuario o correo institucional registrado.");
+        return;
+      }
+
+      const expectedPass = teacher.password || "123";
+      if (password && expectedPass !== password) {
+        this.failedLoginAttempts = (this.failedLoginAttempts || 0) + 1;
+        if (this.failedLoginAttempts >= 5) {
+          this.lockoutUntil = Date.now() + 60000;
+          this.failedLoginAttempts = 0;
+          alert("Has superado el límite de 5 intentos incorrectos. El acceso se ha bloqueado por 60 segundos por seguridad.");
+          return;
+        }
+        alert(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - this.failedLoginAttempts}.`);
+        return;
+      }
+
+      authSuccess = true;
+      targetTeacherId = teacher.id;
+    }
+
+    if (authSuccess && targetTeacherId) {
+      this.failedLoginAttempts = 0;
+      this.lockoutUntil = 0;
+      this.quickLogin(targetTeacherId);
+    }
   },
 
   logout: function() {
+    this.stopInactivityTimer();
     const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
     if (cloud && cloud.stopListening) {
       cloud.stopListening();
@@ -2832,7 +2979,14 @@ const App = {
       return;
     }
 
-    if (this.currentUser.password && currentPass !== this.currentUser.password) {
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
+    if (cloud) {
+      const verifyRes = await cloud.verifyCredentials(this.currentUser.usuario, currentPass);
+      if (!verifyRes || !verifyRes.success) {
+        alert("La contraseña actual es incorrecta.");
+        return;
+      }
+    } else if (this.currentUser.password && currentPass !== this.currentUser.password) {
       alert("La contraseña actual es incorrecta.");
       return;
     }
@@ -2856,7 +3010,6 @@ const App = {
     }
 
     // Persistir directamente en Supabase
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     if (cloud) {
       await cloud.saveTeacher(this.currentUser);
     }
@@ -2885,6 +3038,13 @@ const App = {
           dropdown.classList.remove("open");
         }
       }
+    });
+
+    // Monitoreo de actividad de usuario para auto-cierre de sesión (20 min)
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        App.resetInactivityTimer();
+      }, { passive: true });
     });
   }
 };

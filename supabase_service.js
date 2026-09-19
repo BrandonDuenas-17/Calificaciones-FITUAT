@@ -79,14 +79,14 @@ const SupabaseService = {
     }
   },
 
-  // Obtener todos los profesores desde Supabase
+  // Obtener todos los profesores desde Supabase (sin exponer contraseñas en memoria global)
   fetchTeachers: async function() {
     if (!this.isInitialized || !this.client) return null;
 
     try {
       const { data, error } = await this.client
         .from("teachers")
-        .select("*")
+        .select("id, nombre, usuario, correo, departamento, role, avatar, data, updated_at")
         .order("nombre", { ascending: true });
 
       if (error) {
@@ -98,6 +98,35 @@ const SupabaseService = {
     } catch (e) {
       console.error("Error de red al consultar Supabase:", e);
       return null;
+    }
+  },
+
+  // Verificación segura de credenciales para inicio de sesión en Supabase
+  verifyCredentials: async function(identifier, password) {
+    if (!this.isInitialized || !this.client) return null;
+
+    try {
+      const term = (identifier || "").trim().toLowerCase();
+      const { data, error } = await this.client
+        .from("teachers")
+        .select("id, password, nombre, usuario, correo, role")
+        .or(`usuario.ilike.${term},correo.ilike.${term}`)
+        .limit(1);
+
+      if (error || !data || data.length === 0) {
+        return { success: false, reason: "user_not_found" };
+      }
+
+      const teacher = data[0];
+      const validPass = teacher.password || "123";
+      if (validPass !== password) {
+        return { success: false, reason: "wrong_password" };
+      }
+
+      return { success: true, teacherId: teacher.id, teacher: teacher };
+    } catch (e) {
+      console.error("Error al verificar credenciales:", e);
+      return { success: false, reason: "network_error" };
     }
   },
 
