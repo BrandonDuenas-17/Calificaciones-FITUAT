@@ -29,13 +29,14 @@ const App = {
     // Mostrar estado de carga mientras se conecta a la nube
     this.renderLoadingState();
 
-    // Inicializar sincronización 100% en la nube con Firebase Firestore
-    if (typeof FirebaseService !== "undefined") {
-      await FirebaseService.init();
+    // Inicializar sincronización 100% en la nube con Supabase (PostgreSQL + Realtime)
+    const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
+    if (cloud) {
+      await cloud.init();
       this.updateCloudStatusBadge();
       await this.loadDataFromCloud();
     } else {
-      console.warn("FirebaseService no detectado. Cargando datos de respaldo.");
+      console.warn("Servicio en la nube no detectado. Cargando datos de respaldo.");
       this.loadFallbackData();
     }
 
@@ -50,7 +51,7 @@ const App = {
         <div class="cloud-save-dot" style="width: 22px; height: 22px; border-radius: 50%; background: var(--uat-orange); animation: pulse-cloud 0.8s infinite alternate ease-in-out;"></div>
         <div>
           <div style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
-            Conectando con Firebase Firestore
+            Conectando con Supabase (PostgreSQL)
           </div>
           <div style="font-size: 13px; color: var(--text-tertiary);">
             Cargando catálogo docente y calificaciones 100% en la nube...
@@ -82,30 +83,31 @@ const App = {
   },
 
   loadDataFromCloud: async function() {
-    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) return;
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    if (!cloud) return;
 
     try {
-      let cloudTeachers = await FirebaseService.fetchTeachers();
+      let cloudTeachers = await cloud.fetchTeachers();
 
-      // Si Firestore está vacío por primera vez, sembramos el catálogo inicial
+      // Si Supabase está vacío por primera vez, sembramos el catálogo inicial
       if (!cloudTeachers || cloudTeachers.length === 0) {
-        console.log("Firestore vacío. Sembrando catálogo inicial en la nube...");
+        console.log("Supabase vacío. Sembrando catálogo inicial en la nube...");
         const seeds = [];
         if (typeof INITIAL_ADMIN !== 'undefined') seeds.push(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
         if (typeof INITIAL_TEACHERS !== 'undefined') {
           INITIAL_TEACHERS.forEach(t => seeds.push(JSON.parse(JSON.stringify(t))));
         }
-        await FirebaseService.seedInitialDataIfEmpty(seeds);
-        cloudTeachers = await FirebaseService.fetchTeachers();
+        await cloud.seedInitialDataIfEmpty(seeds);
+        cloudTeachers = await cloud.fetchTeachers();
       }
 
       this.teachers = (cloudTeachers || []).map(t => this.sanitizeTeacher(t));
 
-      // Asegurar que la cuenta maestra de Administración/Coordinación esté en Firestore
+      // Asegurar que la cuenta maestra de Administración/Coordinación esté en la base de datos
       if (typeof INITIAL_ADMIN !== 'undefined' && !this.teachers.some(t => t.id === INITIAL_ADMIN.id || t.role === 'admin')) {
         const adminDoc = JSON.parse(JSON.stringify(INITIAL_ADMIN));
         this.teachers.unshift(adminDoc);
-        await FirebaseService.saveTeacher(adminDoc);
+        await cloud.saveTeacher(adminDoc);
       }
 
       // 2. Cargar usuario/profesor activo desde la sesión (sessionStorage)
@@ -166,33 +168,35 @@ const App = {
     const container = document.getElementById("cloudStatusContainer");
     if (!container) return;
 
-    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) {
+    const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
+
+    if (!cloud || !cloud.isInitialized) {
       container.innerHTML = `
-        <div class="cloud-status-badge offline" title="Sin conexión a Firebase Firestore">
+        <div class="cloud-status-badge offline" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Haz clic para configurar tu conexión a Supabase">
           <span class="cloud-status-dot"></span>
-          <span>Sin Conexión</span>
+          <span>Configurar Supabase</span>
         </div>
       `;
       return;
     }
 
-    if (FirebaseService.status === "connected") {
+    if (cloud.status === "connected") {
       container.innerHTML = `
-        <div class="cloud-status-badge connected" title="Conectado a Firebase Firestore en tiempo real (100% en la nube)">
+        <div class="cloud-status-badge connected" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Conectado a Supabase en tiempo real (PostgreSQL). Haz clic para ver credenciales.">
           <span class="cloud-status-dot"></span>
-          <span>Nube Sincronizada</span>
+          <span>Supabase Conectado</span>
         </div>
       `;
-    } else if (FirebaseService.status === "offline") {
+    } else if (cloud.status === "offline") {
       container.innerHTML = `
-        <div class="cloud-status-badge offline" title="Sin conexión a internet. Verifique su red para sincronizar con Firestore.">
+        <div class="cloud-status-badge offline" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Sin conexión a internet o credenciales pendientes. Haz clic para configurar.">
           <span class="cloud-status-dot"></span>
           <span>Sin Conexión</span>
         </div>
       `;
     } else {
       container.innerHTML = `
-        <div class="cloud-status-badge connecting" title="Conectando con Firestore en la nube...">
+        <div class="cloud-status-badge connecting" style="cursor: pointer;" onclick="App.openSupabaseConfigModal()" title="Conectando con Supabase...">
           <span class="cloud-status-dot"></span>
           <span>Conectando...</span>
         </div>
@@ -209,15 +213,15 @@ const App = {
 
     if (status === "saving") {
       indicator.classList.add("saving");
-      textElem.textContent = "Guardando cambios en la nube...";
+      textElem.textContent = "Guardando cambios en Supabase...";
     } else if (status === "saved") {
       indicator.classList.add("saved");
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      textElem.textContent = `Sincronizado en la nube (Firestore) · ${timeStr}`;
+      textElem.textContent = `Sincronizado en la nube (Supabase) · ${timeStr}`;
     } else if (status === "error") {
       indicator.classList.add("error");
-      textElem.textContent = detail ? `Error en la nube: ${detail}` : "Error de sincronización en la nube";
+      textElem.textContent = detail ? `Error en Supabase: ${detail}` : "Error de sincronización en la nube";
     }
   },
 
@@ -227,32 +231,34 @@ const App = {
 
   saveTimer: null,
 
-  // Guardado directo e inmediato a Firebase Firestore (100% en la nube)
+  // Guardado directo e inmediato a Supabase (100% en la nube)
   saveData: async function() {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    
     // Si estamos en modo supervisión, guardar directamente en el profesor auditado protegiendo al admin
     if (this.isSupervising && this.supervisingTeacherId) {
       const targetTeacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
       if (targetTeacher) {
         targetTeacher.data = this.data;
-        if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
-          await FirebaseService.saveTeacher(targetTeacher);
+        if (cloud) {
+          await cloud.saveTeacher(targetTeacher);
         }
       }
       return;
     }
     if (this.currentUser) {
       this.currentUser.data = this.data;
-      if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
-        await FirebaseService.saveTeacher(this.currentUser);
+      if (cloud) {
+        await cloud.saveTeacher(this.currentUser);
       }
     }
   },
 
-  // Guardado optimizado con debounce para escritura fluida en celdas (directo a Firestore)
+  // Guardado optimizado con debounce para escritura fluida en celdas (directo a Supabase)
   debouncedSave: function() {
     this.setCloudSaveStatus("saving");
     if (this.saveTimer) clearTimeout(this.saveTimer);
@@ -1015,9 +1021,9 @@ const App = {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo alumno a la lista
           </button>
-          <div id="cloudSaveStatusIndicator" class="cloud-save-status-indicator saved" title="Todos los cambios se almacenan directamente en Firebase Firestore en la nube">
+          <div id="cloudSaveStatusIndicator" class="cloud-save-status-indicator saved" title="Todos los cambios se almacenan directamente en Supabase (PostgreSQL) en la nube">
             <span class="cloud-save-dot"></span>
-            <span id="cloudSaveStatusText">Sincronizado en la nube (Firestore)</span>
+            <span id="cloudSaveStatusText">Sincronizado en la nube (Supabase)</span>
           </div>
         </div>
       </div>
@@ -2613,8 +2619,11 @@ const App = {
       return;
     }
 
-    if (typeof FirebaseService === "undefined" || !FirebaseService.isInitialized) {
-      alert("No hay conexión activa con Firebase Firestore.");
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+
+    if (!cloud) {
+      alert("No hay conexión activa con Supabase. Haz clic en el indicador superior para ingresar tu URL y Anon Key.");
+      this.openSupabaseConfigModal();
       return;
     }
 
@@ -2634,22 +2643,22 @@ const App = {
       fullRosterWithAdmin.unshift(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
     }
 
-    const success = await FirebaseService.syncFullFacultyRoster(fullRosterWithAdmin, (current, total) => {
+    const success = await cloud.syncFullFacultyRoster(fullRosterWithAdmin, (current, total) => {
       const pct = Math.round((current / total) * 100);
       if (bar) bar.style.width = pct + "%";
-      if (statusText) statusText.textContent = `Sincronizando a la nube: ${current} de ${total} profesores (${pct}%)...`;
+      if (statusText) statusText.textContent = `Sincronizando a Supabase: ${current} de ${total} profesores (${pct}%)...`;
     });
 
     if (success) {
-      if (statusText) statusText.textContent = "¡153 Profesores y 18,702 inscripciones sincronizadas en Firestore!";
+      if (statusText) statusText.textContent = "¡153 Profesores y 18,702 inscripciones sincronizadas en Supabase!";
       await this.loadDataFromCloud();
       this.render();
       setTimeout(() => {
         this.closeSyncRosterModal();
-        this.showToast("Roster Oficial de 153 profesores activo en Firestore");
+        this.showToast("Roster Oficial de 153 profesores activo en Supabase (PostgreSQL)");
       }, 1200);
     } else {
-      if (statusText) statusText.textContent = "Ocurrió un error al sincronizar con Firestore.";
+      if (statusText) statusText.textContent = "Ocurrió un error al sincronizar con Supabase.";
       if (cancelBtn) cancelBtn.disabled = false;
     }
   },
@@ -2791,6 +2800,44 @@ const App = {
     this.showToast(`Profesor ${nombre} registrado con éxito.`);
   },
 
+  openSupabaseConfigModal: function() {
+    const modal = document.getElementById("supabaseConfigModal");
+    if (modal) {
+      const urlInput = document.getElementById("supabaseUrlInput");
+      const keyInput = document.getElementById("supabaseKeyInput");
+      if (urlInput) urlInput.value = localStorage.getItem("supabase_url") || "";
+      if (keyInput) keyInput.value = localStorage.getItem("supabase_anon_key") || "";
+      modal.classList.add("open");
+    }
+  },
+
+  closeSupabaseConfigModal: function() {
+    const modal = document.getElementById("supabaseConfigModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  saveSupabaseCredentials: async function() {
+    const url = document.getElementById("supabaseUrlInput")?.value.trim();
+    const key = document.getElementById("supabaseKeyInput")?.value.trim();
+    if (!url || !key) {
+      alert("Por favor ingresa tanto el Project URL como el Anon Key de Supabase.");
+      return;
+    }
+    this.closeSupabaseConfigModal();
+    this.showToast("Conectando con Supabase...");
+    if (typeof SupabaseService !== "undefined") {
+      const ok = await SupabaseService.setCredentials(url, key);
+      this.updateCloudStatusBadge();
+      if (ok) {
+        await this.loadDataFromCloud();
+        this.render();
+        this.showToast("¡Conectado exitosamente a Supabase!");
+      } else {
+        this.showToast("Aviso: No se pudo verificar la conexión con Supabase. Revisa tus credenciales.");
+      }
+    }
+  },
+
   setupEventListeners: function() {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -2799,6 +2846,7 @@ const App = {
         this.closeManageCourseModal();
         this.closeSwitchTeacherModal();
         this.closeRegisterTeacherModal();
+        this.closeSupabaseConfigModal();
       }
     });
 

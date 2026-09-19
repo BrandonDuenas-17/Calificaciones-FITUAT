@@ -193,11 +193,11 @@
     </div>
   </div>
 
-  <!-- Modal de Sincronización del Roster Oficial a Firestore -->
+  <!-- Modal de Sincronización del Roster Oficial a Supabase -->
   <div class="modal-backdrop" id="syncRosterModal">
     <div class="modal-content" style="max-width: 480px;">
       <div class="modal-header">
-        <h3>Sincronizar Roster Oficial a Firestore</h3>
+        <h3>Sincronizar Roster Oficial a Supabase</h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSyncRosterModal()">✕</button>
       </div>
       <div class="modal-body" style="text-align: center; padding: 24px;">
@@ -206,7 +206,7 @@
         </div>
         <h4 style="font-size: 16px; margin-bottom: 8px; font-weight: 700;">Roster Oficial de la Facultad de Ingeniería</h4>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
-          Se importarán <b>153 Profesores</b>, <b>353 Materias/Grupos</b> y <b>18,702 Inscripciones</b> directamente a Firebase Firestore.
+          Se importarán <b>153 Profesores</b>, <b>353 Materias/Grupos</b> y <b>18,702 Inscripciones</b> directamente a Supabase (PostgreSQL).
         </p>
         <div id="syncRosterProgressWrap" style="display: none; margin-bottom: 16px;">
           <div style="background: var(--border-color); border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 8px;">
@@ -305,16 +305,45 @@
     </div>
   </div>
 
+  <!-- Modal para Configurar Conexión a Supabase -->
+  <div class="modal-backdrop" id="supabaseConfigModal">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>Configurar Conexión a Supabase</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSupabaseConfigModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+          Ingresa las credenciales de tu proyecto de <b>Supabase</b> (las encuentras en <b>Project Settings &gt; API</b> en supabase.com):
+        </p>
+        <div class="form-group">
+          <label>Project URL:</label>
+          <input type="text" id="supabaseUrlInput" class="form-control" placeholder="https://xyzcompany.supabase.co" />
+        </div>
+        <div class="form-group">
+          <label>Anon Public Key:</label>
+          <input type="password" id="supabaseKeyInput" class="form-control" placeholder="eyJhbGciOi..." />
+        </div>
+        <div style="background: var(--bg-secondary); padding: 10px; border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+          💡 Recuerda haber ejecutado previamente el script <b>supabase_schema.sql</b> en el SQL Editor de tu proyecto Supabase.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="App.closeSupabaseConfigModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.saveSupabaseCredentials()">Guardar y Conectar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Contenedor de Notificaciones Toast -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- Firebase SDKs (Compat v10 para navegador) -->
-  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
-  <script src="firebase_service.js"></script>
+  <!-- Supabase JS Client v2 (Nativo para navegador) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase_service.js"></script>
   <script src="faculty_roster.js"></script>
   <script src="sample_data.js"></script>
-  <script src="exporter.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="exporter.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
