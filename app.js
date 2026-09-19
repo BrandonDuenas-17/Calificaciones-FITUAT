@@ -555,10 +555,14 @@ const App = {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
               Panel de Control Maestro
             </button>
+            <button class="dropdown-item" onclick="App.openSwitchTeacherModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+              Supervisar / Cambiar de Profesor
+            </button>
           ` : ''}
-          <button class="dropdown-item" onclick="App.openSwitchTeacherModal()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
-            Cambiar de Profesor
+          <button class="dropdown-item" onclick="App.openChangePasswordModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Cambiar mi Contraseña
           </button>
           <div class="dropdown-divider"></div>
           <button class="dropdown-item dropdown-item-danger" onclick="App.logout()">
@@ -1183,9 +1187,6 @@ const App = {
               <input type="file" id="backupFileInput" style="display: none;" accept=".json" onchange="App.restoreBackup(this)" />
             </div>
           </div>
-          <button class="btn btn-default btn-sm" style="color: var(--color-red);" onclick="App.resetToDefault()">
-            Restablecer a valores de demostración
-          </button>
         </div>
       </div>
 
@@ -2033,13 +2034,22 @@ const App = {
   },
 
   deleteCurrentCourse: function() {
-    if (this.data.courses.length <= 1) {
+    if (!this.data || !this.data.courses || this.data.courses.length <= 1) {
       alert("No puedes eliminar la única lista que tienes.");
       return;
     }
 
     const course = this.getActiveCourse();
-    if (confirm(`¿Estás seguro de que deseas eliminar la lista de "${course.nombre} - ${course.grupo}"? Esta acción no se puede deshacer.`)) {
+    if (!course) return;
+
+    // Protección de materias oficiales asignadas por la facultad
+    const isOfficial = course.id && (course.id.startsWith("c-g-") || course.id.startsWith("c-rc-") || course.aula);
+    if (isOfficial && !this.isAdmin()) {
+      alert("Esta es una materia oficial asignada por la facultad en tu carga docente. Las materias institucionales no pueden eliminarse. Si no impartes este grupo, comunícate con Coordinación Académica.");
+      return;
+    }
+
+    if (confirm(`¿Estás seguro de que deseas eliminar la lista de "${course.nombre} - ${course.grupo}"? Esta acción borrará todas sus calificaciones y firmas registradas.`)) {
       const idx = this.data.courses.findIndex(c => c.id === course.id);
       if (idx !== -1) {
         this.data.courses.splice(idx, 1);
@@ -2557,6 +2567,10 @@ const App = {
 
   // Modal de sincronización del Roster Oficial
   openSyncRosterModal: function() {
+    if (!this.isAdmin()) {
+      alert("Acceso restringido: Esta herramienta solo puede ser ejecutada por Coordinación Académica.");
+      return;
+    }
     const modal = document.getElementById("syncRosterModal");
     if (modal) {
       modal.classList.add("open");
@@ -2578,6 +2592,11 @@ const App = {
   },
 
   executeOfficialRosterSync: async function() {
+    if (!this.isAdmin()) {
+      alert("Acceso restringido: La sincronización de plantilla docente oficial es exclusiva de Coordinación Académica.");
+      return;
+    }
+
     if (typeof FACULTY_ROSTER === "undefined" || !FACULTY_ROSTER.length) {
       alert("No se encontró el archivo compilado FACULTY_ROSTER.");
       return;
@@ -2639,6 +2658,11 @@ const App = {
   },
 
   openSwitchTeacherModal: function() {
+    if (!this.isAdmin()) {
+      alert("Acceso restringido: Esta función es exclusiva de Coordinación Académica.");
+      return;
+    }
+
     const dropdown = document.getElementById("teacherDropdown");
     if (dropdown) dropdown.classList.remove("open");
 
@@ -2698,11 +2722,19 @@ const App = {
   },
 
   switchTeacher: function(teacherId) {
+    if (!this.isAdmin()) {
+      alert("Acceso restringido: Solo Coordinación Académica puede cambiar de profesor.");
+      return;
+    }
     this.closeSwitchTeacherModal();
     this.quickLogin(teacherId);
   },
 
   openRegisterTeacherModal: function() {
+    if (!this.isAdmin()) {
+      alert("Acceso restringido: Solo Coordinación Académica puede registrar nuevos docentes manualmente.");
+      return;
+    }
     this.closeSwitchTeacherModal();
     const modal = document.getElementById("registerTeacherModal");
     if (modal) modal.classList.add("open");
@@ -2713,20 +2745,20 @@ const App = {
     if (modal) modal.classList.remove("open");
   },
 
-  submitRegisterTeacher: function() {
+  submitRegisterTeacher: async function() {
     const nombre = document.getElementById("regTeacherNombre")?.value.trim();
     const usuario = document.getElementById("regTeacherUsuario")?.value.trim().toLowerCase();
     const correo = document.getElementById("regTeacherCorreo")?.value.trim().toLowerCase();
     const depto = document.getElementById("regTeacherDepto")?.value.trim() || "Facultad de Ingeniería Tampico";
-    const password = document.getElementById("regTeacherPassword")?.value || "123";
+    const password = document.getElementById("regTeacherPassword")?.value;
 
-    if (!nombre || !usuario || !correo) {
-      alert("Por favor completa los campos requeridos.");
+    if (!nombre || !usuario || !correo || !password) {
+      alert("Por favor completa todos los campos requeridos, incluyendo la contraseña.");
       return;
     }
 
     if (this.teachers.some(t => t.usuario.toLowerCase() === usuario || t.correo.toLowerCase() === correo)) {
-      alert("Ya existe un docente con ese usuario o correo.");
+      alert("Ya existe un docente registrado con ese usuario o correo institucional.");
       return;
     }
 
@@ -2755,14 +2787,83 @@ const App = {
     };
 
     this.teachers.push(newTeacher);
-    if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
-      FirebaseService.saveTeacher(newTeacher);
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    if (cloud) {
+      await cloud.saveTeacher(newTeacher);
     }
     this.closeRegisterTeacherModal();
     this.quickLogin(newTeacher.id);
     this.showToast(`Profesor ${nombre} registrado con éxito.`);
   },
 
+  // =========================================================================
+  // MÓDULO DE GESTIÓN DE CONTRASEÑA PERSONAL (DOCENTES Y ADMINISTRACIÓN)
+  // =========================================================================
+
+  openChangePasswordModal: function() {
+    const dropdown = document.getElementById("teacherDropdown");
+    if (dropdown) dropdown.classList.remove("open");
+
+    const cur = document.getElementById("changePassCurrent");
+    const nw = document.getElementById("changePassNew");
+    const conf = document.getElementById("changePassConfirm");
+    if (cur) cur.value = "";
+    if (nw) nw.value = "";
+    if (conf) conf.value = "";
+
+    const modal = document.getElementById("changePasswordModal");
+    if (modal) modal.classList.add("open");
+  },
+
+  closeChangePasswordModal: function() {
+    const modal = document.getElementById("changePasswordModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  submitChangePassword: async function() {
+    if (!this.currentUser) return;
+
+    const currentPass = document.getElementById("changePassCurrent")?.value;
+    const newPass = document.getElementById("changePassNew")?.value;
+    const confirmPass = document.getElementById("changePassConfirm")?.value;
+
+    if (!currentPass || !newPass || !confirmPass) {
+      alert("Por favor completa todos los campos.");
+      return;
+    }
+
+    if (this.currentUser.password && currentPass !== this.currentUser.password) {
+      alert("La contraseña actual es incorrecta.");
+      return;
+    }
+
+    if (newPass.length < 4) {
+      alert("La nueva contraseña debe contener al menos 4 caracteres.");
+      return;
+    }
+
+    if (newPass !== confirmPass) {
+      alert("La nueva contraseña y su confirmación no coinciden.");
+      return;
+    }
+
+    this.currentUser.password = newPass;
+
+    // Actualizar en el catálogo de profesores en memoria
+    const tIndex = this.teachers.findIndex(t => t.id === this.currentUser.id);
+    if (tIndex !== -1) {
+      this.teachers[tIndex].password = newPass;
+    }
+
+    // Persistir directamente en Supabase
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    if (cloud) {
+      await cloud.saveTeacher(this.currentUser);
+    }
+
+    this.closeChangePasswordModal();
+    this.showToast("¡Tu contraseña ha sido actualizada con éxito en la nube!");
+  },
 
   setupEventListeners: function() {
     document.addEventListener("keydown", (e) => {
@@ -2772,6 +2873,7 @@ const App = {
         this.closeManageCourseModal();
         this.closeSwitchTeacherModal();
         this.closeRegisterTeacherModal();
+        this.closeChangePasswordModal();
       }
     });
 
