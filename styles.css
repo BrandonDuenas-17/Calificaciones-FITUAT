@@ -777,6 +777,12 @@ body {
   color: var(--color-red);
 }
 
+.status-pending {
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
+  border: 1px dashed var(--border-color);
+}
+
 /* Pie de Tabla / Fila Resumen */
 .notion-table-footer {
   background: var(--bg-secondary);

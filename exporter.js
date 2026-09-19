@@ -20,19 +20,22 @@ const Exporter = {
       rows = records.map(rec => {
         const student = studentsMap[rec.matricula] || { nombre: "NO REGISTRADO" };
         const calcs = App.calculateStudentGrades(rec, course);
-        const estatus = calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO";
+        const estatus = calcs.hasEvaluations 
+          ? (calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO") 
+          : "PENDIENTE";
+        const getEval = (u) => (calcs.evalU[u] !== null && calcs.evalU[u] !== undefined) ? calcs.evalU[u] : "-";
 
         const baseRow = includeNames ? [rec.matricula, student.nombre] : [rec.matricula];
         return [
           ...baseRow,
-          calcs.evalU[1],
-          calcs.evalU[2],
-          calcs.evalU[3],
-          calcs.evalU[4],
-          calcs.evalU[5],
+          getEval(1),
+          getEval(2),
+          getEval(3),
+          getEval(4),
+          getEval(5),
           rec.proyecto !== null && rec.proyecto !== undefined ? rec.proyecto : "-",
           rec.puntosExtra || 0,
-          calcs.evalFinal,
+          calcs.hasEvaluations ? calcs.evalFinal : "-",
           estatus
         ];
       });
@@ -49,28 +52,34 @@ const Exporter = {
       rows = records.map(rec => {
         const student = studentsMap[rec.matricula] || { nombre: "NO REGISTRADO" };
         const calcs = App.calculateStudentGrades(rec, course);
-        const estatus = calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO";
+        const estatus = calcs.hasEvaluations 
+          ? (calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO") 
+          : "PENDIENTE";
+        const getEval = (u) => (calcs.evalU[u] !== null && calcs.evalU[u] !== undefined) ? calcs.evalU[u] : "";
+
+        const f = rec.firmas || {};
+        const e = rec.examenes || {};
 
         return [
           rec.matricula,
           student.nombre,
-          calcs.evalFinal,
+          calcs.hasEvaluations ? calcs.evalFinal : "-",
           estatus,
-          rec.firmas.u1 ?? "",
-          rec.firmas.u2 ?? "",
-          rec.firmas.u3 ?? "",
-          rec.firmas.u4 ?? "",
-          rec.firmas.u5 ?? "",
-          rec.examenes.u1 ?? "",
-          rec.examenes.u2 ?? "",
-          rec.examenes.u3 ?? "",
-          rec.examenes.u4 ?? "",
-          rec.examenes.u5 ?? "",
-          calcs.evalU[1],
-          calcs.evalU[2],
-          calcs.evalU[3],
-          calcs.evalU[4],
-          calcs.evalU[5],
+          f.u1 ?? "",
+          f.u2 ?? "",
+          f.u3 ?? "",
+          f.u4 ?? "",
+          f.u5 ?? "",
+          e.u1 ?? "",
+          e.u2 ?? "",
+          e.u3 ?? "",
+          e.u4 ?? "",
+          e.u5 ?? "",
+          getEval(1),
+          getEval(2),
+          getEval(3),
+          getEval(4),
+          getEval(5),
           rec.proyecto ?? "",
           rec.puntosExtra || 0
         ];

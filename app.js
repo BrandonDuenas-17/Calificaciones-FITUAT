@@ -233,6 +233,17 @@ const App = {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
+    // Si estamos en modo supervisión, guardar directamente en el profesor auditado protegiendo al admin
+    if (this.isSupervising && this.supervisingTeacherId) {
+      const targetTeacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
+      if (targetTeacher) {
+        targetTeacher.data = this.data;
+        if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
+          await FirebaseService.saveTeacher(targetTeacher);
+        }
+      }
+      return;
+    }
     if (this.currentUser) {
       this.currentUser.data = this.data;
       if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
@@ -318,67 +329,77 @@ const App = {
     return map;
   },
 
-  // MOTOR MATEMÁTICO: Fórmulas extraídas de las imágenes de Notion
+  // MOTOR MATEMÁTICO: Fórmulas extraídas de las imágenes de Notion con cálculo progresivo
   calculateStudentGrades: function(record, course) {
     const maxFirmasConfig = course.firmasMaxConfig || {};
     const evalU = {};
     const validUnitsForMean = [];
+    let evaluatedUnitsCount = 0;
 
     // 1. Evaluación de cada Unidad (U1 a U5)
     for (let u = 1; u <= (course.unidadesCount || 5); u++) {
       const uKey = `u${u}`;
-      const firmas = record.firmas ? record.firmas[uKey] : null;
-      const examen = record.examenes ? record.examenes[uKey] : null;
+      const firmas = (record.firmas && record.firmas[uKey] !== undefined && record.firmas[uKey] !== "") 
+        ? record.firmas[uKey] 
+        : null;
+      const examen = (record.examenes && record.examenes[uKey] !== undefined && record.examenes[uKey] !== "") 
+        ? record.examenes[uKey] 
+        : null;
       const maxF = maxFirmasConfig[uKey] || 10;
 
-      let puntajeFirmas = 0;
-      if (firmas !== null && firmas !== undefined && maxF > 0) {
-        // ((Firmas / max(Firmas)) * 50)
-        puntajeFirmas = (Number(firmas) / maxF) * 50;
-      }
+      const hasFirmas = firmas !== null;
+      const hasExamen = examen !== null;
 
-      let puntajeExamen = 0;
-      if (examen !== null && examen !== undefined) {
-        // (Examen * 0.5)
-        puntajeExamen = Number(examen) * 0.5;
-      }
+      // Si al menos hay firmas o examen registrado, la unidad cuenta con evaluación
+      if (hasFirmas || hasExamen) {
+        let puntajeFirmas = 0;
+        if (hasFirmas && maxF > 0) {
+          puntajeFirmas = (Number(firmas) / maxF) * 50;
+        }
 
-      // Si al menos hay firmas o examen, calculamos la nota de la unidad
-      if (firmas !== null || examen !== null) {
+        let puntajeExamen = 0;
+        if (hasExamen) {
+          puntajeExamen = Number(examen) * 0.5;
+        }
+
         const totalU = Math.round((puntajeFirmas + puntajeExamen) * 10) / 10;
         evalU[u] = totalU;
         validUnitsForMean.push(totalU);
+        evaluatedUnitsCount++;
       } else {
-        evalU[u] = 0;
-        validUnitsForMean.push(0);
+        // Unidad pendiente / no evaluada aún en el semestre
+        evalU[u] = null;
       }
     }
 
     // 2. Proyecto Final y Puntos Extra
-    const proyecto = (record.proyecto !== null && record.proyecto !== undefined) ? Number(record.proyecto) : null;
+    const hasProyecto = (record.proyecto !== null && record.proyecto !== undefined && record.proyecto !== "");
+    const proyecto = hasProyecto ? Number(record.proyecto) : null;
     const puntosExtra = Number(record.puntosExtra) || 0;
 
-    // Fórmula de Evaluación Final de Notion:
-    // round(mean(Eval U1, Eval U2, Eval U3, Eval U4, Eval U5, Proyecto Final) + (Puntos Extra * 5))
     const itemsToAverage = [...validUnitsForMean];
-    if (proyecto !== null) {
+    if (hasProyecto) {
       itemsToAverage.push(proyecto);
     }
 
+    const hasEvaluations = itemsToAverage.length > 0;
     let promedio = 0;
-    if (itemsToAverage.length > 0) {
+    let evalFinal = 0;
+
+    if (hasEvaluations) {
       const suma = itemsToAverage.reduce((acc, v) => acc + v, 0);
       promedio = suma / itemsToAverage.length;
+      const conPuntosExtra = promedio + (puntosExtra * 5);
+      const evalFinalRedondeada = Math.round(conPuntosExtra);
+      evalFinal = Math.min(100, Math.max(0, evalFinalRedondeada));
     }
-
-    const conPuntosExtra = promedio + (puntosExtra * 5);
-    const evalFinalRedondeada = Math.round(conPuntosExtra);
-    const evalFinal = Math.min(100, Math.max(0, evalFinalRedondeada));
 
     return {
       evalU,
       evalFinal,
-      promedioParcial: Math.round(promedio * 10) / 10
+      promedioParcial: Math.round(promedio * 10) / 10,
+      hasEvaluations,
+      evaluatedUnitsCount
     };
   },
 
@@ -416,18 +437,27 @@ const App = {
 
     // Evaluaciones
     let sumFinal = 0;
+    let finalCount = 0;
     const evalSums = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const evalCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
     records.forEach(r => {
       const c = this.calculateStudentGrades(r, course);
-      sumFinal += c.evalFinal;
+      if (c.hasEvaluations) {
+        sumFinal += c.evalFinal;
+        finalCount++;
+      }
       for (let u = 1; u <= 5; u++) {
-        evalSums[u] += (c.evalU[u] || 0);
+        if (c.evalU[u] !== null && c.evalU[u] !== undefined) {
+          evalSums[u] += c.evalU[u];
+          evalCounts[u]++;
+        }
       }
     });
 
-    stats.avgFinal = (sumFinal / count).toFixed(1);
+    stats.avgFinal = finalCount > 0 ? (sumFinal / finalCount).toFixed(1) : "0.0";
     for (let u = 1; u <= 5; u++) {
-      stats.avgEvaluaciones[u] = (evalSums[u] / count).toFixed(2);
+      stats.avgEvaluaciones[u] = evalCounts[u] > 0 ? (evalSums[u] / evalCounts[u]).toFixed(2) : "0.00";
     }
 
     return stats;
@@ -704,26 +734,39 @@ const App = {
       let evalCells = "";
       for (let u = 1; u <= 5; u++) {
         const uKey = `u${u}`;
-        const val = calcs.evalU[u] || 0;
+        const val = calcs.evalU[u];
+        const hasVal = val !== null && val !== undefined;
+        const displayVal = hasVal ? val : "-";
+        const numVal = hasVal ? val : 0;
+
         let ringColor = "var(--color-green)";
-        if (val < 60) ringColor = "var(--color-red)";
-        else if (val < 70) ringColor = "var(--color-orange)";
-        const pct = Math.min(100, val);
-        const dashOffset = 44 - (44 * pct) / 100;
+        if (numVal < 60) ringColor = "var(--color-red)";
+        else if (numVal < 70) ringColor = "var(--color-orange)";
+
+        const pct = Math.min(100, numVal);
+        const dashOffset = hasVal ? (44 - (44 * pct) / 100) : 44;
+        const strokeColor = hasVal ? ringColor : "var(--border-color)";
 
         evalCells += `
           <td class="col-calc">
             <div class="firmas-cell-content">
-              <span id="val-eval-${rec.matricula}-${uKey}">${val}</span>
+              <span id="val-eval-${rec.matricula}-${uKey}">${displayVal}</span>
               <svg class="progress-ring" viewBox="0 0 20 20">
                 <circle class="progress-ring-circle-bg" cx="10" cy="10" r="7"/>
                 <circle id="ring-eval-${rec.matricula}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
-                  style="stroke-dasharray: 44; stroke-dashoffset: ${dashOffset}; stroke: ${ringColor};"/>
+                  style="stroke-dasharray: 44; stroke-dashoffset: ${dashOffset}; stroke: ${strokeColor};"/>
               </svg>
             </div>
           </td>
         `;
       }
+
+      const hasEvals = calcs.hasEvaluations;
+      const displayFinal = hasEvals ? calcs.evalFinal : "-";
+      const finalWidth = hasEvals ? calcs.evalFinal : 0;
+      const finalColorStyle = hasEvals ? finalColor : "var(--text-tertiary)";
+      const badgeText = hasEvals ? (calcs.evalFinal >= 70 ? 'APR' : 'REP') : 'PEN';
+      const badgeClass = hasEvals ? (calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado') : 'status-pending';
 
       rowsHtml += `
         <tr id="row-${rec.matricula}" data-matricula="${rec.matricula}" data-search="${searchData}" style="display: ${isMatch ? '' : 'none'};">
@@ -740,12 +783,12 @@ const App = {
           </td>
           <td class="col-final">
             <div class="progress-bar-wrap">
-              <span id="val-final-${rec.matricula}" class="progress-bar-num" style="color: ${finalColor};">${calcs.evalFinal}</span>
+              <span id="val-final-${rec.matricula}" class="progress-bar-num" style="color: ${finalColorStyle};">${displayFinal}</span>
               <div class="progress-track">
-                <div id="bar-final-${rec.matricula}" class="progress-fill" style="width: ${calcs.evalFinal}%; background-color: ${finalColor};"></div>
+                <div id="bar-final-${rec.matricula}" class="progress-fill" style="width: ${finalWidth}%; background-color: ${hasEvals ? finalColor : 'transparent'};"></div>
               </div>
-              <span id="badge-final-${rec.matricula}" class="status-badge ${calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado'}">
-                ${calcs.evalFinal >= 70 ? 'APR' : 'REP'}
+              <span id="badge-final-${rec.matricula}" class="status-badge ${badgeClass}">
+                ${badgeText}
               </span>
             </div>
           </td>
@@ -1211,8 +1254,14 @@ const App = {
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
       if (!rec.firmas) rec.firmas = {};
-      rec.firmas[uKey] = val === "" ? null : Number(val);
-      this.updateStudentRowView(matricula, 'firmas', uKey, val);
+      if (val === "" || val === null) {
+        rec.firmas[uKey] = null;
+      } else {
+        let num = Number(val);
+        if (isNaN(num)) num = 0;
+        rec.firmas[uKey] = Math.max(0, Math.min(999, num));
+      }
+      this.updateStudentRowView(matricula, 'firmas', uKey, rec.firmas[uKey]);
       this.updateSummaryStats();
       this.debouncedSave();
     }
@@ -1223,8 +1272,14 @@ const App = {
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
       if (!rec.examenes) rec.examenes = {};
-      rec.examenes[uKey] = val === "" ? null : Number(val);
-      this.updateStudentRowView(matricula, 'examenes', uKey, val);
+      if (val === "" || val === null) {
+        rec.examenes[uKey] = null;
+      } else {
+        let num = Number(val);
+        if (isNaN(num)) num = 0;
+        rec.examenes[uKey] = Math.max(0, Math.min(100, num));
+      }
+      this.updateStudentRowView(matricula, 'examenes', uKey, rec.examenes[uKey]);
       this.updateSummaryStats();
       this.debouncedSave();
     }
@@ -1234,8 +1289,14 @@ const App = {
     const course = this.getActiveCourse();
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
-      rec.proyecto = val === "" ? null : Number(val);
-      this.updateStudentRowView(matricula, 'proyecto', null, val);
+      if (val === "" || val === null) {
+        rec.proyecto = null;
+      } else {
+        let num = Number(val);
+        if (isNaN(num)) num = 0;
+        rec.proyecto = Math.max(0, Math.min(100, num));
+      }
+      this.updateStudentRowView(matricula, 'proyecto', null, rec.proyecto);
       this.updateSummaryStats();
       this.debouncedSave();
     }
@@ -1245,8 +1306,10 @@ const App = {
     const course = this.getActiveCourse();
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
-      rec.puntosExtra = Number(val) || 0;
-      this.updateStudentRowView(matricula, 'puntosExtra', null, val);
+      let num = Number(val);
+      if (isNaN(num) || num < 0) num = 0;
+      rec.puntosExtra = Math.min(10, num);
+      this.updateStudentRowView(matricula, 'puntosExtra', null, rec.puntosExtra);
       this.updateSummaryStats();
       this.debouncedSave();
     }
@@ -1266,12 +1329,17 @@ const App = {
       const ring = document.getElementById(`ring-firmas-${matricula}-${uKey}`);
       if (ring) {
         const maxF = maxFirmasConfig[uKey] || 10;
-        const numVal = val !== "" && val !== null ? Number(val) : 0;
-        const pct = Math.min(100, Math.round((numVal / maxF) * 100));
-        const dashOffset = 44 - (44 * pct) / 100;
-        const strokeColor = pct >= 100 ? 'var(--color-green)' : (pct >= 50 ? 'var(--color-orange)' : 'var(--border-color)');
-        ring.style.strokeDashoffset = dashOffset;
-        ring.style.stroke = strokeColor;
+        const numVal = val !== "" && val !== null ? Number(val) : null;
+        if (numVal !== null && maxF > 0) {
+          const pct = Math.min(100, Math.round((numVal / maxF) * 100));
+          const dashOffset = 44 - (44 * pct) / 100;
+          const strokeColor = pct >= 100 ? 'var(--color-green)' : (pct >= 50 ? 'var(--color-orange)' : 'var(--border-color)');
+          ring.style.strokeDashoffset = dashOffset;
+          ring.style.stroke = strokeColor;
+        } else {
+          ring.style.strokeDashoffset = 44;
+          ring.style.stroke = 'var(--border-color)';
+        }
       }
     }
 
@@ -1293,40 +1361,62 @@ const App = {
       const uK = `u${u}`;
       const valEl = document.getElementById(`val-eval-${matricula}-${uK}`);
       const ringEl = document.getElementById(`ring-eval-${matricula}-${uK}`);
-      const evalVal = calcs.evalU[u] || 0;
+      const evalVal = calcs.evalU[u];
+      const hasEval = evalVal !== null && evalVal !== undefined;
+      const displayVal = hasEval ? evalVal : "-";
 
-      if (valEl) valEl.textContent = evalVal;
+      if (valEl) valEl.textContent = displayVal;
       if (ringEl) {
-        let ringColor = "var(--color-green)";
-        if (evalVal < 60) ringColor = "var(--color-red)";
-        else if (evalVal < 70) ringColor = "var(--color-orange)";
-        const pct = Math.min(100, evalVal);
-        const dashOffset = 44 - (44 * pct) / 100;
-        ringEl.style.strokeDashoffset = dashOffset;
-        ringEl.style.stroke = ringColor;
+        if (hasEval) {
+          let ringColor = "var(--color-green)";
+          if (evalVal < 60) ringColor = "var(--color-red)";
+          else if (evalVal < 70) ringColor = "var(--color-orange)";
+          const pct = Math.min(100, evalVal);
+          const dashOffset = 44 - (44 * pct) / 100;
+          ringEl.style.strokeDashoffset = dashOffset;
+          ringEl.style.stroke = ringColor;
+        } else {
+          ringEl.style.strokeDashoffset = 44;
+          ringEl.style.stroke = "var(--border-color)";
+        }
       }
     }
 
     // 4. Actualizar Evaluación Final (número, barra e insignia)
-    let finalColor = "var(--color-green)";
-    if (calcs.evalFinal < 60) finalColor = "var(--color-red)";
-    else if (calcs.evalFinal < 70) finalColor = "var(--color-orange)";
-
     const valFinal = document.getElementById(`val-final-${matricula}`);
     const barFinal = document.getElementById(`bar-final-${matricula}`);
     const badgeFinal = document.getElementById(`badge-final-${matricula}`);
 
-    if (valFinal) {
-      valFinal.textContent = calcs.evalFinal;
-      valFinal.style.color = finalColor;
-    }
-    if (barFinal) {
-      barFinal.style.width = calcs.evalFinal + '%';
-      barFinal.style.backgroundColor = finalColor;
-    }
-    if (badgeFinal) {
-      badgeFinal.textContent = calcs.evalFinal >= 70 ? 'APR' : 'REP';
-      badgeFinal.className = `status-badge ${calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado'}`;
+    if (calcs.hasEvaluations) {
+      let finalColor = "var(--color-green)";
+      if (calcs.evalFinal < 60) finalColor = "var(--color-red)";
+      else if (calcs.evalFinal < 70) finalColor = "var(--color-orange)";
+
+      if (valFinal) {
+        valFinal.textContent = calcs.evalFinal;
+        valFinal.style.color = finalColor;
+      }
+      if (barFinal) {
+        barFinal.style.width = calcs.evalFinal + '%';
+        barFinal.style.backgroundColor = finalColor;
+      }
+      if (badgeFinal) {
+        badgeFinal.textContent = calcs.evalFinal >= 70 ? 'APR' : 'REP';
+        badgeFinal.className = `status-badge ${calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado'}`;
+      }
+    } else {
+      if (valFinal) {
+        valFinal.textContent = "-";
+        valFinal.style.color = "var(--text-tertiary)";
+      }
+      if (barFinal) {
+        barFinal.style.width = '0%';
+        barFinal.style.backgroundColor = "transparent";
+      }
+      if (badgeFinal) {
+        badgeFinal.textContent = 'PEN';
+        badgeFinal.className = 'status-badge status-pending';
+      }
     }
   },
 
@@ -1443,10 +1533,30 @@ const App = {
     }
   },
 
-  // Gestión del Directorio Maestro
+  // Gestión del Directorio Maestro con propagación en cascada de matrículas
   updateDirectoryStudent: function(index, field, value) {
-    if (this.data.students[index]) {
-      this.data.students[index][field] = value.trim();
+    if (this.data && this.data.students && this.data.students[index]) {
+      const trimmedVal = value.trim();
+      if (field === 'matricula') {
+        const oldMatricula = this.data.students[index].matricula;
+        if (oldMatricula && trimmedVal && oldMatricula !== trimmedVal) {
+          this.data.students[index].matricula = trimmedVal;
+          // Propagación en cascada a todas las materias y grupos del docente
+          if (this.data.courses) {
+            this.data.courses.forEach(c => {
+              if (c.records) {
+                c.records.forEach(r => {
+                  if (r.matricula === oldMatricula) {
+                    r.matricula = trimmedVal;
+                  }
+                });
+              }
+            });
+          }
+        }
+      } else {
+        this.data.students[index][field] = trimmedVal;
+      }
       this.debouncedSave();
     }
   },
@@ -1582,7 +1692,10 @@ const App = {
     }
 
     const calcs = this.calculateStudentGrades(rec, course);
-    const estatus = calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO";
+    const hasEvals = calcs.hasEvaluations;
+    const estatus = hasEvals ? (calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO") : "SIN EVALUAR";
+    const statusClass = hasEvals ? (calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado') : 'status-pending';
+    const finalPtsText = hasEvals ? `${calcs.evalFinal} PTS` : 'PENDIENTE';
 
     resultDiv.innerHTML = `
       <div class="student-result-card">
@@ -1591,23 +1704,31 @@ const App = {
             <h4 style="font-size: 16px;">${student.nombre}</h4>
             <span style="font-size: 12.5px; color: var(--text-secondary);">Matrícula: <b>${rec.matricula}</b> • ${course.nombre}</span>
           </div>
-          <span class="status-badge ${calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado'}" style="font-size: 12px; padding: 4px 10px;">
-            ${estatus} (${calcs.evalFinal} PTS)
+          <span class="status-badge ${statusClass}" style="font-size: 12px; padding: 4px 10px;">
+            ${estatus} (${finalPtsText})
           </span>
         </div>
 
         <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; text-align: center; margin: 16px 0; background: var(--bg-secondary); padding: 10px; border-radius: 6px;">
-          ${[1, 2, 3, 4, 5].map(u => `
-            <div>
-              <div style="font-size: 10.5px; color: var(--text-tertiary);">U${u}</div>
-              <div style="font-size: 14px; font-weight: bold; color: ${calcs.evalU[u] >= 70 ? 'var(--color-green)' : 'var(--color-red)'};">${calcs.evalU[u]}</div>
-              <div style="font-size: 10px; color: var(--text-secondary);">${rec.firmas ? (rec.firmas[`u${u}`] || 0) : 0} firmas / ${rec.examenes ? (rec.examenes[`u${u}`] || 0) : 0} ex</div>
-            </div>
-          `).join('')}
+          ${[1, 2, 3, 4, 5].map(u => {
+            const ev = calcs.evalU[u];
+            const hasEv = ev !== null && ev !== undefined;
+            const evColor = hasEv ? (ev >= 70 ? 'var(--color-green)' : (ev >= 60 ? 'var(--color-orange)' : 'var(--color-red)')) : 'var(--text-tertiary)';
+            const evDisplay = hasEv ? ev : '-';
+            const fVal = (rec.firmas && rec.firmas[`u${u}`] !== null && rec.firmas[`u${u}`] !== undefined && rec.firmas[`u${u}`] !== "") ? rec.firmas[`u${u}`] : '-';
+            const eVal = (rec.examenes && rec.examenes[`u${u}`] !== null && rec.examenes[`u${u}`] !== undefined && rec.examenes[`u${u}`] !== "") ? rec.examenes[`u${u}`] : '-';
+            return `
+              <div>
+                <div style="font-size: 10.5px; color: var(--text-tertiary);">U${u}</div>
+                <div style="font-size: 14px; font-weight: bold; color: ${evColor};">${evDisplay}</div>
+                <div style="font-size: 10px; color: var(--text-secondary);">${fVal} f / ${eVal} ex</div>
+              </div>
+            `;
+          }).join('')}
         </div>
 
         <div style="font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between;">
-          <span>Proyecto Final: <b>${rec.proyecto !== null && rec.proyecto !== undefined ? rec.proyecto : '-'}</b></span>
+          <span>Proyecto Final: <b>${rec.proyecto !== null && rec.proyecto !== undefined && rec.proyecto !== "" ? rec.proyecto : '-'}</b></span>
           <span>Puntos Extra: <b>+${(rec.puntosExtra || 0) * 5} pts (${rec.puntosExtra || 0})</b></span>
         </div>
       </div>
