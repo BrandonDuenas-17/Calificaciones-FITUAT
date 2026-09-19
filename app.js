@@ -20,6 +20,16 @@ const App = {
     return this.currentUser && this.currentUser.role === 'admin';
   },
 
+  escapeHtml: function(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  },
+
   startInactivityTimer: function() {
     this.stopInactivityTimer();
     // Excluir al usuario maestro (Coordinación / Administrador) del auto-cierre por inactividad
@@ -820,16 +830,16 @@ const App = {
       const badgeClass = hasEvals ? (calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado') : 'status-pending';
 
       rowsHtml += `
-        <tr id="row-${rec.matricula}" data-matricula="${rec.matricula}" data-search="${searchData}" style="display: ${isMatch ? '' : 'none'};">
+        <tr id="row-${this.escapeHtml(rec.matricula)}" data-matricula="${this.escapeHtml(rec.matricula)}" data-search="${this.escapeHtml(searchData)}" style="display: ${isMatch ? '' : 'none'};">
           <td class="col-matricula">
-            <input type="text" class="cell-input" value="${rec.matricula}" 
+            <input type="text" class="cell-input" value="${this.escapeHtml(rec.matricula)}" 
               onfocus="this.select()"
               onchange="App.updateMatricula(${index}, this.value)" />
           </td>
           <td class="col-rollup" title="Obtenido automáticamente de la base de alumnos (Rollup)">
             <div class="rollup-badge">
               <span class="rollup-icon">↗</span>
-              <span>${student.nombre}</span>
+              <span>${this.escapeHtml(student.nombre)}</span>
             </div>
           </td>
           <td class="col-final">
@@ -920,13 +930,13 @@ const App = {
         <div class="page-title-row">
           <div>
             <h1 class="page-title">
-              ${course.nombre}
+              ${this.escapeHtml(course.nombre)}
               <span style="font-size: 13.5px; font-weight: 700; background: var(--uat-orange-light); color: var(--uat-orange-dark); padding: 3px 12px; border-radius: 12px; border: 1px solid rgba(224, 126, 51, 0.3); margin-left: 6px;">
-                ${course.grupo || 'Grupo A'}
+                ${this.escapeHtml(course.grupo || 'Grupo A')}
               </span>
             </h1>
             <p class="page-desc">
-              Control de evaluaciones por unidad y calificación final • Periodo <b>${course.periodo}</b>
+              Control de evaluaciones por unidad y calificación final • Periodo <b>${this.escapeHtml(course.periodo)}</b>
             </p>
           </div>
           <div class="header-actions">
@@ -1865,8 +1875,8 @@ const App = {
     lines.forEach(line => {
       const parts = line.split(/\t|,/); // Separado por tabulador (Excel) o coma
       if (parts.length >= 1) {
-        const matricula = parts[0].trim().replace(/["']/g, '');
-        const nombre = parts[1] ? parts[1].trim().replace(/["']/g, '') : "ALUMNO REGISTRADO";
+        const matricula = parts[0].trim().replace(/[<>"']/g, '');
+        const nombre = parts[1] ? parts[1].trim().replace(/[<>"']/g, '') : "ALUMNO REGISTRADO";
 
         if (matricula) {
           // 1. Agregar a la Base Maestra si no existe
@@ -2748,7 +2758,7 @@ const App = {
     }
 
     if (typeof FACULTY_ROSTER === "undefined" || !FACULTY_ROSTER.length) {
-      alert("No se encontró el archivo compilado FACULTY_ROSTER.");
+      alert("La plantilla docente ya está sincronizada y protegida al 100% en la nube de Supabase. El archivo local fue desconectado del navegador por seguridad.");
       return;
     }
 

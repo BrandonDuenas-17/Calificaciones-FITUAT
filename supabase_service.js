@@ -107,6 +107,39 @@ const SupabaseService = {
 
     try {
       const term = (identifier || "").trim().toLowerCase();
+
+      // 1. Intento primario vía RPC seguro (ejecutado dentro de PostgreSQL)
+      try {
+        const { data: rpcData, error: rpcError } = await this.client.rpc("verify_teacher_credentials", {
+          p_identifier: term,
+          p_password: password
+        });
+
+        if (!rpcError && rpcData && rpcData.length > 0) {
+          const res = rpcData[0];
+          if (res.success && res.id) {
+            return {
+              success: true,
+              teacherId: res.id,
+              teacher: {
+                id: res.id,
+                nombre: res.nombre,
+                usuario: res.usuario,
+                correo: res.correo,
+                role: res.role
+              }
+            };
+          } else if (res.id) {
+            return { success: false, reason: "wrong_password" };
+          } else {
+            return { success: false, reason: "user_not_found" };
+          }
+        }
+      } catch (rpcEx) {
+        // Procedimiento aún no creado en Supabase, continuar con consulta directa de respaldo
+      }
+
+      // 2. Consulta filtrada de respaldo
       const { data, error } = await this.client
         .from("teachers")
         .select("id, password, nombre, usuario, correo, role")
