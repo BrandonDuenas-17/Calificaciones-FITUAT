@@ -22,14 +22,16 @@ const App = {
 
   startInactivityTimer: function() {
     this.stopInactivityTimer();
-    if (!this.currentUser) return;
+    // Excluir al usuario maestro (Coordinación / Administrador) del auto-cierre por inactividad
+    if (!this.currentUser || this.isAdmin()) return;
     this.inactivityTimer = setTimeout(() => {
       this.handleInactivityTimeout();
     }, this.inactivityTimeoutMs);
   },
 
   resetInactivityTimer: function() {
-    if (!this.currentUser) return;
+    // Si no hay usuario activo o es el usuario maestro, no aplicar temporizador
+    if (!this.currentUser || this.isAdmin()) return;
     if (this.inactivityTimer) {
       clearTimeout(this.inactivityTimer);
     }
@@ -46,7 +48,8 @@ const App = {
   },
 
   handleInactivityTimeout: function() {
-    if (this.currentUser) {
+    // Cerrar sesión únicamente para cuentas docentes ordinarias, nunca al usuario maestro
+    if (this.currentUser && !this.isAdmin()) {
       this.logout();
       alert("Tu sesión se ha cerrado automáticamente tras 20 minutos de inactividad para proteger tus calificaciones.");
     }
