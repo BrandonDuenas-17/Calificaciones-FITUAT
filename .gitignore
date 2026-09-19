@@ -12,3 +12,7 @@ $RECYCLE.BIN/
 
 # Logs
 *.log
+
+# Credenciales sensibles locales (SEC-04)
+CUENTAS_DOCENTES_FIUAT.csv
+CUENTAS_DOCENTES_FIUAT.md

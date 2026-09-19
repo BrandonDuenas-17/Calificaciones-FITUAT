@@ -209,6 +209,45 @@ const SupabaseService = {
         App.setCloudSaveStatus("saving");
       }
 
+      // BLINDAJE CRÍTICO SEC-01:
+      // Para evitar sobreescribir la contraseña a '123' o alterar roles de forma inadvertida,
+      // la persistencia periódica de calificaciones actualiza ÚNICAMENTE las columnas data y updated_at.
+      const payload = {
+        data: teacher.data || { courses: [], students: [] },
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await this.client
+        .from("teachers")
+        .update(payload)
+        .eq("id", teacher.id);
+
+      if (error) throw error;
+
+      this.status = "connected";
+      this.notifyStatusChange();
+
+      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+        App.setCloudSaveStatus("saved");
+      }
+      return true;
+    } catch (error) {
+      console.error("Error al guardar calificaciones en Supabase:", error);
+      this.status = navigator.onLine ? "error" : "offline";
+      this.notifyStatusChange();
+
+      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+        App.setCloudSaveStatus("error", error.message);
+      }
+      return false;
+    }
+  },
+
+  // Registrar un nuevo docente en Supabase (Solo Coordinación Académica)
+  createTeacher: async function(teacher) {
+    if (!this.isInitialized || !this.client || !teacher || !teacher.id) return false;
+
+    try {
       const payload = {
         id: teacher.id,
         nombre: teacher.nombre,
@@ -224,25 +263,45 @@ const SupabaseService = {
 
       const { error } = await this.client
         .from("teachers")
-        .upsert(payload, { onConflict: "id" });
+        .insert([payload]);
 
       if (error) throw error;
-
-      this.status = "connected";
-      this.notifyStatusChange();
-
-      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
-        App.setCloudSaveStatus("saved");
-      }
       return true;
     } catch (error) {
-      console.error("Error al guardar docente en Supabase:", error);
-      this.status = navigator.onLine ? "error" : "offline";
-      this.notifyStatusChange();
+      console.error("Error al registrar docente en Supabase:", error);
+      return false;
+    }
+  },
 
-      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
-        App.setCloudSaveStatus("error", error.message);
+  // Actualizar contraseña de forma segura (SEC-01 / SEC-06)
+  updatePassword: async function(teacherId, newPassword, oldPassword) {
+    if (!this.isInitialized || !this.client || !teacherId || !newPassword) return false;
+
+    try {
+      // 1. Intentar procedimiento seguro con validación previa en PostgreSQL
+      try {
+        const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("change_teacher_password", {
+          p_id: teacherId,
+          p_old_password: oldPassword || "",
+          p_new_password: newPassword
+        });
+        if (!rpcErr && typeof rpcSuccess === "boolean") {
+          return rpcSuccess;
+        }
+      } catch (e) {
+        // RPC no configurado aún, continuar con actualización directa
       }
+
+      // 2. Respaldo directo
+      const { error } = await this.client
+        .from("teachers")
+        .update({ password: newPassword, updated_at: new Date().toISOString() })
+        .eq("id", teacherId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error("Error al actualizar contraseña:", error);
       return false;
     }
   },

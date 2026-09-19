@@ -89,10 +89,13 @@ const Exporter = {
     const grupoSuffix = course.grupo ? `_${course.grupo.replace(/\s+/g, '_')}` : '';
     const filename = `FIUAT_${course.nombre.replace(/\s+/g, '_')}${grupoSuffix}_${course.periodo}_${mode === 'teams' ? 'TEAMS_PUBLICACION' : 'CONTROL_DOCENTE'}.xlsx`;
 
+    // Sanitización contra inyección de fórmulas en Excel (CWE-1236 - SEC-07)
+    const sanitizedRows = rows.map(r => r.map(cell => Exporter.sanitizeForSpreadsheet(cell)));
+
     // Si la librería SheetJS (XLSX) está presente
     if (window.XLSX) {
       const wb = XLSX.utils.book_new();
-      const wsData = [headers, ...rows];
+      const wsData = [headers, ...sanitizedRows];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
       // Anchos de columna optimizados
@@ -116,8 +119,19 @@ const Exporter = {
       );
     } else {
       // Fallback a CSV compatible con Excel
-      Exporter.exportToCSV(headers, rows, filename.replace('.xlsx', '.csv'));
+      Exporter.exportToCSV(headers, sanitizedRows, filename.replace('.xlsx', '.csv'));
     }
+  },
+
+  // Sanitización de celdas contra inyección de fórmulas CSV/Excel (CWE-1236 - SEC-07)
+  sanitizeForSpreadsheet: function(val) {
+    if (val === null || val === undefined) return "";
+    if (typeof val === 'number') return val;
+    const str = String(val);
+    if (/^[=+@\-\t\r]/.test(str)) {
+      return "'" + str;
+    }
+    return str;
   },
 
   // Método seguro de guardado que funciona tanto en protocolo file:// como en web
@@ -195,7 +209,10 @@ const Exporter = {
     let csvContent = "\uFEFF"; // BOM para acentos en Excel
     csvContent += headers.map(h => `"${h}"`).join(",") + "\r\n";
     rows.forEach(row => {
-      csvContent += row.map(val => `"${val !== null && val !== undefined ? val : ''}"`).join(",") + "\r\n";
+      csvContent += row.map(val => {
+        const clean = Exporter.sanitizeForSpreadsheet(val !== null && val !== undefined ? val : '');
+        return `"${String(clean).replace(/"/g, '""')}"`;
+      }).join(",") + "\r\n";
     });
 
     Exporter.saveFileSafe(

@@ -4,7 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Calificaciones • Facultad de Ingeniería Tampico (FIUAT - UAT)</title>
-  <meta name="description" content="Plataforma docente oficial de la Facultad de Ingeniería Tampico (UAT) para evaluación de Álgebra Lineal y Cálculo Integral.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://xjlqzwigqmevbffaavjl.supabase.co wss://xjlqzwigqmevbffaavjl.supabase.co data: blob:; img-src 'self' data: https:; font-src 'self' data: https:;">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <!-- Blindaje Anti-Clickjacking: evita incrustación no autorizada en iframes maliciosos -->
+  <script>
+    if (window.top !== window.self) {
+      window.top.location = window.self.location;
+    }
+  </script>
   <link rel="stylesheet" href="styles.css">
   <!-- SheetJS para generación de archivos Excel (.xlsx) nativos -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>

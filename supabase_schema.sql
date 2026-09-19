@@ -87,7 +87,40 @@ $$;
 -- Permitir ejecutar la función a clientes web
 grant execute on function public.verify_teacher_credentials(text, text) to anon, authenticated;
 
--- 6. Habilitar Realtime para permitir la supervisión en vivo del Administrador
+-- 6. FUNCIÓN RPC SEGURA PARA CAMBIO DE CONTRASEÑA (SEC-01 / SEC-06)
+create or replace function public.change_teacher_password(p_id text, p_old_password text, p_new_password text)
+returns boolean language plpgsql security definer as $$
+declare
+  v_current_pass text;
+begin
+  select password into v_current_pass from public.teachers where id = p_id;
+  if not found then
+    return false;
+  end if;
+
+  -- Validar que la contraseña anterior coincida (o que sea la de defecto '123')
+  if v_current_pass is distinct from p_old_password and not (v_current_pass is null and p_old_password = '123') then
+    return false;
+  end if;
+
+  -- Actualizar únicamente la contraseña y fecha de modificación
+  update public.teachers 
+  set password = p_new_password, updated_at = timezone('utc'::text, now())
+  where id = p_id;
+
+  return true;
+end;
+$$;
+
+grant execute on function public.change_teacher_password(text, text, text) to anon, authenticated;
+
+-- 7. RESTRICCIÓN DE PRIVILEGIOS POR COLUMNA (SEC-03 y SEC-05)
+-- Blindaje contra manipulación indebida de roles y contraseñas vía REST anónimo:
+-- El rol anónimo solo tiene autorización para actualizar calificaciones (data) y fecha (updated_at).
+revoke update on public.teachers from anon;
+grant update (data, updated_at) on public.teachers to anon;
+
+-- 8. Habilitar Realtime para permitir la supervisión en vivo del Administrador
 do $$
 begin
   if not exists (
@@ -99,11 +132,13 @@ begin
 end;
 $$;
 
--- 7. Crear índices de búsqueda rápida
+-- 9. Crear índices de búsqueda rápida
 create index if not exists idx_teachers_usuario on public.teachers (usuario);
 create index if not exists idx_teachers_role on public.teachers (role);
 
 -- ============================================================================
--- ¡Listo! Tu base de datos Supabase cuenta con blindaje contra borrado masivo
--- y validación segura de contraseñas mediante procedimiento almacenado.
+-- ¡Listo! Tu base de datos Supabase cuenta con:
+-- 1. Blindaje total contra borrado (DELETE revocado).
+-- 2. Restricción estricta de actualización de columnas sensibles (SEC-03 y SEC-05).
+-- 3. Autenticación y cambio seguro de contraseñas por funciones RPC en PostgreSQL.
 -- ============================================================================

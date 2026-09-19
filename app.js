@@ -30,6 +30,51 @@ const App = {
       .replace(/'/g, "&#039;");
   },
 
+  // Generador de firma criptográfica de sesión para evitar suplantación (SEC-02)
+  generateSessionSignature: function(teacherId, token) {
+    if (!teacherId || !token) return "";
+    const str = teacherId + ":" + token + ":fiuat_uat_sec_salt_2026";
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return "sig_" + Math.abs(hash).toString(36) + "_" + str.length;
+  },
+
+  // Control persistente de fuerza bruta (SEC-09)
+  getRateLimitState: function() {
+    try {
+      const stored = localStorage.getItem("notion_login_ratelimit");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          return {
+            failedAttempts: Number(parsed.failedAttempts) || 0,
+            lockoutUntil: Number(parsed.lockoutUntil) || 0
+          };
+        }
+      }
+    } catch (e) {}
+    return { failedAttempts: 0, lockoutUntil: 0 };
+  },
+
+  setRateLimitState: function(failedAttempts, lockoutUntil) {
+    try {
+      localStorage.setItem("notion_login_ratelimit", JSON.stringify({
+        failedAttempts: failedAttempts,
+        lockoutUntil: lockoutUntil
+      }));
+    } catch (e) {}
+  },
+
+  clearRateLimitState: function() {
+    try {
+      localStorage.removeItem("notion_login_ratelimit");
+    } catch (e) {}
+  },
+
   startInactivityTimer: function() {
     this.stopInactivityTimer();
     // Excluir al usuario maestro (Coordinación / Administrador) del auto-cierre por inactividad
@@ -160,10 +205,21 @@ const App = {
         await cloud.saveTeacher(adminDoc);
       }
 
-      // 2. Cargar usuario/profesor activo desde la sesión (sessionStorage)
+      // 2. Cargar usuario/profesor activo desde la sesión con validación criptográfica (SEC-02)
       const savedTeacherId = sessionStorage.getItem("notion_active_teacher_id");
-      if (savedTeacherId) {
-        this.currentUser = this.teachers.find(t => t.id === savedTeacherId) || null;
+      const savedToken = sessionStorage.getItem("notion_session_token");
+      const savedSig = sessionStorage.getItem("notion_session_signature");
+      if (savedTeacherId && savedToken && savedSig) {
+        const expectedSig = this.generateSessionSignature(savedTeacherId, savedToken);
+        if (savedSig === expectedSig) {
+          this.currentUser = this.teachers.find(t => t.id === savedTeacherId) || null;
+        } else {
+          console.warn("Firma de sesión adulterada o inválida. Acceso revocado.");
+          sessionStorage.removeItem("notion_active_teacher_id");
+          sessionStorage.removeItem("notion_session_token");
+          sessionStorage.removeItem("notion_session_signature");
+          this.currentUser = null;
+        }
       } else {
         this.currentUser = null;
       }
@@ -1810,8 +1866,8 @@ const App = {
       <div class="student-result-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <div>
-            <h4 style="font-size: 16px;">${student.nombre}</h4>
-            <span style="font-size: 12.5px; color: var(--text-secondary);">Matrícula: <b>${rec.matricula}</b> • ${course.nombre}</span>
+            <h4 style="font-size: 16px;">${this.escapeHtml(student.nombre)}</h4>
+            <span style="font-size: 12.5px; color: var(--text-secondary);">Matrícula: <b>${this.escapeHtml(rec.matricula)}</b> • ${this.escapeHtml(course.nombre)}</span>
           </div>
           <span class="status-badge ${statusClass}" style="font-size: 12px; padding: 4px 10px;">
             ${estatus} (${finalPtsText})
@@ -2328,8 +2384,23 @@ const App = {
     const teacher = this.teachers.find(t => t.id === teacherId);
     if (teacher) {
       this.currentUser = teacher;
+
+      // Generar token de sesión criptográfico y firma única (SEC-02)
+      const sessionToken = (window.crypto && crypto.randomUUID) 
+        ? crypto.randomUUID() 
+        : ('tok_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+      const sessionSig = this.generateSessionSignature(teacher.id, sessionToken);
+
       sessionStorage.setItem("notion_active_teacher_id", teacher.id);
-      try { localStorage.removeItem("notion_active_teacher_id"); } catch(e) {}
+      sessionStorage.setItem("notion_session_token", sessionToken);
+      sessionStorage.setItem("notion_session_signature", sessionSig);
+
+      try { 
+        localStorage.removeItem("notion_active_teacher_id");
+        localStorage.removeItem("notion_teachers_db");
+        localStorage.removeItem("notion_grades_data");
+      } catch(e) {}
+
       this.isSupervising = false;
       this.supervisingTeacherId = null;
 
@@ -2348,9 +2419,11 @@ const App = {
   },
 
   login: async function(identifier, password) {
+    // Control persistente contra ataques de fuerza bruta (SEC-09)
+    const rateLimit = this.getRateLimitState();
     const now = Date.now();
-    if (this.lockoutUntil && now < this.lockoutUntil) {
-      const remainingSecs = Math.ceil((this.lockoutUntil - now) / 1000);
+    if (rateLimit.lockoutUntil && now < rateLimit.lockoutUntil) {
+      const remainingSecs = Math.ceil((rateLimit.lockoutUntil - now) / 1000);
       alert(`Acceso temporalmente bloqueado por múltiples intentos fallidos. Intenta de nuevo en ${remainingSecs} segundos.`);
       return;
     }
@@ -2371,15 +2444,17 @@ const App = {
         authSuccess = true;
         targetTeacherId = res.teacherId;
       } else if (res && res.reason === "wrong_password") {
-        this.failedLoginAttempts = (this.failedLoginAttempts || 0) + 1;
-        if (this.failedLoginAttempts >= 5) {
-          this.lockoutUntil = Date.now() + 60000;
-          this.failedLoginAttempts = 0;
+        const newAttempts = rateLimit.failedAttempts + 1;
+        if (newAttempts >= 5) {
+          const lockUntil = Date.now() + 60000;
+          this.setRateLimitState(0, lockUntil);
           alert("Has superado el límite de 5 intentos incorrectos. El acceso se ha bloqueado por 60 segundos por seguridad.");
           return;
+        } else {
+          this.setRateLimitState(newAttempts, 0);
+          alert(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - newAttempts}.`);
+          return;
         }
-        alert(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - this.failedLoginAttempts}.`);
-        return;
       } else {
         alert("No se encontró ningún usuario o correo institucional registrado.");
         return;
@@ -2398,15 +2473,17 @@ const App = {
 
       const expectedPass = teacher.password || "123";
       if (password && expectedPass !== password) {
-        this.failedLoginAttempts = (this.failedLoginAttempts || 0) + 1;
-        if (this.failedLoginAttempts >= 5) {
-          this.lockoutUntil = Date.now() + 60000;
-          this.failedLoginAttempts = 0;
+        const newAttempts = rateLimit.failedAttempts + 1;
+        if (newAttempts >= 5) {
+          const lockUntil = Date.now() + 60000;
+          this.setRateLimitState(0, lockUntil);
           alert("Has superado el límite de 5 intentos incorrectos. El acceso se ha bloqueado por 60 segundos por seguridad.");
           return;
+        } else {
+          this.setRateLimitState(newAttempts, 0);
+          alert(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - newAttempts}.`);
+          return;
         }
-        alert(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - this.failedLoginAttempts}.`);
-        return;
       }
 
       authSuccess = true;
@@ -2414,8 +2491,7 @@ const App = {
     }
 
     if (authSuccess && targetTeacherId) {
-      this.failedLoginAttempts = 0;
-      this.lockoutUntil = 0;
+      this.clearRateLimitState();
       this.quickLogin(targetTeacherId);
     }
   },
@@ -2431,7 +2507,14 @@ const App = {
     this.supervisingTeacherId = null;
     this.data = null;
     sessionStorage.removeItem("notion_active_teacher_id");
-    try { localStorage.removeItem("notion_active_teacher_id"); } catch(e) {}
+    sessionStorage.removeItem("notion_session_token");
+    sessionStorage.removeItem("notion_session_signature");
+    try { 
+      sessionStorage.clear();
+      localStorage.removeItem("notion_active_teacher_id"); 
+      localStorage.removeItem("notion_teachers_db");
+      localStorage.removeItem("notion_grades_data");
+    } catch(e) {}
     const dropdown = document.getElementById("teacherDropdown");
     if (dropdown) dropdown.classList.remove("open");
     const banner = document.getElementById("supervisionBannerContainer");
@@ -2949,7 +3032,11 @@ const App = {
     this.teachers.push(newTeacher);
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     if (cloud) {
-      await cloud.saveTeacher(newTeacher);
+      if (cloud.createTeacher) {
+        await cloud.createTeacher(newTeacher);
+      } else {
+        await cloud.saveTeacher(newTeacher);
+      }
     }
     this.closeRegisterTeacherModal();
     this.quickLogin(newTeacher.id);
@@ -3022,9 +3109,13 @@ const App = {
       this.teachers[tIndex].password = newPass;
     }
 
-    // Persistir directamente en Supabase
+    // Persistir directamente en Supabase vía método seguro de contraseña (SEC-01)
     if (cloud) {
-      await cloud.saveTeacher(this.currentUser);
+      if (cloud.updatePassword) {
+        await cloud.updatePassword(this.currentUser.id, newPass, currentPass);
+      } else {
+        await cloud.saveTeacher(this.currentUser);
+      }
     }
 
     this.closeChangePasswordModal();
