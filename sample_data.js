@@ -173,13 +173,12 @@ const INITIAL_DATA = {
   ]
 };
 
-// Perfil Maestro de Coordinación / Administrador
+// Perfil Maestro de Coordinación / Administrador (Sin contraseñas en cliente)
 const INITIAL_ADMIN = {
   id: "admin-coordinacion",
   nombre: "Coordinación Académica FIUAT",
   usuario: "admin",
   correo: "coordinacion@ingenieria.uat.edu.mx",
-  password: "admin",
   departamento: "Dirección y Gestión Docente",
   role: "admin",
   avatar: "DIR"
@@ -192,7 +191,6 @@ const INITIAL_TEACHERS = [
     nombre: "Ing. Roberto García M.",
     usuario: "rgarcia",
     correo: "rgarcia@docentes.uat.edu.mx",
-    password: "123",
     departamento: "Ciencias Básicas (FIUAT)",
     role: "docente",
     avatar: "RG",
@@ -203,7 +201,6 @@ const INITIAL_TEACHERS = [
     nombre: "Dra. Martha Elena Sánchez",
     usuario: "msanchez",
     correo: "msanchez@docentes.uat.edu.mx",
-    password: "123",
     departamento: "Ingeniería en Sistemas",
     role: "docente",
     avatar: "MS",

@@ -24,8 +24,8 @@ create table if not exists public.teachers (
 -- 2. Habilitar Row Level Security (RLS)
 alter table public.teachers enable row level security;
 
--- 3. BLINDAJE CONTRA BORRADO MASIVO: Revocar privilegio DELETE para usuarios anónimos
-revoke delete on public.teachers from anon;
+-- 3. BLINDAJE CONTRA BORRADO MASIVO: Revocar privilegio DELETE
+revoke delete on public.teachers from anon, authenticated;
 drop policy if exists "Acceso total para docentes y coordinacion FIUAT" on public.teachers;
 drop policy if exists "Lectura pública del catálogo docente" on public.teachers;
 drop policy if exists "Docentes pueden actualizar sus calificaciones" on public.teachers;
@@ -114,11 +114,24 @@ $$;
 
 grant execute on function public.change_teacher_password(text, text, text) to anon, authenticated;
 
--- 7. RESTRICCIÓN DE PRIVILEGIOS POR COLUMNA (SEC-03 y SEC-05)
--- Blindaje contra manipulación indebida de roles y contraseñas vía REST anónimo:
--- El rol anónimo solo tiene autorización para actualizar calificaciones (data) y fecha (updated_at).
-revoke update on public.teachers from anon;
-grant update (data, updated_at) on public.teachers to anon;
+-- 7. RESTRICCIÓN ESTRICTA DE PRIVILEGIOS POR COLUMNA (VULN-01, VULN-02, VULN-03)
+-- ============================================================================
+-- a) BLINDAJE CONTRA FILTRACIÓN DE CONTRASEÑAS (VULN-01):
+-- Se revoca el SELECT completo de la tabla para roles anónimos y autenticados,
+-- otorgando SELECT únicamente en columnas no sensibles.
+-- La columna 'password' queda 100% INACCESIBLE vía REST API (evita descargas de hashes o contraseñas).
+revoke select on public.teachers from anon, authenticated;
+grant select (id, nombre, usuario, correo, departamento, role, avatar, data, updated_at) on public.teachers to anon, authenticated;
+
+-- b) BLINDAJE CONTRA ESCALACIÓN DE PRIVILEGIOS Y MANIPULACIÓN (VULN-02):
+-- Ningún usuario anónimo puede modificar su 'role' a 'admin' ni cambiar contraseñas por PATCH directo.
+-- Solo se autoriza la actualización de las calificaciones ('data') y la marca temporal ('updated_at').
+revoke update on public.teachers from anon, authenticated;
+grant update (data, updated_at) on public.teachers to anon, authenticated;
+
+-- c) BLINDAJE CONTRA BORRADO DE REGISTROS (VULN-03):
+-- Queda estrictamente revocado el permiso DELETE.
+revoke delete on public.teachers from anon, authenticated;
 
 -- 8. Habilitar Realtime para permitir la supervisión en vivo del Administrador
 do $$
@@ -137,8 +150,9 @@ create index if not exists idx_teachers_usuario on public.teachers (usuario);
 create index if not exists idx_teachers_role on public.teachers (role);
 
 -- ============================================================================
--- ¡Listo! Tu base de datos Supabase cuenta con:
--- 1. Blindaje total contra borrado (DELETE revocado).
--- 2. Restricción estricta de actualización de columnas sensibles (SEC-03 y SEC-05).
--- 3. Autenticación y cambio seguro de contraseñas por funciones RPC en PostgreSQL.
+-- ¡LISTO! Tu base de datos Supabase ahora cuenta con Blindaje Nivel Empresa:
+-- 1. Contraseñas protegidas: SELECT (password) revocado en REST API (VULN-01).
+-- 2. Anti-Escalación: UPDATE restringido a 'data' y 'updated_at' únicamente (VULN-02).
+-- 3. Anti-Destrucción: DELETE revocado para anon y authenticated (VULN-03).
+-- 4. Autenticación y cambio de contraseñas mediante RPCs seguros con SECURITY DEFINER.
 -- ============================================================================

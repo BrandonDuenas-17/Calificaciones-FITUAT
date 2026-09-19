@@ -342,15 +342,9 @@ const App = {
     }
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     
-    // Si estamos en modo supervisión, guardar directamente en el profesor auditado protegiendo al admin
-    if (this.isSupervising && this.supervisingTeacherId) {
-      const targetTeacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
-      if (targetTeacher) {
-        targetTeacher.data = this.data;
-        if (cloud) {
-          await cloud.saveTeacher(targetTeacher);
-        }
-      }
+    // Blindaje VULN-05 y VULN-06: Modo Supervisión es estrictamente de Solo Lectura
+    if (this.isSupervising) {
+      console.warn("Modo Supervisión: La edición sobre las calificaciones de otro docente está restringida.");
       return;
     }
     if (this.currentUser) {
@@ -727,7 +721,7 @@ const App = {
       ${adminBackBtn}
       <button class="nav-tab-btn ${this.activeTab === 'gradebook' ? 'active' : ''}" onclick="App.switchTab('gradebook')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3zM3 9h18M9 21V9"/></svg>
-        ${course.nombre || 'Materia'} • ${course.grupo || 'Grupo A'}
+        ${this.escapeHtml(course.nombre || 'Materia')} • ${this.escapeHtml(course.grupo || 'Grupo A')}
         <span class="nav-tab-badge">${recordsCount} alumnos</span>
       </button>
 
@@ -739,7 +733,7 @@ const App = {
 
       <button class="nav-tab-btn ${this.activeTab === 'teams' ? 'active' : ''}" onclick="App.switchTab('teams')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        Publicar en Teams (${course.grupo || 'Grupo A'})
+        Publicar en Teams (${this.escapeHtml(course.grupo || 'Grupo A')})
       </button>
 
       <button class="nav-tab-btn ${this.activeTab === 'config' ? 'active' : ''}" onclick="App.switchTab('config')">
@@ -755,6 +749,11 @@ const App = {
   },
 
   switchTab: function(tabName) {
+    // Control de Acceso Estricto VULN-04
+    if (tabName === 'admin_dashboard' && !this.isAdmin()) {
+      alert("Acceso Restringido: Se requieren privilegios de Coordinación Académica para ver el Panel de Control Maestro.");
+      return;
+    }
     this.activeTab = tabName;
     this.render();
   },
@@ -1171,26 +1170,29 @@ const App = {
     
     let rowsHtml = "";
     students.forEach((s, idx) => {
+      const escMat = this.escapeHtml(s.matricula || "");
+      const escNom = this.escapeHtml(s.nombre || "");
+      const escCar = this.escapeHtml(s.carrera || "Ingeniería");
       rowsHtml += `
         <tr>
           <td class="col-matricula">
-            <input type="text" class="cell-input" value="${s.matricula}" 
+            <input type="text" class="cell-input" value="${escMat}" 
               onfocus="this.select()"
               onchange="App.updateDirectoryStudent(${idx}, 'matricula', this.value)" />
           </td>
           <td>
-            <input type="text" class="cell-input" value="${s.nombre}" style="font-weight: 500;"
+            <input type="text" class="cell-input" value="${escNom}" style="font-weight: 500;"
               onfocus="this.select()"
               onchange="App.updateDirectoryStudent(${idx}, 'nombre', this.value)" />
           </td>
           <td>
-            <input type="text" class="cell-input" value="${s.carrera || 'Ingeniería'}" 
+            <input type="text" class="cell-input" value="${escCar}" 
               onfocus="this.select()"
               onchange="App.updateDirectoryStudent(${idx}, 'carrera', this.value)" />
           </td>
           <td style="text-align: center; width: 40px;">
             <button type="button" class="btn-delete-row" 
-              title="Eliminar del directorio maestro" onclick="App.deleteDirectoryStudent('${(s.matricula || '').replace(/'/g, "\\'")}')">✕</button>
+              title="Eliminar del directorio maestro" onclick="App.deleteDirectoryStudent('${escMat.replace(/'/g, "\\'")}')">✕</button>
           </td>
         </tr>
       `;
@@ -1355,7 +1357,7 @@ const App = {
       </div>
 
       <div style="max-width: 750px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;">
-        <h3 style="font-size: 15px; margin-bottom: 14px;">Máximo de Firmas por Unidad (${course.nombre})</h3>
+        <h3 style="font-size: 15px; margin-bottom: 14px;">Máximo de Firmas por Unidad (${this.escapeHtml(course.nombre)})</h3>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
           Define la cantidad máxima de firmas para la escala del 50% en cada unidad:
         </p>
@@ -1388,6 +1390,10 @@ const App = {
 
   // BLOQUEO Y CONGELAMIENTO DE UNIDADES (PROTECCIÓN CONTRA CAMBIOS ACCIDENTALES)
   toggleUnitLock: function(uKey) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: No tienes autorización para alterar bloqueos de otro docente.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     if (!course) return;
     if (!course.lockedUnits) course.lockedUnits = {};
@@ -1405,6 +1411,10 @@ const App = {
 
   // ACCIONES Y ACTUALIZACIONES QUIRÚRGICAS DE DATOS (ULTRA FLUIDEZ < 1MS)
   updateFirmas: function(matricula, uKey, val) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     if (!course) return;
     if (course.lockedUnits && course.lockedUnits[uKey]) {
@@ -1428,6 +1438,10 @@ const App = {
   },
 
   updateExamen: function(matricula, uKey, val) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     if (!course) return;
     if (course.lockedUnits && course.lockedUnits[uKey]) {
@@ -1451,6 +1465,10 @@ const App = {
   },
 
   updateProyecto: function(matricula, val) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
@@ -1468,6 +1486,10 @@ const App = {
   },
 
   updatePuntosExtra: function(matricula, val) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     const rec = (course.records || []).find(r => r.matricula === matricula);
     if (rec) {
@@ -1645,6 +1667,10 @@ const App = {
   },
 
   updateMatricula: function(recordIndex, newMatricula) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     if (course.records[recordIndex]) {
       course.records[recordIndex].matricula = newMatricula.trim();
@@ -1654,6 +1680,10 @@ const App = {
   },
 
   addNewStudentToCourse: function() {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     course.records.push({
       matricula: "NUEVA_MATRICULA",
@@ -1668,6 +1698,10 @@ const App = {
   },
 
   deleteRecord: function(identifier) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     let idx = -1;
     if (typeof identifier === "number") {
@@ -1677,11 +1711,19 @@ const App = {
     }
 
     if (idx !== -1) {
-      const deleted = course.records.splice(idx, 1)[0];
+      const recToDelete = course.records[idx];
       const studentMap = this.getStudentsMap();
-      const sName = studentMap[deleted.matricula] ? studentMap[deleted.matricula].nombre : deleted.matricula;
-      const isPlaceholder = deleted.matricula === "NUEVA_MATRICULA";
+      const sName = studentMap[recToDelete.matricula] ? studentMap[recToDelete.matricula].nombre : recToDelete.matricula;
+      const isPlaceholder = recToDelete.matricula === "NUEVA_MATRICULA";
 
+      // VULN-13: Confirmación obligatoria para evitar borrado accidental
+      if (!isPlaceholder) {
+        if (!confirm(`¿Estás seguro de que deseas eliminar al alumno "${sName}" (${recToDelete.matricula}) de esta materia? Esta acción alterará los registros de calificaciones.`)) {
+          return;
+        }
+      }
+
+      const deleted = course.records.splice(idx, 1)[0];
       this.saveData();
       this.render();
 
@@ -1852,7 +1894,7 @@ const App = {
     const student = this.getStudentsMap()[matricula] || { nombre: "Alumno no registrado" };
 
     if (!rec) {
-      resultDiv.innerHTML = `<div class="student-result-card" style="border-color: var(--color-red);"><p>No se encontró ningún registro para la matrícula <b>${matricula}</b> en ${course.nombre}.</p></div>`;
+      resultDiv.innerHTML = `<div class="student-result-card" style="border-color: var(--color-red);"><p>No se encontró ningún registro para la matrícula <b>${this.escapeHtml(matricula)}</b> en ${this.escapeHtml(course.nombre)}.</p></div>`;
       return;
     }
 
@@ -2528,6 +2570,12 @@ const App = {
   // =========================================================================
 
   superviseTeacher: function(teacherId) {
+    // Control de Acceso Estricto VULN-05: Solo Coordinación puede supervisar
+    if (!this.isAdmin()) {
+      alert("Acceso Denegado: Se requieren privilegios de Coordinación Académica para auditar a otros docentes.");
+      return;
+    }
+
     const teacher = this.teachers.find(t => t.id === teacherId);
     if (!teacher) return;
 
@@ -2537,11 +2585,12 @@ const App = {
     this.activeCourseId = (teacher.data && teacher.data.courses && teacher.data.courses[0]) ? teacher.data.courses[0].id : "";
     this.activeTab = "gradebook";
     this.render();
-    this.showToast(`Modo Supervisión: Auditando a ${teacher.nombre}`);
+    this.showToast(`Modo Supervisión: Auditando a ${teacher.nombre} (Solo Lectura)`);
 
-    // Suscripción en tiempo real a Firestore para ver las notas del profesor en vivo
-    if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
-      FirebaseService.listenToTeacher(teacherId, (updated) => {
+    // Suscripción en tiempo real a Supabase para ver las notas del profesor en vivo
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    if (cloud && cloud.listenToTeacher) {
+      cloud.listenToTeacher(teacherId, (updated) => {
         if (this.isSupervising && this.supervisingTeacherId === teacherId) {
           const idx = this.teachers.findIndex(t => t.id === teacherId);
           if (idx !== -1) this.teachers[idx] = updated;
@@ -2559,12 +2608,13 @@ const App = {
   },
 
   exitSupervision: function() {
-    if (typeof FirebaseService !== "undefined") {
-      FirebaseService.stopListening();
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    if (cloud && cloud.stopListening) {
+      cloud.stopListening();
     }
     this.isSupervising = false;
     this.supervisingTeacherId = null;
-    this.data = this.currentUser.data || null;
+    this.data = this.currentUser ? (this.currentUser.data || null) : null;
     this.activeTab = "admin_dashboard";
     this.render();
     this.showToast("Has regresado al Panel de Control Maestro.");
@@ -2599,6 +2649,16 @@ const App = {
   },
 
   renderAdminDashboard: function(container) {
+    if (!this.isAdmin()) {
+      container.innerHTML = `
+        <div style="padding: 60px 20px; text-align: center;">
+          <h2 style="color: var(--color-red); margin-bottom: 12px;">Acceso Denegado</h2>
+          <p style="color: var(--text-secondary); font-size: 14px;">Se requieren privilegios de Coordinación Académica para visualizar este módulo.</p>
+        </div>
+      `;
+      return;
+    }
+
     const teachersList = this.teachers.filter(t => t.role !== 'admin');
 
     let totalMaterias = 0;
@@ -2929,15 +2989,18 @@ const App = {
       const cardAvatar = t.role === 'admin'
         ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
         : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
+      const escId = this.escapeHtml(t.id);
+      const escNombre = this.escapeHtml(t.nombre);
+      const escUsuario = this.escapeHtml(t.usuario);
       return `
-        <div class="demo-teacher-card" style="margin-bottom: 0; ${isCurrent ? 'border-color: var(--uat-orange); background: var(--bg-hover);' : ''}" onclick="App.switchTeacher('${t.id}')">
+        <div class="demo-teacher-card" style="margin-bottom: 0; ${isCurrent ? 'border-color: var(--uat-orange); background: var(--bg-hover);' : ''}" onclick="App.switchTeacher('${escId}')">
           <div class="demo-avatar">${cardAvatar}</div>
           <div style="flex: 1; min-width: 0;">
             <div class="demo-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${t.nombre} ${isCurrent ? '<span style="color: var(--uat-orange); font-size: 11px;">(Activo)</span>' : ''}
+              ${escNombre} ${isCurrent ? '<span style="color: var(--uat-orange); font-size: 11px;">(Activo)</span>' : ''}
             </div>
             <div class="demo-sub">
-              ${t.role === 'admin' ? 'Coordinación y Dirección' : `${t.usuario} • ${coursesCount} materias • ${studentsCount} alumnos`}
+              ${t.role === 'admin' ? 'Coordinación y Dirección' : `${escUsuario} • ${coursesCount} materias • ${studentsCount} alumnos`}
             </div>
           </div>
           <button class="btn btn-default btn-sm" style="pointer-events: none;">
