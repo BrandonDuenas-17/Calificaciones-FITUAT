@@ -2,10 +2,9 @@
 // Reemplaza a Firebase Firestore para la persistencia en la nube y supervisión en tiempo real
 
 const SUPABASE_CONFIG = {
-  // Configura aquí tus credenciales de Supabase (Settings -> API en supabase.com)
-  // O puedes configurarlas dinámicamente desde el menú de la aplicación
-  url: localStorage.getItem("supabase_url") || "https://your-project-id.supabase.co",
-  anonKey: localStorage.getItem("supabase_anon_key") || "your-anon-key-here"
+  // Credenciales activas de Supabase (Facultad de Ingeniería Tampico)
+  url: localStorage.getItem("supabase_url") || "https://xjlqzwigqmevbffaavjl.supabase.co",
+  anonKey: localStorage.getItem("supabase_anon_key") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqbHF6d2lncW1ldmJmZmFhdmpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MzI2NzcsImV4cCI6MjEwNTQwODY3N30.T4U1JRUH4DiGAZWhaFd83Q1em2NUHWxMCpibeX2-OFs"
 };
 
 const SupabaseService = {
@@ -22,10 +21,13 @@ const SupabaseService = {
       return false;
     }
 
-    const isPlaceholder = !SUPABASE_CONFIG.url || 
-                          SUPABASE_CONFIG.url.includes("your-project-id") || 
-                          !SUPABASE_CONFIG.anonKey || 
-                          SUPABASE_CONFIG.anonKey.includes("your-anon-key");
+    const cleanUrl = (SUPABASE_CONFIG.url || "").trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+    const cleanKey = (SUPABASE_CONFIG.anonKey || "").trim();
+
+    const isPlaceholder = !cleanUrl || 
+                          cleanUrl.includes("your-project-id") || 
+                          !cleanKey || 
+                          cleanKey.includes("your-anon-key");
 
     if (isPlaceholder) {
       console.warn("Supabase: Credenciales pendientes de configurar. Se usarán datos locales hasta que ingreses tu URL y Anon Key.");
@@ -34,7 +36,7 @@ const SupabaseService = {
     }
 
     try {
-      this.client = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
+      this.client = supabase.createClient(cleanUrl, cleanKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false
@@ -286,10 +288,16 @@ const SupabaseService = {
 
   // Actualizar credenciales en caliente desde la interfaz
   setCredentials: function(url, anonKey) {
-    if (url) localStorage.setItem("supabase_url", url.trim());
-    if (anonKey) localStorage.setItem("supabase_anon_key", anonKey.trim());
-    SUPABASE_CONFIG.url = url ? url.trim() : SUPABASE_CONFIG.url;
-    SUPABASE_CONFIG.anonKey = anonKey ? anonKey.trim() : SUPABASE_CONFIG.anonKey;
+    if (url) {
+      const cleanUrl = url.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+      localStorage.setItem("supabase_url", cleanUrl);
+      SUPABASE_CONFIG.url = cleanUrl;
+    }
+    if (anonKey) {
+      const cleanKey = anonKey.trim();
+      localStorage.setItem("supabase_anon_key", cleanKey);
+      SUPABASE_CONFIG.anonKey = cleanKey;
+    }
     return this.init();
   }
 };
