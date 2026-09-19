@@ -24,6 +24,7 @@ const App = {
     try {
       localStorage.removeItem("notion_teachers_db");
       localStorage.removeItem("notion_grades_data");
+      localStorage.removeItem("notion_active_teacher_id");
     } catch (e) {}
 
     // Mostrar estado de carga mientras se conecta a la nube
@@ -111,15 +112,11 @@ const App = {
       }
 
       // 2. Cargar usuario/profesor activo desde la sesión (sessionStorage)
-      const savedTeacherId = sessionStorage.getItem("notion_active_teacher_id") || localStorage.getItem("notion_active_teacher_id");
+      const savedTeacherId = sessionStorage.getItem("notion_active_teacher_id");
       if (savedTeacherId) {
         this.currentUser = this.teachers.find(t => t.id === savedTeacherId) || null;
-      }
-      if (!this.currentUser) {
-        this.currentUser = this.teachers.find(t => t.role === 'admin') || this.teachers[0] || null;
-        if (this.currentUser) {
-          sessionStorage.setItem("notion_active_teacher_id", this.currentUser.id);
-        }
+      } else {
+        this.currentUser = null;
       }
 
       // 3. Enlazar datos de trabajo del profesor actual
@@ -2091,7 +2088,7 @@ const App = {
                     <span class="login-input-icon">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                     </span>
-                    <input type="text" id="loginIdentifier" class="login-input" placeholder="ej. rgarcia o rgarcia@docentes.uat.edu.mx" value="rgarcia" required />
+                    <input type="text" id="loginIdentifier" class="login-input" placeholder="ej. usuario o correo@docentes.uat.edu.mx" autocomplete="username" required />
                   </div>
                 </div>
 
@@ -2101,7 +2098,7 @@ const App = {
                     <span class="login-input-icon">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     </span>
-                    <input type="password" id="loginPassword" class="login-input" placeholder="Contraseña de acceso" value="123" required />
+                    <input type="password" id="loginPassword" class="login-input" placeholder="Contraseña de acceso" autocomplete="current-password" required />
                   </div>
                 </div>
 
@@ -2110,41 +2107,6 @@ const App = {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
               </form>
-
-              <div class="demo-teachers-section">
-                <div class="demo-teachers-title">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
-                  Cuentas de Demostración (Acceso con 1 Clic):
-                </div>
-                ${this.teachers.map(t => {
-                  const avatarCard = t.role === 'admin'
-                    ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
-                    : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
-                  if (t.role === 'admin') {
-                    return `
-                      <div class="demo-teacher-card" style="border: 1.5px solid var(--uat-orange); background: rgba(224, 126, 51, 0.08);" onclick="App.quickLogin('${t.id}')">
-                        <div class="demo-avatar">${avatarCard}</div>
-                        <div style="flex: 1;">
-                          <div class="demo-name" style="color: var(--uat-orange-dark);">${t.nombre} <span class="badge-role-admin">PERFIL MAESTRO</span></div>
-                          <div class="demo-sub">Supervisión general de todos los profesores, materias y calificaciones</div>
-                        </div>
-                        <span class="demo-badge-enter" style="background: var(--uat-orange); color: white;">Entrar como Admin ➜</span>
-                      </div>
-                    `;
-                  }
-                  const subjectNames = (t.data && t.data.courses) ? t.data.courses.map(c => c.nombre).slice(0, 2).join(', ') : 'Sin materias';
-                  return `
-                    <div class="demo-teacher-card" onclick="App.quickLogin('${t.id}')">
-                      <div class="demo-avatar">${avatarCard}</div>
-                      <div style="flex: 1;">
-                        <div class="demo-name">${t.nombre}</div>
-                        <div class="demo-sub">${t.departamento} • ${subjectNames}</div>
-                      </div>
-                      <span class="demo-badge-enter">Entrar ➜</span>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
             ` : `
               <form onsubmit="event.preventDefault(); App.handleRegisterFormSubmit();">
                 <div class="login-form-group">
@@ -2158,7 +2120,7 @@ const App = {
                   </div>
                   <div class="login-form-group">
                     <label class="login-label">Contraseña:</label>
-                    <input type="password" id="regPassword" class="login-input" style="padding-left: 14px;" placeholder="Contraseña" value="123" required />
+                    <input type="password" id="regPassword" class="login-input" style="padding-left: 14px;" placeholder="Contraseña de acceso" required />
                   </div>
                 </div>
                 <div class="login-form-group">
@@ -2202,15 +2164,15 @@ const App = {
     const usuario = document.getElementById("regUsuario")?.value.trim().toLowerCase();
     const correo = document.getElementById("regCorreo")?.value.trim().toLowerCase();
     const depto = document.getElementById("regDepto")?.value.trim() || "Facultad de Ingeniería Tampico";
-    const password = document.getElementById("regPassword")?.value || "123";
+    const password = document.getElementById("regPassword")?.value;
 
-    if (!nombre || !usuario || !correo) {
-      alert("Por favor completa los campos requeridos.");
+    if (!nombre || !usuario || !correo || !password) {
+      alert("Por favor completa todos los campos requeridos, incluyendo la contraseña.");
       return;
     }
 
     if (this.teachers.some(t => t.usuario.toLowerCase() === usuario || t.correo.toLowerCase() === correo)) {
-      alert("Ya existe un docente con ese usuario o correo.");
+      alert("Ya existe un docente registrado con ese usuario o correo institucional.");
       return;
     }
 
@@ -2239,11 +2201,12 @@ const App = {
     };
 
     this.teachers.push(newTeacher);
-    if (typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) {
-      FirebaseService.saveTeacher(newTeacher);
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    if (cloud) {
+      cloud.saveTeacher(newTeacher);
     }
     this.quickLogin(newTeacher.id);
-    this.showToast(`¡Bienvenido, ${nombre}! Tu espacio docente ha sido creado en la nube.`);
+    this.showToast(`¡Bienvenido, ${nombre}! Tu espacio docente ha sido creado.`);
   },
 
   quickLogin: function(teacherId) {
@@ -2271,17 +2234,17 @@ const App = {
   login: function(identifier, password) {
     const term = identifier.trim().toLowerCase();
     const teacher = this.teachers.find(t => 
-      t.usuario.toLowerCase() === term || 
-      t.correo.toLowerCase() === term
+      (t.usuario && t.usuario.toLowerCase() === term) || 
+      (t.correo && t.correo.toLowerCase() === term)
     );
 
     if (!teacher) {
-      alert("No se encontró ningún usuario o correo institucional.");
+      alert("No se encontró ningún usuario o correo institucional registrado.");
       return;
     }
 
     if (teacher.password && password && teacher.password !== password) {
-      alert("Contraseña incorrecta. (Para pruebas puedes usar 'admin' o '123')");
+      alert("Contraseña incorrecta. Por favor verifica tus credenciales o contacta a Coordinación.");
       return;
     }
 
@@ -2289,8 +2252,9 @@ const App = {
   },
 
   logout: function() {
-    if (typeof FirebaseService !== "undefined") {
-      FirebaseService.stopListening();
+    const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
+    if (cloud && cloud.stopListening) {
+      cloud.stopListening();
     }
     this.currentUser = null;
     this.isSupervising = false;
