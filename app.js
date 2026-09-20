@@ -2509,7 +2509,7 @@ const App = {
     this.login(identifier, password);
   },
 
-  handleRegisterFormSubmit: function() {
+  handleRegisterFormSubmit: async function() {
     const nombre = document.getElementById("regNombre")?.value.trim();
     const usuario = document.getElementById("regUsuario")?.value.trim().toLowerCase();
     const correo = document.getElementById("regCorreo")?.value.trim().toLowerCase();
@@ -2750,7 +2750,6 @@ const App = {
     this.showToast(`Modo Supervisión: Auditando a ${teacher.nombre} (Solo Lectura)`);
 
     // Suscripción en tiempo real a Supabase para ver las notas del profesor en vivo
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     if (cloud && cloud.listenToTeacher) {
       cloud.listenToTeacher(teacherId, (updated) => {
         if (this.isSupervising && this.supervisingTeacherId === teacherId) {
