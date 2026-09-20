@@ -86,7 +86,7 @@ const SupabaseService = {
     try {
       const { data, error } = await this.client
         .from("teachers")
-        .select("id, nombre, usuario, correo, departamento, role, avatar, updated_at")
+        .select("id, nombre, usuario, correo, departamento, role, avatar, data, updated_at")
         .order("nombre", { ascending: true });
 
       if (error) {
