@@ -2902,10 +2902,16 @@ const App = {
               <span>Alumnos en catálogo: <b>${students.length}</b></span>
               <span>Estado: <b style="color: var(--color-green);">Activo</b></span>
             </div>
-            <button type="button" class="btn-supervise" onclick="App.superviseTeacher('${t.id}')">
-              <span>Supervisar / Auditar Calificaciones</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <button type="button" class="btn-supervise" onclick="App.superviseTeacher('${t.id}')">
+                <span>Supervisar / Auditar Calificaciones</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+              <button type="button" class="btn btn-default btn-sm" onclick="App.openAdminManageTeacherModal('${t.id}')" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 12px; padding: 7px 10px; border-radius: var(--radius-md); color: var(--text-secondary);" title="Administrar cuenta y restablecer clave del docente">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span>Administrar Cuenta / Clave</span>
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -3346,6 +3352,122 @@ const App = {
     this.showToast("¡Tu contraseña ha sido actualizada con éxito en la nube!");
   },
 
+  // =========================================================================
+  // ADMINISTRACIÓN DE CUENTAS Y RESTABLECIMIENTO DE CLAVES (CUENTA MAESTRA)
+  // =========================================================================
+
+  openAdminManageTeacherModal: function(teacherId) {
+    if (!this.isAdmin()) {
+      alert("Acceso denegado: Se requieren privilegios de Coordinación Académica para administrar cuentas.");
+      return;
+    }
+
+    const teacher = this.teachers.find(t => t.id === teacherId);
+    if (!teacher) {
+      alert("Docente no encontrado.");
+      return;
+    }
+
+    const idInput = document.getElementById("adminManageTeacherId");
+    const nameDiv = document.getElementById("adminManageTeacherNombre");
+    const userDiv = document.getElementById("adminManageTeacherUsuario");
+    const deptoDiv = document.getElementById("adminManageTeacherDepto");
+    const newPassInput = document.getElementById("adminManageNewPass");
+    const confPassInput = document.getElementById("adminManageConfirmPass");
+
+    if (idInput) idInput.value = teacher.id;
+    if (nameDiv) nameDiv.textContent = teacher.nombre;
+    if (userDiv) userDiv.textContent = `Usuario: @${teacher.usuario} • ${teacher.correo || 'Sin correo registrado'}`;
+    if (deptoDiv) deptoDiv.textContent = teacher.departamento || "Facultad de Ingeniería Tampico";
+    if (newPassInput) newPassInput.value = "";
+    if (confPassInput) confPassInput.value = "";
+
+    const modal = document.getElementById("adminManageTeacherModal");
+    if (modal) modal.classList.add("open");
+  },
+
+  closeAdminManageTeacherModal: function() {
+    const modal = document.getElementById("adminManageTeacherModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  adminQuickResetDefault: function() {
+    const newPassInput = document.getElementById("adminManageNewPass");
+    const confPassInput = document.getElementById("adminManageConfirmPass");
+    if (newPassInput) newPassInput.value = "123";
+    if (confPassInput) confPassInput.value = "123";
+    this.showToast("Contraseña preestablecida en '123'. Haz clic en 'Guardar Nueva Contraseña' para confirmar.");
+  },
+
+  toggleAdminPasswordVisibility: function(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.type = input.type === "password" ? "text" : "password";
+  },
+
+  submitAdminResetPassword: async function() {
+    if (!this.isAdmin()) {
+      alert("Acceso denegado: Operación reservada para Coordinación Académica.");
+      return;
+    }
+
+    const teacherId = document.getElementById("adminManageTeacherId")?.value;
+    const newPass = document.getElementById("adminManageNewPass")?.value;
+    const confPass = document.getElementById("adminManageConfirmPass")?.value;
+
+    if (!teacherId) {
+      alert("Error: Identificador del docente inválido.");
+      return;
+    }
+
+    if (!newPass || !confPass) {
+      alert("Por favor ingresa y confirma la nueva contraseña.");
+      return;
+    }
+
+    if (newPass.length < 3) {
+      alert("La contraseña debe tener al menos 3 caracteres.");
+      return;
+    }
+
+    if (newPass !== confPass) {
+      alert("La nueva contraseña y su confirmación no coinciden.");
+      return;
+    }
+
+    const teacher = this.teachers.find(t => t.id === teacherId);
+    const teacherName = teacher ? teacher.nombre : "del docente";
+
+    this.showToast("Actualizando contraseña en Supabase...", "info");
+
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
+    let saved = false;
+
+    if (cloud && cloud.adminResetTeacherPassword) {
+      saved = await cloud.adminResetTeacherPassword(this.currentUser ? this.currentUser.id : "admin-coordinacion", teacherId, newPass);
+    } else if (cloud) {
+      // Respaldo directo en tabla teachers
+      const { error } = await cloud.client
+        .from("teachers")
+        .update({ password: newPass, updated_at: new Date().toISOString() })
+        .eq("id", teacherId);
+      saved = !error;
+    }
+
+    // Actualizar en memoria local de la aplicación
+    if (teacher) {
+      teacher.password = newPass;
+    }
+
+    this.closeAdminManageTeacherModal();
+
+    if (saved) {
+      this.showToast(`¡Contraseña de ${teacherName} restablecida exitosamente!`);
+    } else {
+      this.showToast(`Contraseña actualizada en memoria local. (Aviso: revisa tu conexión a Supabase)`, "warning");
+    }
+  },
+
   setupEventListeners: function() {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -3355,6 +3477,7 @@ const App = {
         this.closeSwitchTeacherModal();
         this.closeRegisterTeacherModal();
         this.closeChangePasswordModal();
+        this.closeAdminManageTeacherModal();
       }
     });
 

@@ -125,6 +125,46 @@ $$;
 
 grant execute on function public.change_teacher_password(text, text, text) to anon, authenticated;
 
+-- 6.1 FUNCIÓN RPC SEGURA PARA ADMINISTRACIÓN Y RESTABLECIMIENTO DE CLAVES (CUENTA MAESTRA)
+create or replace function public.admin_reset_teacher_password(
+  p_admin_id text,
+  p_target_teacher_id text,
+  p_new_password text
+)
+returns boolean language plpgsql security definer as $$
+declare
+  v_admin_role text;
+begin
+  -- 1. Validar que quien invoca tenga rol admin en la base de datos
+  select role into v_admin_role from public.teachers where id = p_admin_id;
+  if v_admin_role <> 'admin' then
+    return false;
+  end if;
+
+  -- 2. Validar que el profesor objetivo exista
+  if not exists (select 1 from public.teachers where id = p_target_teacher_id) then
+    return false;
+  end if;
+
+  -- 3. Actualizar contraseña con hash bcrypt seguro
+  update public.teachers
+  set password = public.crypt(p_new_password, public.gen_salt('bf', 8)),
+      updated_at = timezone('utc'::text, now())
+  where id = p_target_teacher_id;
+
+  return true;
+exception when undefined_function then
+  -- Fallback en caso de que pgcrypto no esté activado
+  update public.teachers
+  set password = p_new_password,
+      updated_at = timezone('utc'::text, now())
+  where id = p_target_teacher_id;
+  return true;
+end;
+$$;
+
+grant execute on function public.admin_reset_teacher_password(text, text, text) to anon, authenticated;
+
 -- 7. FUNCIÓN RPC SEGURA PARA PERSISTENCIA DE NOTAS (Anti-IDOR • VULN-3.0-01)
 create or replace function public.save_teacher_grades(p_teacher_id text, p_data jsonb)
 returns boolean language plpgsql security definer as $$
