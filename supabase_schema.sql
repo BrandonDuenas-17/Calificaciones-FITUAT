@@ -7,6 +7,9 @@
 -- 3. Haz clic en "New query", pega todo el contenido de este archivo y presiona "Run".
 -- ============================================================================
 
+-- 0. Habilitar extensión criptográfica para almacenamiento seguro de contraseñas (pgcrypto)
+create extension if not exists pgcrypto;
+
 -- 1. Crear tabla de profesores (teachers) si aún no existe
 create table if not exists public.teachers (
   id text primary key,
@@ -53,7 +56,7 @@ create policy "Permitir creación de cuentas docentes"
 
 -- Nota: Al no existir política para DELETE, cualquier petición DELETE queda 100% BLOQUEADA por RLS.
 
--- 5. FUNCIÓN RPC SEGURA PARA VALIDAR CREDENCIALES (Protección de contraseñas)
+-- 5. FUNCIÓN RPC SEGURA PARA VALIDAR CREDENCIALES (Protección de contraseñas con pgcrypto)
 create or replace function public.verify_teacher_credentials(p_identifier text, p_password text)
 returns table (
   id text,
@@ -76,7 +79,10 @@ begin
     return;
   end if;
 
-  if v_teacher.password = p_password or (v_teacher.password is null and p_password = '123') then
+  -- Comparación segura: soporta hash bcrypt ($2a$ / $2b$), texto plano previo para migración, o default '123'
+  if (v_teacher.password like '$2%' and public.crypt(p_password, v_teacher.password) = v_teacher.password)
+     or (v_teacher.password = p_password)
+     or (v_teacher.password is null and p_password = '123') then
     return query select v_teacher.id, v_teacher.nombre, v_teacher.usuario, v_teacher.correo, v_teacher.role, true;
   else
     return query select null::text, null::text, null::text, null::text, null::text, false;
@@ -87,7 +93,7 @@ $$;
 -- Permitir ejecutar la función a clientes web
 grant execute on function public.verify_teacher_credentials(text, text) to anon, authenticated;
 
--- 6. FUNCIÓN RPC SEGURA PARA CAMBIO DE CONTRASEÑA (SEC-01 / SEC-06)
+-- 6. FUNCIÓN RPC SEGURA PARA CAMBIO DE CONTRASEÑA CON HASHING BCRYPT (SEC-01 / SEC-03)
 create or replace function public.change_teacher_password(p_id text, p_old_password text, p_new_password text)
 returns boolean language plpgsql security definer as $$
 declare
@@ -98,14 +104,19 @@ begin
     return false;
   end if;
 
-  -- Validar que la contraseña anterior coincida (o que sea la de defecto '123')
-  if v_current_pass is distinct from p_old_password and not (v_current_pass is null and p_old_password = '123') then
+  -- Validar que la contraseña anterior coincida (compara contra bcrypt o texto plano previo)
+  if not (
+    (v_current_pass like '$2%' and public.crypt(p_old_password, v_current_pass) = v_current_pass)
+    or (v_current_pass = p_old_password)
+    or (v_current_pass is null and p_old_password = '123')
+  ) then
     return false;
   end if;
 
-  -- Actualizar únicamente la contraseña y fecha de modificación
+  -- Actualizar almacenando siempre hash bcrypt generado por pgcrypto
   update public.teachers 
-  set password = p_new_password, updated_at = timezone('utc'::text, now())
+  set password = public.crypt(p_new_password, public.gen_salt('bf', 8)), 
+      updated_at = timezone('utc'::text, now())
   where id = p_id;
 
   return true;
@@ -166,6 +177,12 @@ $$;
 -- 10. Crear índices de búsqueda rápida
 create index if not exists idx_teachers_usuario on public.teachers (usuario);
 create index if not exists idx_teachers_role on public.teachers (role);
+
+-- 11. MIGRACIÓN AUTOMÁTICA DE CONTRASEÑAS A BCRYPT (SEC-07):
+-- Transforma automáticamente cualquier contraseña almacenada en texto plano que aún no use bcrypt ($2a$).
+update public.teachers
+set password = public.crypt(password, public.gen_salt('bf', 8))
+where password is not null and password not like '$2%';
 
 -- ============================================================================
 -- ¡LISTO! Tu base de datos Supabase ahora cuenta con Blindaje Nivel Empresa:

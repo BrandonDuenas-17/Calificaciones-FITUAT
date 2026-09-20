@@ -312,33 +312,24 @@ const SupabaseService = {
     }
   },
 
-  // Actualizar contraseña de forma segura (SEC-01 / SEC-06)
+  // Actualizar contraseña de forma segura (SEC-01 / SEC-03)
   updatePassword: async function(teacherId, newPassword, oldPassword) {
     if (!this.isInitialized || !this.client || !teacherId || !newPassword) return false;
 
     try {
-      // 1. Intentar procedimiento seguro con validación previa en PostgreSQL
-      try {
-        const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("change_teacher_password", {
-          p_id: teacherId,
-          p_old_password: oldPassword || "",
-          p_new_password: newPassword
-        });
-        if (!rpcErr && typeof rpcSuccess === "boolean") {
-          return rpcSuccess;
-        }
-      } catch (e) {
-        // RPC no configurado aún, continuar con actualización directa
+      // Procedimiento seguro con validación previa y hashing bcrypt en PostgreSQL
+      const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("change_teacher_password", {
+        p_id: teacherId,
+        p_old_password: oldPassword || "",
+        p_new_password: newPassword
+      });
+
+      if (rpcErr) {
+        console.error("Error al ejecutar change_teacher_password en Supabase:", rpcErr);
+        return false;
       }
 
-      // 2. Respaldo directo
-      const { error } = await this.client
-        .from("teachers")
-        .update({ password: newPassword, updated_at: new Date().toISOString() })
-        .eq("id", teacherId);
-
-      if (error) throw error;
-      return true;
+      return !!rpcSuccess;
     } catch (error) {
       console.error("Error al actualizar contraseña:", error);
       return false;

@@ -84,14 +84,14 @@ En la pestaña **Publicar en Teams** encontrarás los botones para:
 
 El sistema cuenta con un **Perfil Maestro** para la Coordinación o Dirección Académica con permisos para supervisar a todos los profesores:
 
-### Cuentas de Acceso:
+### Cuentas y Accesos Institucionales:
 1. **Cuenta Maestra (Coordinación Académica):**
-   * **Usuario:** `admin` &nbsp;|&nbsp; **Contraseña:** `admin` (o clic en la tarjeta dorada de la pantalla de inicio)
-   * **Alcance:** Acceso al **Panel Central de Control**, métricas de toda la facultad, botón de **Supervisión / Auditoría** directa en cada profesor y descarga de respaldo global.
+   * **Acceso:** Mediante usuario administrador institucional asignado por el Departamento de Cómputo FIUAT.
+   * **Alcance:** Acceso al **Panel Central de Control**, métricas de toda la facultad, buscador en tiempo real, supervisión de listas y actas oficiales en modo de solo lectura, y descarga de respaldos globales.
 2. **Cuentas Docentes (Aislamiento Privado):**
-   * **Ing. Roberto García M.:** `rgarcia` &nbsp;|&nbsp; `123` (Álgebra Lineal y Cálculo Integral)
-   * **Dra. Martha Elena Sánchez:** `msanchez` &nbsp;|&nbsp; `123` (Programación Web y Bases de Datos)
-   * **Nuevo Docente:** Puedes registrar nuevos profesores con su propio usuario, contraseña y departamento.
+   * **Acceso:** Cada profesor accede con su identificador institucional o correo oficial `@docentes.uat.edu.mx`.
+   * **Seguridad:** Por política de seguridad institucional, cada docente debe actualizar su contraseña inicial en su primer ingreso utilizando el menú de seguridad en la esquina superior derecha. Las contraseñas se almacenan con cifrado bcrypt en la base de datos PostgreSQL.
+   * **Nuevo Docente:** El administrador puede registrar nuevos profesores desde el panel central o mediante el formulario de registro institucional.
 
 ### Modo Supervisión:
 * Desde el Panel Maestro, haz clic en **`👁️ Supervisar / Auditar Calificaciones`** en cualquier profesor.

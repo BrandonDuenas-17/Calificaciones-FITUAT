@@ -47,10 +47,27 @@ const App = {
       .replace(/'/g, "&#039;");
   },
 
+  // Clave secreta criptográfica efímera por sesión del navegador (SEC-02)
+  _getSessionSecret: function() {
+    try {
+      let secret = sessionStorage.getItem("notion_ephemeral_sec_key");
+      if (!secret) {
+        const arr = new Uint8Array(32);
+        (window.crypto || window.msCrypto).getRandomValues(arr);
+        secret = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+        sessionStorage.setItem("notion_ephemeral_sec_key", secret);
+      }
+      return secret;
+    } catch (e) {
+      return "ephemeral_fallback_" + Math.random().toString(36).substr(2);
+    }
+  },
+
   // Generador de firma criptográfica de sesión para evitar suplantación (SEC-02)
   generateSessionSignature: function(teacherId, token) {
     if (!teacherId || !token) return "";
-    const str = teacherId + ":" + token + ":fiuat_uat_sec_salt_2026";
+    const secret = this._getSessionSecret();
+    const str = teacherId + ":" + token + ":" + secret;
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
@@ -841,11 +858,11 @@ const App = {
                 placeholder="-" data-col="firmas-${uKey}"
                 ${isLocked ? 'readonly title="Unidad bloqueada (Solo Lectura)"' : ''}
                 onfocus="this.select()"
-                oninput="App.updateFirmas('${rec.matricula}', '${uKey}', this.value)"
+                oninput="App.updateFirmas(${index}, '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
               <svg class="progress-ring" viewBox="0 0 20 20">
                 <circle class="progress-ring-circle-bg" cx="10" cy="10" r="7"/>
-                <circle id="ring-firmas-${rec.matricula}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
+                <circle id="ring-firmas-${index}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
                   style="stroke-dasharray: 44; stroke-dashoffset: ${dashOffset}; stroke: ${strokeColor};"/>
               </svg>
             </div>
@@ -871,10 +888,10 @@ const App = {
                 value="${val}" placeholder="-" data-col="examenes-${uKey}"
                 ${isLocked ? 'readonly title="Unidad bloqueada (Solo Lectura)"' : ''}
                 onfocus="this.select()"
-                oninput="App.updateExamen('${rec.matricula}', '${uKey}', this.value)"
+                oninput="App.updateExamen(${index}, '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
               <div class="progress-track">
-                <div id="bar-exam-${rec.matricula}-${uKey}" class="progress-fill" style="width: ${numVal !== null ? numVal : 0}%; background-color: ${barColor};"></div>
+                <div id="bar-exam-${index}-${uKey}" class="progress-fill" style="width: ${numVal !== null ? numVal : 0}%; background-color: ${barColor};"></div>
               </div>
             </div>
           </td>
@@ -901,10 +918,10 @@ const App = {
         evalCells += `
           <td class="col-calc">
             <div class="firmas-cell-content">
-              <span id="val-eval-${rec.matricula}-${uKey}">${displayVal}</span>
+              <span id="val-eval-${index}-${uKey}">${displayVal}</span>
               <svg class="progress-ring" viewBox="0 0 20 20">
                 <circle class="progress-ring-circle-bg" cx="10" cy="10" r="7"/>
-                <circle id="ring-eval-${rec.matricula}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
+                <circle id="ring-eval-${index}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
                   style="stroke-dasharray: 44; stroke-dashoffset: ${dashOffset}; stroke: ${strokeColor};"/>
               </svg>
             </div>
@@ -920,7 +937,7 @@ const App = {
       const badgeClass = hasEvals ? (calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado') : 'status-pending';
 
       rowsHtml += `
-        <tr id="row-${this.escapeHtml(rec.matricula)}" data-matricula="${this.escapeHtml(rec.matricula)}" data-search="${this.escapeHtml(searchData)}" style="display: ${isMatch ? '' : 'none'};">
+        <tr id="row-${index}" data-matricula="${this.escapeHtml(rec.matricula)}" data-search="${this.escapeHtml(searchData)}" style="display: ${isMatch ? '' : 'none'};">
           <td class="col-matricula">
             <input type="text" class="cell-input" value="${this.escapeHtml(rec.matricula)}" 
               onfocus="this.select()"
@@ -934,11 +951,11 @@ const App = {
           </td>
           <td class="col-final">
             <div class="progress-bar-wrap">
-              <span id="val-final-${rec.matricula}" class="progress-bar-num" style="color: ${finalColorStyle};">${displayFinal}</span>
+              <span id="val-final-${index}" class="progress-bar-num" style="color: ${finalColorStyle};">${displayFinal}</span>
               <div class="progress-track">
-                <div id="bar-final-${rec.matricula}" class="progress-fill" style="width: ${finalWidth}%; background-color: ${hasEvals ? finalColor : 'transparent'};"></div>
+                <div id="bar-final-${index}" class="progress-fill" style="width: ${finalWidth}%; background-color: ${hasEvals ? finalColor : 'transparent'};"></div>
               </div>
-              <span id="badge-final-${rec.matricula}" class="status-badge ${badgeClass}">
+              <span id="badge-final-${index}" class="status-badge ${badgeClass}">
                 ${badgeText}
               </span>
             </div>
@@ -949,18 +966,18 @@ const App = {
           <td class="col-number-input">
             <input type="number" min="0" max="100" class="cell-input" value="${rec.proyecto ?? ''}" placeholder="-" data-col="proyecto"
               onfocus="this.select()"
-              oninput="App.updateProyecto('${rec.matricula}', this.value)"
+              oninput="App.updateProyecto(${index}, this.value)"
               onkeydown="App.handleCellKeydown(event, this)" />
           </td>
           <td class="col-number-input">
             <input type="number" min="0" max="10" class="cell-input" value="${rec.puntosExtra || 0}" placeholder="0" data-col="puntosExtra"
               onfocus="this.select()"
-              oninput="App.updatePuntosExtra('${rec.matricula}', this.value)"
+              oninput="App.updatePuntosExtra(${index}, this.value)"
               onkeydown="App.handleCellKeydown(event, this)" />
           </td>
           <td style="text-align: center; width: 40px;">
             <button type="button" class="btn-delete-row" 
-              title="Quitar alumno de esta materia" onclick="App.deleteRecord('${(rec.matricula || '').replace(/'/g, "\\'")}')">✕</button>
+              title="Quitar alumno de esta materia" onclick="App.deleteRecord(${index})">✕</button>
           </td>
         </tr>
       `;
@@ -1227,7 +1244,7 @@ const App = {
           </td>
           <td style="text-align: center; width: 40px;">
             <button type="button" class="btn-delete-row" 
-              title="Eliminar del directorio maestro" onclick="App.deleteDirectoryStudent('${escMat.replace(/'/g, "\\'")}')">✕</button>
+              title="Eliminar del directorio maestro" onclick="App.deleteDirectoryStudent(${idx})">✕</button>
           </td>
         </tr>
       `;
@@ -1445,7 +1462,19 @@ const App = {
   },
 
   // ACCIONES Y ACTUALIZACIONES QUIRÚRGICAS DE DATOS (ULTRA FLUIDEZ < 1MS)
-  updateFirmas: function(matricula, uKey, val) {
+  _resolveRecord: function(identifier, course) {
+    if (!course || !course.records) return { rec: null, idx: -1 };
+    let idx = -1;
+    if (typeof identifier === "number") {
+      idx = identifier;
+    } else {
+      idx = (course.records || []).findIndex(r => String(r.matricula) === String(identifier));
+    }
+    const rec = (idx >= 0 && idx < course.records.length) ? course.records[idx] : null;
+    return { rec, idx };
+  },
+
+  updateFirmas: function(identifier, uKey, val) {
     if (this.isSupervising) {
       this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
       return;
@@ -1456,8 +1485,8 @@ const App = {
       this.showToast(`⚠️ La Unidad ${uKey.replace('u', '')} está bloqueada. Desbloquéala para editar calificaciones.`, "warning");
       return;
     }
-    const rec = (course.records || []).find(r => r.matricula === matricula);
-    if (rec) {
+    const { rec, idx } = this._resolveRecord(identifier, course);
+    if (rec && idx !== -1) {
       if (!rec.firmas) rec.firmas = {};
       if (val === "" || val === null) {
         rec.firmas[uKey] = null;
@@ -1466,13 +1495,13 @@ const App = {
         if (isNaN(num)) num = 0;
         rec.firmas[uKey] = Math.max(0, Math.min(999, num));
       }
-      this.updateStudentRowView(matricula, 'firmas', uKey, rec.firmas[uKey]);
+      this.updateStudentRowView(idx, 'firmas', uKey, rec.firmas[uKey]);
       this.updateSummaryStats();
       this.debouncedSave();
     }
   },
 
-  updateExamen: function(matricula, uKey, val) {
+  updateExamen: function(identifier, uKey, val) {
     if (this.isSupervising) {
       this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
       return;
@@ -1483,8 +1512,8 @@ const App = {
       this.showToast(`⚠️ La Unidad ${uKey.replace('u', '')} está bloqueada. Desbloquéala para editar calificaciones.`, "warning");
       return;
     }
-    const rec = (course.records || []).find(r => r.matricula === matricula);
-    if (rec) {
+    const { rec, idx } = this._resolveRecord(identifier, course);
+    if (rec && idx !== -1) {
       if (!rec.examenes) rec.examenes = {};
       if (val === "" || val === null) {
         rec.examenes[uKey] = null;
@@ -1493,20 +1522,20 @@ const App = {
         if (isNaN(num)) num = 0;
         rec.examenes[uKey] = Math.max(0, Math.min(100, num));
       }
-      this.updateStudentRowView(matricula, 'examenes', uKey, rec.examenes[uKey]);
+      this.updateStudentRowView(idx, 'examenes', uKey, rec.examenes[uKey]);
       this.updateSummaryStats();
       this.debouncedSave();
     }
   },
 
-  updateProyecto: function(matricula, val) {
+  updateProyecto: function(identifier, val) {
     if (this.isSupervising) {
       this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
       return;
     }
     const course = this.getActiveCourse();
-    const rec = (course.records || []).find(r => r.matricula === matricula);
-    if (rec) {
+    const { rec, idx } = this._resolveRecord(identifier, course);
+    if (rec && idx !== -1) {
       if (val === "" || val === null) {
         rec.proyecto = null;
       } else {
@@ -1514,41 +1543,41 @@ const App = {
         if (isNaN(num)) num = 0;
         rec.proyecto = Math.max(0, Math.min(100, num));
       }
-      this.updateStudentRowView(matricula, 'proyecto', null, rec.proyecto);
+      this.updateStudentRowView(idx, 'proyecto', null, rec.proyecto);
       this.updateSummaryStats();
       this.debouncedSave();
     }
   },
 
-  updatePuntosExtra: function(matricula, val) {
+  updatePuntosExtra: function(identifier, val) {
     if (this.isSupervising) {
       this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
       return;
     }
     const course = this.getActiveCourse();
-    const rec = (course.records || []).find(r => r.matricula === matricula);
-    if (rec) {
+    const { rec, idx } = this._resolveRecord(identifier, course);
+    if (rec && idx !== -1) {
       let num = Number(val);
       if (isNaN(num) || num < 0) num = 0;
       rec.puntosExtra = Math.min(10, num);
-      this.updateStudentRowView(matricula, 'puntosExtra', null, rec.puntosExtra);
+      this.updateStudentRowView(idx, 'puntosExtra', null, rec.puntosExtra);
       this.updateSummaryStats();
       this.debouncedSave();
     }
   },
 
   // Actualización quirúrgica de una fila sin tocar el resto del DOM
-  updateStudentRowView: function(matricula, field, uKey, val) {
+  updateStudentRowView: function(identifier, field, uKey, val) {
     const course = this.getActiveCourse();
-    const rec = (course.records || []).find(r => r.matricula === matricula);
-    if (!rec) return;
+    const { rec, idx: recIdx } = this._resolveRecord(identifier, course);
+    if (!rec || recIdx === -1) return;
 
     const calcs = this.calculateStudentGrades(rec, course);
     const maxFirmasConfig = course.firmasMaxConfig || {};
 
     // 1. Si se actualizó firmas de una unidad, actualizar anillo SVG correspondiente
     if (field === 'firmas' && uKey) {
-      const ring = document.getElementById(`ring-firmas-${matricula}-${uKey}`);
+      const ring = document.getElementById(`ring-firmas-${recIdx}-${uKey}`);
       if (ring) {
         const maxF = maxFirmasConfig[uKey] || 10;
         const numVal = val !== "" && val !== null ? Number(val) : null;
@@ -1567,7 +1596,7 @@ const App = {
 
     // 2. Si se actualizó examen de una unidad, actualizar la barra de progreso correspondiente
     if (field === 'examenes' && uKey) {
-      const bar = document.getElementById(`bar-exam-${matricula}-${uKey}`);
+      const bar = document.getElementById(`bar-exam-${recIdx}-${uKey}`);
       if (bar) {
         const numVal = val !== "" && val !== null ? Number(val) : null;
         let barColor = "var(--color-green)";
@@ -1581,8 +1610,8 @@ const App = {
     // 3. Actualizar los números y anillos de Evaluación calculada U1 a U5
     for (let u = 1; u <= 5; u++) {
       const uK = `u${u}`;
-      const valEl = document.getElementById(`val-eval-${matricula}-${uK}`);
-      const ringEl = document.getElementById(`ring-eval-${matricula}-${uK}`);
+      const valEl = document.getElementById(`val-eval-${recIdx}-${uK}`);
+      const ringEl = document.getElementById(`ring-eval-${recIdx}-${uK}`);
       const evalVal = calcs.evalU[u];
       const hasEval = evalVal !== null && evalVal !== undefined;
       const displayVal = hasEval ? evalVal : "-";
@@ -1605,9 +1634,9 @@ const App = {
     }
 
     // 4. Actualizar Evaluación Final (número, barra e insignia)
-    const valFinal = document.getElementById(`val-final-${matricula}`);
-    const barFinal = document.getElementById(`bar-final-${matricula}`);
-    const badgeFinal = document.getElementById(`badge-final-${matricula}`);
+    const valFinal = document.getElementById(`val-final-${recIdx}`);
+    const barFinal = document.getElementById(`bar-final-${recIdx}`);
+    const badgeFinal = document.getElementById(`badge-final-${recIdx}`);
 
     if (calcs.hasEvaluations) {
       let finalColor = "var(--color-green)";
@@ -1777,6 +1806,10 @@ const App = {
 
   // Gestión del Directorio Maestro con propagación en cascada de matrículas
   updateDirectoryStudent: function(index, field, value) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Directorio en Modo Solo Lectura.", "warning");
+      return;
+    }
     if (this.data && this.data.students && this.data.students[index]) {
       const trimmedVal = value.trim();
       if (field === 'matricula') {
@@ -1804,6 +1837,10 @@ const App = {
   },
 
   addEmptyStudentToDirectory: function() {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Directorio en Modo Solo Lectura.", "warning");
+      return;
+    }
     const newMat = "22" + Math.floor(10000000 + Math.random() * 90000000);
     this.data.students.push({
       matricula: newMat,
@@ -1816,6 +1853,10 @@ const App = {
   },
 
   deleteDirectoryStudent: function(identifier) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Directorio en Modo Solo Lectura.", "warning");
+      return;
+    }
     let idx = -1;
     if (typeof identifier === "number") {
       idx = identifier;
@@ -1828,6 +1869,11 @@ const App = {
       const studentName = student.nombre || student.matricula;
       const isPlaceholder = !student.nombre || student.nombre === "NOMBRE APELLIDO PATERNO MATERNO";
       
+      // Confirmación obligatoria para evitar borrado accidental en base maestra
+      if (!isPlaceholder && !confirm(`¿Estás seguro de que deseas eliminar al alumno "${studentName}" (${student.matricula}) del directorio maestro? Esta acción afectará la relación Rollup con las materias.`)) {
+        return;
+      }
+
       const deletedStudent = this.data.students.splice(idx, 1)[0];
       this.saveData();
       this.render();
@@ -2058,6 +2104,11 @@ const App = {
   },
 
   restoreBackup: function(fileInput) {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: No puedes sobreescribir datos en modo solo lectura.", "warning");
+      fileInput.value = "";
+      return;
+    }
     const file = fileInput.files[0];
     if (!file) return;
 
@@ -2065,16 +2116,51 @@ const App = {
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result);
-        if (parsed.students && parsed.courses) {
-          this.data = parsed;
-          this.saveData();
-          this.render();
-          this.showToast("Respaldo restaurado exitosamente.");
+        if (parsed && Array.isArray(parsed.students) && Array.isArray(parsed.courses)) {
+          // Sanitizar y validar estructura mínima de alumnos
+          const cleanStudents = parsed.students.filter(s => s && typeof s === 'object').map(s => ({
+            matricula: String(s.matricula || '').trim(),
+            nombre: String(s.nombre || '').trim(),
+            carrera: String(s.carrera || 'Ingeniería').trim()
+          }));
+
+          // Sanitizar y validar cursos y sus registros de notas
+          const cleanCourses = parsed.courses.filter(c => c && typeof c === 'object').map(c => ({
+            id: String(c.id || ('c-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5))),
+            nombre: String(c.nombre || 'Materia').trim(),
+            grupo: String(c.grupo || 'Grupo A').trim(),
+            periodo: String(c.periodo || '2026-1').trim(),
+            unidadesCount: Number(c.unidadesCount) || 5,
+            lockedUnits: (c.lockedUnits && typeof c.lockedUnits === 'object') ? c.lockedUnits : {},
+            firmasMaxConfig: (c.firmasMaxConfig && typeof c.firmasMaxConfig === 'object') ? c.firmasMaxConfig : { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 },
+            records: Array.isArray(c.records) ? c.records.filter(r => r && typeof r === 'object').map(r => ({
+              matricula: String(r.matricula || '').trim(),
+              firmas: (r.firmas && typeof r.firmas === 'object') ? r.firmas : {},
+              examenes: (r.examenes && typeof r.examenes === 'object') ? r.examenes : {},
+              proyecto: r.proyecto !== null && r.proyecto !== undefined && r.proyecto !== "" ? Number(r.proyecto) : null,
+              puntosExtra: Number(r.puntosExtra) || 0
+            })) : []
+          }));
+
+          if (cleanCourses.length === 0) {
+            alert("El archivo de respaldo no contiene cursos válidos.");
+            return;
+          }
+
+          if (confirm(`¿Deseas restaurar este respaldo con ${cleanCourses.length} materias y ${cleanStudents.length} alumnos registrados? Todos los registros actuales de este docente serán reemplazados.`)) {
+            this.data = { students: cleanStudents, courses: cleanCourses };
+            this.activeCourseId = cleanCourses[0].id;
+            this.saveData();
+            this.render();
+            this.showToast("Respaldo restaurado y sanitizado exitosamente.");
+          }
         } else {
-          alert("El archivo no tiene el formato de respaldo correcto.");
+          alert("El archivo no tiene el formato de respaldo correcto (debe contener listas de 'students' y 'courses').");
         }
       } catch (err) {
-        alert("Error al leer el archivo JSON.");
+        alert("Error al analizar el archivo de respaldo: " + (err.message || "JSON corrupto"));
+      } finally {
+        fileInput.value = "";
       }
     };
     reader.readAsText(file);
@@ -2176,6 +2262,10 @@ const App = {
   },
 
   submitCreateCourse: function() {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+      return;
+    }
     const nombre = document.getElementById("newCourseNombre")?.value.trim();
     const grupo = document.getElementById("newCourseGrupo")?.value.trim() || "Grupo A";
     const periodo = document.getElementById("newCoursePeriodo")?.value.trim() || "2026-1";
@@ -2227,6 +2317,10 @@ const App = {
   },
 
   submitEditCourse: function() {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     const nombre = document.getElementById("editCourseNombre")?.value.trim();
     const grupo = document.getElementById("editCourseGrupo")?.value.trim();
@@ -2248,6 +2342,10 @@ const App = {
   },
 
   duplicateCurrentCourse: function() {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+      return;
+    }
     const course = this.getActiveCourse();
     const newGroup = prompt(`Ingresa el nombre del nuevo grupo para ${course.nombre}:`, "Grupo B");
     if (!newGroup || !newGroup.trim()) return;
@@ -2272,6 +2370,10 @@ const App = {
   },
 
   deleteCurrentCourse: function() {
+    if (this.isSupervising) {
+      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+      return;
+    }
     if (!this.data || !this.data.courses || this.data.courses.length <= 1) {
       alert("No puedes eliminar la única lista que tienes.");
       return;

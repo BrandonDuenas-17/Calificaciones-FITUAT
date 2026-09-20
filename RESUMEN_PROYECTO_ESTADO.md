@@ -11,25 +11,24 @@
 
 ### A. Autenticación y Cuentas Integradas:
 * **Coordinación / Dirección Académica (Perfil Maestro):**
-  * **Usuario:** `admin` | **Contraseña:** `admin`
-  * **Permisos:** Supervisión en vivo de los 153+ docentes de la facultad, auditoría de actas, métricas globales de facultad, buscador instantáneo y sincronización de plantilla oficial.
-* **Plantilla Docente Oficial (153 Profesores sincronizados en la nube):**
-  * Acceso automático con credenciales generadas por formato normalizado de usuario (o ingreso directo vía supervisión de `admin`).
-  * Cada profesor cuenta con sus materias reales asignadas (353 asignaturas/grupos en total) y sus listas de alumnos oficiales (2,492 estudiantes únicos con matrícula de 10 dígitos).
-* **Docentes de prueba integrados:**
-  * `rgarcia` / `123` (Ing. Roberto García M.)
-  * `msanchez` / `123` (Dra. Martha Elena Sánchez)
-* **Registro de Nuevos Docentes:** Funcional desde la pantalla de login o desde el panel maestro.
+  * **Acceso:** Cuenta de Coordinación Académica protegida mediante función RPC `verify_teacher_credentials` con cifrado bcrypt.
+  * **Permisos:** Supervisión en vivo de los docentes de la facultad, auditoría de actas en modo de solo lectura, métricas globales de facultad, buscador instantáneo y administración centralizada.
+* **Plantilla Docente Oficial:**
+  * Acceso automático con credenciales institucionales normalizadas (o ingreso supervisado por Coordinación).
+  * Cada profesor cuenta con sus materias asignadas y sus listas de alumnos oficiales con matrícula de 10 dígitos.
+  * Contraseñas gestionadas y validadas a través del procedimiento almacenado `change_teacher_password` con hash `pgcrypto` (`$2a$08$`).
+* **Registro de Nuevos Docentes:** Funcional desde el panel maestro y sincronizado a Supabase.
 
-### B. Arquitectura 100% en la Nube (Firebase Firestore):
-* **ID de Proyecto:** `calificaciones-fiuat`
-* **Colección Principal:** `teachers` (documentos por `teacherId` para aislamiento total).
+### B. Arquitectura 100% en la Nube (Supabase PostgreSQL):
+* **Infraestructura:** Supabase Database (PostgreSQL 15+ con extensión `pgcrypto`).
+* **Tabla Principal:** `public.teachers` con Row Level Security (RLS) habilitado.
 * **Mecanismos de Sincronización 100% Cloud:**
-  * Carga inicial directa desde Firestore (`fetchTeachers`).
-  * Sin almacenamiento local de catálogos (`localStorage` eliminado por completo).
-  * Sesión volátil aislada por pestaña (`sessionStorage`).
+  * Carga inicial optimizada desde Supabase (`fetchTeachers`), restringiendo columnas sensibles.
+  * Columna `password` revocada de consultas REST API directas (solo accesible vía RPC `SECURITY DEFINER`).
+  * Sin almacenamiento local de catálogos (`localStorage` eliminado para catálogos).
+  * Sesión aislada por pestaña (`sessionStorage`) con validación de clave efímera de 256 bits.
   * Indicador dinámico de estado en la barra superior: `🟢 Nube Sincronizada`.
-  * Indicador reactivo en el pie de tabla: `🟢 Sincronizado en la nube (Firestore) · [hh:mm]`.
+  * Indicador reactivo en el pie de tabla: `🟢 Sincronizado en la nube (Supabase) · [hh:mm]`.
 
 ---
 
