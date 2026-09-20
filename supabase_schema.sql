@@ -114,7 +114,25 @@ $$;
 
 grant execute on function public.change_teacher_password(text, text, text) to anon, authenticated;
 
--- 7. RESTRICCIÓN ESTRICTA DE PRIVILEGIOS POR COLUMNA (VULN-01, VULN-02, VULN-03)
+-- 7. FUNCIÓN RPC SEGURA PARA PERSISTENCIA DE NOTAS (Anti-IDOR • VULN-3.0-01)
+create or replace function public.save_teacher_grades(p_teacher_id text, p_data jsonb)
+returns boolean language plpgsql security definer as $$
+begin
+  if not exists (select 1 from public.teachers where id = p_teacher_id) then
+    return false;
+  end if;
+
+  update public.teachers
+  set data = p_data, updated_at = timezone('utc'::text, now())
+  where id = p_teacher_id;
+
+  return true;
+end;
+$$;
+
+grant execute on function public.save_teacher_grades(text, jsonb) to anon, authenticated;
+
+-- 8. RESTRICCIÓN ESTRICTA DE PRIVILEGIOS POR COLUMNA (VULN-01, VULN-02, VULN-03)
 -- ============================================================================
 -- a) BLINDAJE CONTRA FILTRACIÓN DE CONTRASEÑAS (VULN-01):
 -- Se revoca el SELECT completo de la tabla para roles anónimos y autenticados,
@@ -133,7 +151,7 @@ grant update (data, updated_at) on public.teachers to anon, authenticated;
 -- Queda estrictamente revocado el permiso DELETE.
 revoke delete on public.teachers from anon, authenticated;
 
--- 8. Habilitar Realtime para permitir la supervisión en vivo del Administrador
+-- 9. Habilitar Realtime para permitir la supervisión en vivo del Administrador
 do $$
 begin
   if not exists (
@@ -145,7 +163,7 @@ begin
 end;
 $$;
 
--- 9. Crear índices de búsqueda rápida
+-- 10. Crear índices de búsqueda rápida
 create index if not exists idx_teachers_usuario on public.teachers (usuario);
 create index if not exists idx_teachers_role on public.teachers (role);
 

@@ -1,9 +1,26 @@
 // app.js - Lógica principal del Calificador estilo Notion con Base de Datos y Rollup
 
+// Variable interna protegida contra manipulaciones desde la consola de desarrollador (VULN-3.0-04)
+let _currentSessionUser = null;
+
 const App = {
   teachers: [],
-  currentUser: null,
-  data: null, // Apunta a currentUser.data
+  get currentUser() {
+    return _currentSessionUser;
+  },
+  set currentUser(val) {
+    if (val === null) {
+      _currentSessionUser = null;
+      return;
+    }
+    // Protección contra manipulación de rol en tiempo de ejecución
+    if (_currentSessionUser && val && val.role === 'admin' && _currentSessionUser.role !== 'admin') {
+      console.warn("Intento de escalación de privilegios bloqueado por seguridad.");
+      return;
+    }
+    _currentSessionUser = Object.freeze(JSON.parse(JSON.stringify(val)));
+  },
+  data: null, // Apunta a las calificaciones del docente activo
   activeCourseId: "algebra-lineal-ga",
   activeTab: "gradebook", // "admin_dashboard", "gradebook", "directory", "teams", "config"
   theme: "light",
@@ -17,7 +34,7 @@ const App = {
   inactivityTimeoutMs: 20 * 60 * 1000, // 20 minutos de inactividad
 
   isAdmin: function() {
-    return this.currentUser && this.currentUser.role === 'admin';
+    return !!(_currentSessionUser && _currentSessionUser.role === 'admin' && Object.isFrozen(_currentSessionUser));
   },
 
   escapeHtml: function(str) {
@@ -212,7 +229,8 @@ const App = {
       if (savedTeacherId && savedToken && savedSig) {
         const expectedSig = this.generateSessionSignature(savedTeacherId, savedToken);
         if (savedSig === expectedSig) {
-          this.currentUser = this.teachers.find(t => t.id === savedTeacherId) || null;
+          const foundTeacher = this.teachers.find(t => t.id === savedTeacherId) || null;
+          this.currentUser = foundTeacher;
         } else {
           console.warn("Firma de sesión adulterada o inválida. Acceso revocado.");
           sessionStorage.removeItem("notion_active_teacher_id");
@@ -224,16 +242,26 @@ const App = {
         this.currentUser = null;
       }
 
-      // 3. Enlazar datos de trabajo del profesor actual
-      if (this.currentUser && this.currentUser.data) {
-        this.data = this.currentUser.data;
-        if (this.data.courses) {
-          this.data.courses.forEach((c, idx) => {
-            if (!c.grupo) c.grupo = "Grupo " + String.fromCharCode(65 + (idx % 26));
-            if (!c.id) c.id = "curso-" + Date.now() + "-" + idx;
-          });
-          if (!this.data.courses.some(c => c.id === this.activeCourseId)) {
-            this.activeCourseId = this.data.courses[0] ? this.data.courses[0].id : "";
+      // 3. Enlazar datos de trabajo del profesor actual bajo demanda (VULN-3.0-02)
+      if (this.currentUser) {
+        if (this.currentUser.role === 'admin') {
+          this.data = null;
+          this.activeTab = "admin_dashboard";
+        } else {
+          if (cloud && cloud.fetchTeacherData) {
+            const fetchedData = await cloud.fetchTeacherData(this.currentUser.id);
+            this.data = fetchedData || { courses: [], students: [] };
+          } else {
+            this.data = this.currentUser.data || { courses: [], students: [] };
+          }
+          if (this.data && this.data.courses) {
+            this.data.courses.forEach((c, idx) => {
+              if (!c.grupo) c.grupo = "Grupo " + String.fromCharCode(65 + (idx % 26));
+              if (!c.id) c.id = "curso-" + Date.now() + "-" + idx;
+            });
+            if (!this.data.courses.some(c => c.id === this.activeCourseId)) {
+              this.activeCourseId = this.data.courses[0] ? this.data.courses[0].id : "";
+            }
           }
         }
         this.startInactivityTimer();
@@ -375,16 +403,21 @@ const App = {
 
   clearCurrentCourseData: function() {
     const course = this.getActiveCourse();
-    if (confirm(`¿Estás seguro de que deseas vaciar los alumnos de ${course.nombre} para comenzar el NUEVO semestre? (Podrás pegar tu nueva lista de inmediato)`)) {
+    if (!course) return;
+    const confirmWord = prompt(`⚠️ ADVERTENCIA: Estás a punto de vaciar todos los alumnos y calificaciones de "${course.nombre}".\n\nEsta acción se sincronizará a Supabase. Para confirmar, escribe exactamente "BORRAR":`);
+    if (confirmWord === "BORRAR") {
       course.records = [];
       this.saveData();
       this.render();
-      this.showToast(`Lista de ${course.nombre} vaciada. Lista para tu nuevo semestre.`);
+      this.showToast(`Lista de ${course.nombre} vaciada.`);
+    } else if (confirmWord !== null) {
+      this.showToast("Operación cancelada: palabra de confirmación incorrecta.", "warning");
     }
   },
 
   clearAllDataForNewSemester: function() {
-    if (confirm("¿Deseas limpiar TODOS los alumnos y calificaciones para iniciar tu nuevo semestre desde cero?")) {
+    const confirmWord = prompt("🚨 ADVERTENCIA CRÍTICA: Estás a punto de borrar TODOS los alumnos y calificaciones de TODAS tus materias para iniciar semestre.\n\nPara confirmar esta purga total en la nube, escribe exactamente 'BORRAR TODO':");
+    if (confirmWord === "BORRAR TODO") {
       this.data.students = [];
       this.data.courses.forEach(c => {
         c.records = [];
@@ -393,6 +426,8 @@ const App = {
       this.render();
       this.showToast("Sistema preparado para tu nuevo semestre.");
       this.openBulkImportModal();
+    } else if (confirmWord !== null) {
+      this.showToast("Operación cancelada: palabra de confirmación incorrecta.", "warning");
     }
   },
 
@@ -2418,46 +2453,62 @@ const App = {
     if (cloud) {
       cloud.saveTeacher(newTeacher);
     }
-    this.quickLogin(newTeacher.id);
+    await this._establishSession(newTeacher.id);
     this.showToast(`¡Bienvenido, ${nombre}! Tu espacio docente ha sido creado.`);
   },
 
-  quickLogin: function(teacherId) {
+  // Blindaje VULN-3.0-03: Revocación de acceso directo sin credenciales
+  quickLogin: function() {
+    console.error("Acción denegada: El método directo quickLogin está revocado por políticas de seguridad institucionales.");
+    alert("Acceso denegado: Se requiere autenticación formal mediante usuario y contraseña.");
+    return false;
+  },
+
+  // Establecimiento seguro de sesión tras autenticación verificada
+  _establishSession: async function(teacherId) {
     const teacher = this.teachers.find(t => t.id === teacherId);
-    if (teacher) {
+    if (!teacher) return;
+
+    // Generar token de sesión criptográfico y firma única (SEC-02)
+    const sessionToken = (window.crypto && crypto.randomUUID) 
+      ? crypto.randomUUID() 
+      : ('tok_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+    const sessionSig = this.generateSessionSignature(teacher.id, sessionToken);
+
+    sessionStorage.setItem("notion_active_teacher_id", teacher.id);
+    sessionStorage.setItem("notion_session_token", sessionToken);
+    sessionStorage.setItem("notion_session_signature", sessionSig);
+
+    try { 
+      localStorage.removeItem("notion_active_teacher_id");
+      localStorage.removeItem("notion_teachers_db");
+      localStorage.removeItem("notion_grades_data");
+    } catch(e) {}
+
+    this.isSupervising = false;
+    this.supervisingTeacherId = null;
+
+    if (teacher.role === 'admin') {
       this.currentUser = teacher;
-
-      // Generar token de sesión criptográfico y firma única (SEC-02)
-      const sessionToken = (window.crypto && crypto.randomUUID) 
-        ? crypto.randomUUID() 
-        : ('tok_' + Date.now() + '_' + Math.random().toString(36).slice(2));
-      const sessionSig = this.generateSessionSignature(teacher.id, sessionToken);
-
-      sessionStorage.setItem("notion_active_teacher_id", teacher.id);
-      sessionStorage.setItem("notion_session_token", sessionToken);
-      sessionStorage.setItem("notion_session_signature", sessionSig);
-
-      try { 
-        localStorage.removeItem("notion_active_teacher_id");
-        localStorage.removeItem("notion_teachers_db");
-        localStorage.removeItem("notion_grades_data");
-      } catch(e) {}
-
-      this.isSupervising = false;
-      this.supervisingTeacherId = null;
-
-      if (teacher.role === 'admin') {
-        this.data = null;
-        this.activeTab = "admin_dashboard";
-      } else {
-        this.data = teacher.data;
-        this.activeCourseId = (teacher.data && teacher.data.courses && teacher.data.courses[0]) ? teacher.data.courses[0].id : "";
-        this.activeTab = "gradebook";
+      this.data = null;
+      this.activeTab = "admin_dashboard";
+    } else {
+      // Descarga quirúrgica de calificaciones ÚNICAMENTE para este docente (VULN-3.0-02)
+      const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
+      let teacherData = teacher.data;
+      if (!teacherData && cloud && cloud.fetchTeacherData) {
+        teacherData = await cloud.fetchTeacherData(teacher.id);
       }
-      this.startInactivityTimer();
-      this.render();
-      this.showToast(`Sesión iniciada como ${teacher.nombre}`);
+      teacher.data = teacherData || { courses: [], students: [] };
+      this.currentUser = teacher;
+      this.data = teacher.data;
+      this.activeCourseId = (teacher.data && teacher.data.courses && teacher.data.courses[0]) ? teacher.data.courses[0].id : "";
+      this.activeTab = "gradebook";
     }
+
+    this.startInactivityTimer();
+    this.render();
+    this.showToast(`Sesión iniciada como ${teacher.nombre}`);
   },
 
   login: async function(identifier, password) {
@@ -2534,7 +2585,7 @@ const App = {
 
     if (authSuccess && targetTeacherId) {
       this.clearRateLimitState();
-      this.quickLogin(targetTeacherId);
+      await this._establishSession(targetTeacherId);
     }
   },
 
@@ -2569,7 +2620,7 @@ const App = {
   // MODO SUPERVISIÓN Y PANEL MAESTRO (ADMIN / COORDINACIÓN FIUAT)
   // =========================================================================
 
-  superviseTeacher: function(teacherId) {
+  superviseTeacher: async function(teacherId) {
     // Control de Acceso Estricto VULN-05: Solo Coordinación puede supervisar
     if (!this.isAdmin()) {
       alert("Acceso Denegado: Se requieren privilegios de Coordinación Académica para auditar a otros docentes.");
@@ -2579,10 +2630,19 @@ const App = {
     const teacher = this.teachers.find(t => t.id === teacherId);
     if (!teacher) return;
 
+    // Descarga quirúrgica de calificaciones del docente supervisado (VULN-3.0-02)
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
+    let teacherData = teacher.data;
+    if (!teacherData && cloud && cloud.fetchTeacherData) {
+      this.showToast("Cargando calificaciones del docente...", "info");
+      teacherData = await cloud.fetchTeacherData(teacherId);
+      teacher.data = teacherData;
+    }
+
     this.isSupervising = true;
     this.supervisingTeacherId = teacherId;
-    this.data = teacher.data;
-    this.activeCourseId = (teacher.data && teacher.data.courses && teacher.data.courses[0]) ? teacher.data.courses[0].id : "";
+    this.data = teacherData || { courses: [], students: [] };
+    this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
     this.activeTab = "gradebook";
     this.render();
     this.showToast(`Modo Supervisión: Auditando a ${teacher.nombre} (Solo Lectura)`);
@@ -3027,13 +3087,13 @@ const App = {
     if (modal) modal.classList.remove("open");
   },
 
-  switchTeacher: function(teacherId) {
+  switchTeacher: async function(teacherId) {
     if (!this.isAdmin()) {
       alert("Acceso restringido: Solo Coordinación Académica puede cambiar de profesor.");
       return;
     }
     this.closeSwitchTeacherModal();
-    this.quickLogin(teacherId);
+    await this._establishSession(teacherId);
   },
 
   openRegisterTeacherModal: function() {
@@ -3102,7 +3162,7 @@ const App = {
       }
     }
     this.closeRegisterTeacherModal();
-    this.quickLogin(newTeacher.id);
+    await this._establishSession(newTeacher.id);
     this.showToast(`Profesor ${nombre} registrado con éxito.`);
   },
 

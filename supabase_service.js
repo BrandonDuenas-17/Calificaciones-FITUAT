@@ -79,14 +79,14 @@ const SupabaseService = {
     }
   },
 
-  // Obtener todos los profesores desde Supabase (sin exponer contraseñas en memoria global)
+  // Obtener directorio público de profesores desde Supabase (sin contraseñas y sin calificaciones masivas - VULN-3.0-02)
   fetchTeachers: async function() {
     if (!this.isInitialized || !this.client) return null;
 
     try {
       const { data, error } = await this.client
         .from("teachers")
-        .select("id, nombre, usuario, correo, departamento, role, avatar, data, updated_at")
+        .select("id, nombre, usuario, correo, departamento, role, avatar, updated_at")
         .order("nombre", { ascending: true });
 
       if (error) {
@@ -97,6 +97,29 @@ const SupabaseService = {
       return data || [];
     } catch (e) {
       console.error("Error de red al consultar Supabase:", e);
+      return null;
+    }
+  },
+
+  // Obtener calificaciones y cursos ÚNICAMENTE del docente autenticado bajo demanda (VULN-3.0-02)
+  fetchTeacherData: async function(teacherId) {
+    if (!this.isInitialized || !this.client || !teacherId) return null;
+
+    try {
+      const { data, error } = await this.client
+        .from("teachers")
+        .select("id, data, updated_at")
+        .eq("id", teacherId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error al obtener calificaciones del docente:", error);
+        return null;
+      }
+
+      return data ? data.data : null;
+    } catch (e) {
+      console.error("Error de red al consultar calificaciones del docente:", e);
       return null;
     }
   },
@@ -209,11 +232,27 @@ const SupabaseService = {
         App.setCloudSaveStatus("saving");
       }
 
-      // BLINDAJE CRÍTICO SEC-01:
-      // Para evitar sobreescribir la contraseña a '123' o alterar roles de forma inadvertida,
-      // la persistencia periódica de calificaciones actualiza ÚNICAMENTE las columnas data y updated_at.
+      // BLINDAJE VULN-3.0-01 (Anti-IDOR):
+      // 1. Intento primario vía función RPC segura en PostgreSQL
+      const payloadData = teacher.data || { courses: [], students: [] };
+      try {
+        const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("save_teacher_grades", {
+          p_teacher_id: teacher.id,
+          p_data: payloadData
+        });
+        if (!rpcErr && rpcSuccess === true) {
+          this.status = "connected";
+          this.notifyStatusChange();
+          if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+            App.setCloudSaveStatus("saved");
+          }
+          return true;
+        }
+      } catch (rpcEx) {}
+
+      // 2. Respaldo directo en tabla (solo columnas data y updated_at)
       const payload = {
-        data: teacher.data || { courses: [], students: [] },
+        data: payloadData,
         updated_at: new Date().toISOString()
       };
 
