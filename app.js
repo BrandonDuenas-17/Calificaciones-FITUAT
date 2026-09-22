@@ -2674,8 +2674,35 @@ const App = {
     if (modal) modal.classList.add("open");
   },
 
+  onManageUnitsInputDirect: function(val) {
+    let num = parseInt(val, 10);
+    if (isNaN(num)) return;
+    num = Math.max(1, Math.min(8, num));
+
+    // Guardar los valores actuales de los inputs antes de redimensionar
+    for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+      const inp = document.getElementById(`manageModalMaxF_u${u}`);
+      if (inp) {
+        this._tempManageMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
+      }
+    }
+
+    for (let u = 1; u <= num; u++) {
+      if (!this._tempManageMaxFirmas[`u${u}`]) {
+        this._tempManageMaxFirmas[`u${u}`] = 10;
+      }
+    }
+
+    this._tempManageUnitsCount = num;
+    this.renderManageCourseUnitsInputs();
+  },
+
   renderManageCourseUnitsInputs: function() {
     const course = this.getActiveCourse();
+    const countInput = document.getElementById("manageModalUnitsInput");
+    if (countInput && document.activeElement !== countInput) {
+      countInput.value = this._tempManageUnitsCount;
+    }
     const countDisplay = document.getElementById("manageModalUnitsCountDisplay");
     if (countDisplay) countDisplay.textContent = this._tempManageUnitsCount;
 
@@ -2759,6 +2786,15 @@ const App = {
     if (!nombre) {
       alert("El nombre de la materia no puede estar vacío.");
       return;
+    }
+
+    // Recoger el valor exacto del input numérico si el usuario lo tecleó directamente
+    const inputUnitsEl = document.getElementById("manageModalUnitsInput");
+    if (inputUnitsEl && inputUnitsEl.value) {
+      const typedVal = parseInt(inputUnitsEl.value, 10);
+      if (!isNaN(typedVal) && typedVal >= 1 && typedVal <= 8) {
+        this._tempManageUnitsCount = typedVal;
+      }
     }
 
     // Recoger valores de firmas de los inputs visibles

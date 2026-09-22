@@ -6,13 +6,16 @@
   <title>Sistema de Calificaciones • Facultad de Ingeniería Tampico (FIUAT - UAT)</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://xjlqzwigqmevbffaavjl.supabase.co wss://xjlqzwigqmevbffaavjl.supabase.co data: blob:; img-src 'self' data: https:; font-src 'self' data: https:;">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <!-- Blindaje Anti-Clickjacking: evita incrustación no autorizada en iframes maliciosos -->
   <script>
     if (window.top !== window.self) {
       window.top.location = window.self.location;
     }
   </script>
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=25">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -367,7 +370,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 4px 8px;">
               <button type="button" class="btn btn-sm btn-default" id="btnRemoveUnitManageModal" style="padding: 2px 8px; font-weight: 800; font-size: 14px;" onclick="App.changeManageModalUnitsCount(-1)">−</button>
-              <span id="manageModalUnitsCountDisplay" style="font-weight: 800; font-size: 15px; color: var(--uat-orange); min-width: 24px; text-align: center;">5</span>
+              <input type="number" id="manageModalUnitsInput" min="1" max="8" value="5" class="form-control" style="width: 52px; height: 32px; text-align: center; font-weight: 800; font-size: 16px; color: var(--uat-orange); padding: 0 4px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);" oninput="App.onManageUnitsInputDirect(this.value)" />
               <button type="button" class="btn btn-sm btn-default" id="btnAddUnitManageModal" style="padding: 2px 8px; font-weight: 800; font-size: 14px;" onclick="App.changeManageModalUnitsCount(1)">+</button>
             </div>
           </div>
@@ -690,9 +693,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js"></script>
-  <script src="sample_data.js"></script>
-  <script src="exporter.js?v=6"></script>
-  <script src="app.js?v=13"></script>
+  <script src="supabase_service.js?v=25"></script>
+  <script src="sample_data.js?v=25"></script>
+  <script src="exporter.js?v=25"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>
