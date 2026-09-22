@@ -28,6 +28,7 @@ const App = {
   loginTab: "login", // "login" o "register"
   isSupervising: false,
   supervisingTeacherId: null,
+  supervisionEditMode: true,
   failedLoginAttempts: 0,
   lockoutUntil: 0,
   inactivityTimer: null,
@@ -136,11 +137,17 @@ const App = {
     }
   },
 
-  handleInactivityTimeout: function() {
+  handleInactivityTimeout: async function() {
     // Cerrar sesión únicamente para cuentas docentes ordinarias, nunca al usuario maestro
     if (this.currentUser && !this.isAdmin()) {
-      this.logout();
-      alert("Tu sesión se ha cerrado automáticamente tras 20 minutos de inactividad para proteger tus calificaciones.");
+      try {
+        // Blindaje: Asentar de inmediato cualquier calificación pendiente antes de cerrar
+        await this.flushSave();
+      } catch (e) {
+        console.error("Error al guardar calificaciones antes del timeout:", e);
+      }
+      await this.logout();
+      alert("Tu sesión se ha cerrado automáticamente tras 20 minutos de inactividad.\n\n✅ Todas las calificaciones que capturaste se guardaron con éxito en la nube de Supabase.");
     }
   },
 
@@ -267,7 +274,19 @@ const App = {
         } else {
           if (cloud && cloud.fetchTeacherData) {
             const fetchedData = await cloud.fetchTeacherData(this.currentUser.id);
-            this.data = fetchedData || { courses: [], students: [] };
+            if (fetchedData) {
+              this.data = fetchedData;
+            } else {
+              // Respaldo de resiliencia local en sessionStorage si hubo desconexión puntual
+              try {
+                const bufStr = sessionStorage.getItem("fiuat_active_grades_buffer_" + this.currentUser.id);
+                if (bufStr) {
+                  const bufObj = JSON.parse(bufStr);
+                  if (bufObj && bufObj.data) this.data = bufObj.data;
+                }
+              } catch(e) {}
+              if (!this.data) this.data = { courses: [], students: [] };
+            }
           } else {
             this.data = this.currentUser.data || { courses: [], students: [] };
           }
@@ -387,17 +406,55 @@ const App = {
     }
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     
-    // Blindaje VULN-05 y VULN-06: Modo Supervisión es estrictamente de Solo Lectura
-    if (this.isSupervising) {
-      console.warn("Modo Supervisión: La edición sobre las calificaciones de otro docente está restringida.");
-      return;
+    let targetTeacher = null;
+    if (this.isSupervising && this.supervisingTeacherId) {
+      if (!this.supervisionEditMode) {
+        console.warn("Modo Supervisión: Auditoría en Solo Lectura activa. Guardado omitido.");
+        return;
+      }
+      targetTeacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
+    } else if (this.currentUser) {
+      targetTeacher = this.currentUser;
     }
-    if (this.currentUser) {
-      this.currentUser.data = this.data;
+
+    if (targetTeacher) {
+      targetTeacher.data = this.data;
+      // Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
+      try {
+        if (targetTeacher.id && this.data) {
+          sessionStorage.setItem("fiuat_active_grades_buffer_" + targetTeacher.id, JSON.stringify({
+            data: this.data,
+            timestamp: Date.now()
+          }));
+        }
+      } catch (e) {}
+
       if (cloud) {
-        await cloud.saveTeacher(this.currentUser);
+        await cloud.saveTeacher(targetTeacher);
       }
     }
+  },
+
+  // Mini-guardado forzado e instantáneo (sin espera de debounce)
+  flushSave: async function() {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    await this.saveData();
+  },
+
+  // Manejo de salida o desenfoque de celda (blur): confirma y mini-guarda de inmediato
+  handleCellBlur: function(inputEl) {
+    if (inputEl) {
+      inputEl.classList.remove("cell-saved-flash");
+      void inputEl.offsetWidth; // Forzar reflow para animación reactiva
+      inputEl.classList.add("cell-saved-flash");
+      setTimeout(() => {
+        if (inputEl) inputEl.classList.remove("cell-saved-flash");
+      }, 700);
+    }
+    this.flushSave();
   },
 
   // Guardado optimizado con debounce para escritura fluida en celdas (directo a Supabase)
@@ -406,7 +463,7 @@ const App = {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(async () => {
       await this.saveData();
-    }, 500);
+    }, 300);
   },
 
   resetToDefault: function() {
@@ -645,6 +702,20 @@ const App = {
     if (nav) nav.style.display = "flex";
     this.renderNavTabs();
 
+    if (this.activeTab === "gradebook" || this.activeTab === "directory") {
+      container.classList.add("has-table-view");
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      container.scrollTop = 0;
+    } else {
+      container.classList.remove("has-table-view");
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    }
+
     if (this.activeTab === "admin_dashboard") {
       this.renderAdminDashboard(container);
     } else if (this.activeTab === "gradebook") {
@@ -744,12 +815,12 @@ const App = {
       nav.innerHTML = `
         <button class="nav-tab-btn active" onclick="App.switchTab('admin_dashboard')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          Panel de Control Maestro (Supervisión)
-          <span class="nav-tab-badge">${regularTeachers.length} profesores</span>
+          <span>Panel Maestro</span>
+          <span class="nav-tab-badge">${regularTeachers.length}</span>
         </button>
         <button class="nav-tab-btn" style="margin-left: auto; color: var(--uat-orange); font-weight: 700;" onclick="App.openRegisterTeacherModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Dar de Alta Nuevo Docente
+          <span>+ Nuevo Docente</span>
         </button>
       `;
       return;
@@ -821,6 +892,7 @@ const App = {
     const studentsMap = this.getStudentsMap();
     const stats = this.calculateCourseStats(course);
     const maxFirmasConfig = course.firmasMaxConfig || {};
+    const isAuditReadOnly = this.isAdmin() && this.isSupervising && !this.supervisionEditMode;
 
     let records = course.records || [];
     let visibleCount = 0;
@@ -845,6 +917,7 @@ const App = {
       for (let u = 1; u <= 5; u++) {
         const uKey = `u${u}`;
         const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
+        const isFieldReadOnly = isLocked || isAuditReadOnly;
         const val = rec.firmas ? (rec.firmas[uKey] ?? "") : "";
         const maxF = maxFirmasConfig[uKey] || 10;
         const pct = val !== "" && val !== null ? Math.min(100, Math.round((Number(val) / maxF) * 100)) : 0;
@@ -854,10 +927,11 @@ const App = {
         firmasCells += `
           <td class="col-number-input">
             <div class="firmas-cell-content">
-              <input type="number" min="0" max="99" class="cell-input firmas-num-input ${isLocked ? 'cell-locked' : ''}" value="${val}" 
+              <input type="number" inputmode="numeric" min="0" max="99" class="cell-input firmas-num-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" value="${val}" 
                 placeholder="-" data-col="firmas-${uKey}"
-                ${isLocked ? 'readonly title="Unidad bloqueada (Solo Lectura)"' : ''}
+                ${isFieldReadOnly ? `readonly title="${isAuditReadOnly ? 'Modo Auditoría (Solo Lectura)' : 'Unidad bloqueada (Solo Lectura)'}"` : ''}
                 onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
                 oninput="App.updateFirmas(${index}, '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
               <svg class="progress-ring" viewBox="0 0 20 20">
@@ -875,6 +949,7 @@ const App = {
       for (let u = 1; u <= 5; u++) {
         const uKey = `u${u}`;
         const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
+        const isFieldReadOnly = isLocked || isAuditReadOnly;
         const val = rec.examenes ? (rec.examenes[uKey] ?? "") : "";
         const numVal = val !== "" && val !== null ? Number(val) : null;
         let barColor = "var(--color-green)";
@@ -884,10 +959,11 @@ const App = {
         examenesCells += `
           <td style="min-width: 110px;">
             <div class="progress-bar-wrap">
-              <input type="number" min="0" max="100" class="cell-input ${isLocked ? 'cell-locked' : ''}" style="width: 48px; text-align: right; font-weight: 500;" 
+              <input type="number" inputmode="decimal" min="0" max="100" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" style="width: 48px; text-align: right; font-weight: 500;" 
                 value="${val}" placeholder="-" data-col="examenes-${uKey}"
-                ${isLocked ? 'readonly title="Unidad bloqueada (Solo Lectura)"' : ''}
+                ${isFieldReadOnly ? `readonly title="${isAuditReadOnly ? 'Modo Auditoría (Solo Lectura)' : 'Unidad bloqueada (Solo Lectura)'}"` : ''}
                 onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
                 oninput="App.updateExamen(${index}, '${uKey}', this.value)"
                 onkeydown="App.handleCellKeydown(event, this)" />
               <div class="progress-track">
@@ -938,15 +1014,18 @@ const App = {
 
       rowsHtml += `
         <tr id="row-${index}" data-matricula="${this.escapeHtml(rec.matricula)}" data-search="${this.escapeHtml(searchData)}" style="display: ${isMatch ? '' : 'none'};">
-          <td class="col-matricula">
-            <input type="text" class="cell-input" value="${this.escapeHtml(rec.matricula)}" 
+          <td class="col-sticky-1 col-matricula">
+            <input type="text" class="cell-input ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" value="${this.escapeHtml(rec.matricula)}" 
+              ${isAuditReadOnly ? 'readonly title="Modo Auditoría (Solo Lectura)"' : ''}
               onfocus="this.select()"
+              onblur="App.handleCellBlur(this)"
               onchange="App.updateMatricula(${index}, this.value)" />
           </td>
-          <td class="col-rollup" title="Obtenido automáticamente de la base de alumnos (Rollup)">
+          <td class="col-sticky-2 col-rollup" title="Toca o haz clic para abrir la Ficha Táctil del Alumno" onclick="App.openStudentMobileModal(${index})">
             <div class="rollup-badge">
               <span class="rollup-icon">↗</span>
-              <span>${this.escapeHtml(student.nombre)}</span>
+              <span class="rollup-name">${this.escapeHtml(student.nombre)}</span>
+              <span class="rollup-mobile-hint">📱 Ficha</span>
             </div>
           </td>
           <td class="col-final">
@@ -964,14 +1043,18 @@ const App = {
           ${examenesCells}
           ${evalCells}
           <td class="col-number-input">
-            <input type="number" min="0" max="100" class="cell-input" value="${rec.proyecto ?? ''}" placeholder="-" data-col="proyecto"
+            <input type="number" inputmode="decimal" min="0" max="100" class="cell-input ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" value="${rec.proyecto ?? ''}" placeholder="-" data-col="proyecto"
+              ${isAuditReadOnly ? 'readonly title="Modo Auditoría (Solo Lectura)"' : ''}
               onfocus="this.select()"
+              onblur="App.handleCellBlur(this)"
               oninput="App.updateProyecto(${index}, this.value)"
               onkeydown="App.handleCellKeydown(event, this)" />
           </td>
           <td class="col-number-input">
-            <input type="number" min="0" max="10" class="cell-input" value="${rec.puntosExtra || 0}" placeholder="0" data-col="puntosExtra"
+            <input type="number" inputmode="numeric" min="0" max="10" class="cell-input ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" value="${rec.puntosExtra || 0}" placeholder="0" data-col="puntosExtra"
+              ${isAuditReadOnly ? 'readonly title="Modo Auditoría (Solo Lectura)"' : ''}
               onfocus="this.select()"
+              onblur="App.handleCellBlur(this)"
               oninput="App.updatePuntosExtra(${index}, this.value)"
               onkeydown="App.handleCellKeydown(event, this)" />
           </td>
@@ -1032,7 +1115,38 @@ const App = {
       `;
     }
 
+    let supervisionBannerHtml = "";
+    if (this.isAdmin() && this.isSupervising) {
+      const supTeacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
+      const sName = supTeacher ? supTeacher.nombre : "Docente";
+      const sUser = supTeacher ? supTeacher.usuario : "";
+      const isEdit = this.supervisionEditMode;
+
+      supervisionBannerHtml = `
+        <div class="supervision-banner ${isEdit ? 'supervision-banner-edit' : 'supervision-banner-audit'}">
+          <div class="supervision-banner-info">
+            <span class="supervision-banner-badge">
+              ${isEdit ? '✏️ MODO EDICIÓN' : '👁️ MODO AUDITORÍA'}
+            </span>
+            <span>Supervisando expediente de: <b>${this.escapeHtml(sName)}</b> (<code>${this.escapeHtml(sUser)}</code>)</span>
+            <span class="supervision-banner-hint">
+              ${isEdit ? '• Las notas capturadas se guardan en la nube para este docente' : '• Calificaciones en Solo Lectura (Activa edición para pasar o cambiar notas)'}
+            </span>
+          </div>
+          <div class="supervision-banner-actions">
+            <button class="btn btn-sm ${isEdit ? 'btn-default' : 'btn-primary'}" onclick="App.toggleSupervisionEditMode()">
+              ${isEdit ? '🔒 Cambiar a Solo Lectura' : '✏️ Habilitar Edición de Notas'}
+            </button>
+            <button class="btn btn-sm btn-default" onclick="App.exitSupervision()">
+              ✕ Salir al Panel Maestro
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
     container.innerHTML = `
+      ${supervisionBannerHtml}
       <div class="page-title-area">
         <div class="page-title-row">
           <div>
@@ -1085,8 +1199,15 @@ const App = {
             <input type="text" class="search-input" placeholder="Buscar por matrícula o nombre..." 
               value="${this.searchTerm}" oninput="App.handleSearch(this.value)" />
           </div>
+          <button type="button" class="btn-focus-toggle" onclick="App.toggleGradebookFocusMode()" title="Maximizar área de calificaciones (Inmovilizado estilo Excel)">
+            <span id="btnFocusIcon">${this.isGradebookFocused ? '⤡' : '⤢'}</span>
+            <span id="btnFocusText">${this.isGradebookFocused ? 'Restaurar Vista' : 'Maximizar Calificador'}</span>
+          </button>
         </div>
         <div class="toolbar-right">
+          <span class="freeze-panes-hint" title="Encabezados y columnas de alumnos inmovilizados al desplazarte como en Excel">
+            📌 Fila y Alumnos Fijos
+          </span>
           <span id="studentCountDisplay" style="font-size: 12.5px; color: var(--text-secondary);">
             Mostrando <b>${visibleCount}</b> alumnos
           </span>
@@ -1097,8 +1218,8 @@ const App = {
         <table class="notion-table notion-table-gradebook">
           <thead>
             <tr>
-              <th style="width: 130px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
-              <th style="width: 270px;"><div class="th-content"><span class="th-icon">Q</span> Alumno (Rollup)</div></th>
+              <th class="col-sticky-1 col-matricula" style="width: 130px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
+              <th class="col-sticky-2 col-alumno" style="width: 270px;"><div class="th-content"><span class="th-icon">Q</span> Alumno (Rollup)</div></th>
               <th style="width: 160px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación Final</div></th>
               
               <!-- Firmas U1-U5 con Candado de Bloqueo -->
@@ -1124,7 +1245,7 @@ const App = {
           </tbody>
           <tfoot>
             <tr class="notion-table-footer">
-              <td colspan="2"><span class="summary-chip"><span class="summary-label">TOTAL:</span> <span class="summary-value">${course.records.length} ALUMNOS</span></span></td>
+              <td colspan="2" class="col-sticky-footer"><span class="summary-chip"><span class="summary-label">TOTAL:</span> <span class="summary-value">${course.records.length} ALUMNOS</span></span></td>
               <td><span class="summary-chip"><span class="summary-label">AVERAGE:</span> <span id="stat-avg-final" class="summary-value">${stats.avgFinal}</span></span></td>
               
               <!-- Max Firmas con Edición Directa en Pie de Tabla -->
@@ -1214,6 +1335,9 @@ const App = {
         </div>
       </div>
     `;
+    setTimeout(() => {
+      this.fitGradebookTableHeight();
+    }, 0);
   },
 
   // 2. VISTA DE DIRECTORIO MAESTRO DE ALUMNOS (BASE DE DATOS RELACIONAL)
@@ -1297,6 +1421,9 @@ const App = {
         </div>
       </div>
     `;
+    setTimeout(() => {
+      this.fitGradebookTableHeight();
+    }, 0);
   },
 
   // 3. VISTA DE PUBLICACIÓN EN TEAMS
@@ -1475,8 +1602,8 @@ const App = {
   },
 
   updateFirmas: function(identifier, uKey, val) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para capturar notas.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -1502,8 +1629,8 @@ const App = {
   },
 
   updateExamen: function(identifier, uKey, val) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para capturar notas.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -1529,8 +1656,8 @@ const App = {
   },
 
   updateProyecto: function(identifier, val) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para capturar notas.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -1550,8 +1677,8 @@ const App = {
   },
 
   updatePuntosExtra: function(identifier, val) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para capturar notas.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -1707,8 +1834,11 @@ const App = {
         const col = input.getAttribute('data-col');
         const nextInput = nextTr.querySelector(`input[data-col="${col}"]`);
         if (nextInput) {
-          nextInput.focus();
+          nextInput.focus({ preventScroll: true });
           nextInput.select();
+          if (nextTr) {
+            nextTr.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
         }
       }
     } else if (event.key === 'ArrowUp') {
@@ -1723,16 +1853,19 @@ const App = {
         const col = input.getAttribute('data-col');
         const prevInput = prevTr.querySelector(`input[data-col="${col}"]`);
         if (prevInput) {
-          prevInput.focus();
+          prevInput.focus({ preventScroll: true });
           prevInput.select();
+          if (prevTr) {
+            prevTr.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
         }
       }
     }
   },
 
   updateMatricula: function(recordIndex, newMatricula) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para modificar matrículas.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -1744,8 +1877,8 @@ const App = {
   },
 
   addNewStudentToCourse: function() {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para inscribir alumnos.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -1762,8 +1895,8 @@ const App = {
   },
 
   deleteRecord: function(identifier) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Calificaciones en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para quitar alumnos.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -1806,8 +1939,8 @@ const App = {
 
   // Gestión del Directorio Maestro con propagación en cascada de matrículas
   updateDirectoryStudent: function(index, field, value) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Directorio en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría: Directorio en Modo Solo Lectura.", "warning");
       return;
     }
     if (this.data && this.data.students && this.data.students[index]) {
@@ -1837,8 +1970,8 @@ const App = {
   },
 
   addEmptyStudentToDirectory: function() {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Directorio en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría: Directorio en Modo Solo Lectura.", "warning");
       return;
     }
     const newMat = "22" + Math.floor(10000000 + Math.random() * 90000000);
@@ -1853,8 +1986,8 @@ const App = {
   },
 
   deleteDirectoryStudent: function(identifier) {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Directorio en Modo Solo Lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría: Directorio en Modo Solo Lectura.", "warning");
       return;
     }
     let idx = -1;
@@ -1937,6 +2070,243 @@ const App = {
     this.saveData();
     this.render();
     this.showToast(`Meta de ${uKey.toUpperCase()} actualizada a ${num} firmas`);
+  },
+
+  // =========================================================================
+  // MÓDULO MÓVIL: FICHA TÁCTIL RÁPIDA DEL ALUMNO (EVALUACIÓN ÁGIL)
+  // =========================================================================
+  currentMobileStudentIndex: -1,
+
+  openStudentMobileModal: function(index) {
+    const course = this.getActiveCourse();
+    if (!course || !course.records || !course.records[index]) return;
+
+    this.currentMobileStudentIndex = index;
+    this.renderStudentMobileModal(index);
+
+    const modal = document.getElementById("studentDetailMobileModal");
+    if (modal) modal.classList.add("open");
+  },
+
+  closeStudentMobileModal: function() {
+    const modal = document.getElementById("studentDetailMobileModal");
+    if (modal) modal.classList.remove("open");
+    this.currentMobileStudentIndex = -1;
+  },
+
+  navigateMobileStudent: function(direction) {
+    const course = this.getActiveCourse();
+    if (!course || !course.records || course.records.length === 0) return;
+
+    let newIdx = this.currentMobileStudentIndex + direction;
+    if (newIdx < 0) newIdx = course.records.length - 1;
+    if (newIdx >= course.records.length) newIdx = 0;
+
+    this.currentMobileStudentIndex = newIdx;
+    this.renderStudentMobileModal(newIdx);
+  },
+
+  renderStudentMobileModal: function(index) {
+    const course = this.getActiveCourse();
+    if (!course || !course.records || !course.records[index]) return;
+
+    const rec = course.records[index];
+    const studentsMap = this.getStudentsMap();
+    const student = studentsMap[rec.matricula] || { nombre: "Alumno no registrado en Base Maestra" };
+    const calcs = this.calculateStudentGrades(rec, course);
+    const maxFirmasConfig = course.firmasMaxConfig || {};
+
+    const matEl = document.getElementById("studentModalMatricula");
+    if (matEl) matEl.textContent = rec.matricula;
+
+    const nomEl = document.getElementById("studentModalNombre");
+    if (nomEl) nomEl.textContent = student.nombre;
+
+    const prevBtn = document.getElementById("btnPrevStudent");
+    if (prevBtn) prevBtn.textContent = `← Alumno ${index > 0 ? index : course.records.length}`;
+
+    const nextBtn = document.getElementById("btnNextStudent");
+    if (nextBtn) nextBtn.textContent = `Alumno ${index + 2 <= course.records.length ? index + 2 : 1} →`;
+
+    const bodyEl = document.getElementById("studentModalBody");
+    if (!bodyEl) return;
+
+    // Generar desglose de unidades U1 a U5
+    let unitsHtml = "";
+    for (let u = 1; u <= 5; u++) {
+      const uKey = `u${u}`;
+      const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
+      const maxF = maxFirmasConfig[uKey] || 10;
+      const fVal = rec.firmas ? (rec.firmas[uKey] ?? "") : "";
+      const eVal = rec.examenes ? (rec.examenes[uKey] ?? "") : "";
+      const uGrade = calcs.evalU[u];
+      const hasUGrade = uGrade !== null && uGrade !== undefined;
+      const displayUGrade = hasUGrade ? uGrade : "-";
+
+      let badgeColor = "var(--color-green)";
+      let badgeBg = "var(--color-green-bg)";
+      if (hasUGrade && uGrade < 60) {
+        badgeColor = "var(--color-red)";
+        badgeBg = "var(--color-red-bg)";
+      } else if (hasUGrade && uGrade < 70) {
+        badgeColor = "var(--color-orange)";
+        badgeBg = "var(--color-orange-bg)";
+      }
+
+      unitsHtml += `
+        <div class="student-mobile-unit-card">
+          <div class="student-mobile-unit-header">
+            <span>Unidad ${u} ${isLocked ? '🔒 (Bloqueada)' : ''}</span>
+            <span id="mobile-unit-badge-${uKey}" style="font-size: 13px; font-weight: 800; color: ${badgeColor}; background: ${badgeBg}; padding: 2px 10px; border-radius: 12px;">
+              Nota: ${displayUGrade}
+            </span>
+          </div>
+          <div class="student-mobile-inputs-grid">
+            <div class="student-mobile-input-field">
+              <label>Firmas (Meta: ${maxF})</label>
+              <input type="number" inputmode="numeric" min="0" max="99" class="mobile-grade-input ${isLocked ? 'cell-locked' : ''}" 
+                value="${fVal}" placeholder="0"
+                ${isLocked || (this.isSupervising && !this.supervisionEditMode) ? 'readonly' : ''}
+                onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
+                oninput="App.updateFirmas(${index}, '${uKey}', this.value); App.updateMobileStudentModalView(${index});" />
+            </div>
+            <div class="student-mobile-input-field">
+              <label>Examen (0 a 100)</label>
+              <input type="number" inputmode="decimal" min="0" max="100" class="mobile-grade-input ${isLocked ? 'cell-locked' : ''}" 
+                value="${eVal}" placeholder="0"
+                ${isLocked || (this.isSupervising && !this.supervisionEditMode) ? 'readonly' : ''}
+                onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
+                oninput="App.updateExamen(${index}, '${uKey}', this.value); App.updateMobileStudentModalView(${index});" />
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Color semáforo final
+    let finalColor = "var(--color-green)";
+    if (calcs.evalFinal < 60) finalColor = "var(--color-red)";
+    else if (calcs.evalFinal < 70) finalColor = "var(--color-orange)";
+
+    const hasEvals = calcs.hasEvaluations;
+    const displayFinal = hasEvals ? calcs.evalFinal : "-";
+    const badgeText = hasEvals ? (calcs.evalFinal >= 70 ? 'APROBADO' : 'REPROBADO') : 'PENDIENTE';
+    const badgeBg = hasEvals ? (calcs.evalFinal >= 70 ? 'var(--color-green-bg)' : 'var(--color-red-bg)') : 'var(--bg-selected)';
+
+    bodyEl.innerHTML = `
+      <div style="margin-bottom: 14px;">
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; margin-bottom: 8px;">
+          Evaluación por Unidades (Firmas + Examen)
+        </div>
+        ${unitsHtml}
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; margin-bottom: 8px;">
+          Evaluación Final y Proyecto
+        </div>
+        <div class="student-mobile-unit-card">
+          <div class="student-mobile-inputs-grid">
+            <div class="student-mobile-input-field">
+              <label>Proyecto Final (0 a 100)</label>
+              <input type="number" inputmode="decimal" min="0" max="100" class="mobile-grade-input" 
+                value="${rec.proyecto ?? ''}" placeholder="0"
+                ${this.isSupervising && !this.supervisionEditMode ? 'readonly' : ''}
+                onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
+                oninput="App.updateProyecto(${index}, this.value); App.updateMobileStudentModalView(${index});" />
+            </div>
+            <div class="student-mobile-input-field">
+              <label>Puntos Extra (+5 c/u)</label>
+              <input type="number" inputmode="numeric" min="0" max="10" class="mobile-grade-input" 
+                value="${rec.puntosExtra || 0}" placeholder="0"
+                ${this.isSupervising && !this.supervisionEditMode ? 'readonly' : ''}
+                onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
+                oninput="App.updatePuntosExtra(${index}, this.value); App.updateMobileStudentModalView(${index});" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="student-mobile-final-summary">
+        <div>
+          <div style="font-size: 11.5px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">
+            Calificación Final Oficial
+          </div>
+          <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">
+            Promedio de 5 Unidades + Proyecto + P. Extra
+          </div>
+        </div>
+        <div style="text-align: right; display: flex; align-items: center; gap: 12px;">
+          <div id="mobile-summary-final" style="font-size: 28px; font-weight: 900; color: ${finalColor};">
+            ${displayFinal}
+          </div>
+          <span id="mobile-summary-badge" style="font-size: 11.5px; font-weight: 800; color: ${finalColor}; background: ${badgeBg}; padding: 4px 10px; border-radius: 8px; border: 1px solid ${finalColor};">
+            ${badgeText}
+          </span>
+        </div>
+      </div>
+    `;
+  },
+
+  updateMobileStudentModalView: function(index) {
+    const course = this.getActiveCourse();
+    if (!course || !course.records || !course.records[index]) return;
+
+    const rec = course.records[index];
+    const calcs = this.calculateStudentGrades(rec, course);
+
+    // Actualizar badges de cada unidad sin reconstruir inputs para preservar foco
+    for (let u = 1; u <= 5; u++) {
+      const uKey = `u${u}`;
+      const uGrade = calcs.evalU[u];
+      const hasUGrade = uGrade !== null && uGrade !== undefined;
+      const displayUGrade = hasUGrade ? uGrade : "-";
+
+      let badgeColor = "var(--color-green)";
+      let badgeBg = "var(--color-green-bg)";
+      if (hasUGrade && uGrade < 60) {
+        badgeColor = "var(--color-red)";
+        badgeBg = "var(--color-red-bg)";
+      } else if (hasUGrade && uGrade < 70) {
+        badgeColor = "var(--color-orange)";
+        badgeBg = "var(--color-orange-bg)";
+      }
+
+      const badgeEl = document.getElementById(`mobile-unit-badge-${uKey}`);
+      if (badgeEl) {
+        badgeEl.style.color = badgeColor;
+        badgeEl.style.background = badgeBg;
+        badgeEl.textContent = `Nota: ${displayUGrade}`;
+      }
+    }
+
+    // Color semáforo final
+    let finalColor = "var(--color-green)";
+    if (calcs.evalFinal < 60) finalColor = "var(--color-red)";
+    else if (calcs.evalFinal < 70) finalColor = "var(--color-orange)";
+
+    const hasEvals = calcs.hasEvaluations;
+    const displayFinal = hasEvals ? calcs.evalFinal : "-";
+    const badgeText = hasEvals ? (calcs.evalFinal >= 70 ? 'APROBADO' : 'REPROBADO') : 'PENDIENTE';
+    const badgeBg = hasEvals ? (calcs.evalFinal >= 70 ? 'var(--color-green-bg)' : 'var(--color-red-bg)') : 'var(--bg-selected)';
+
+    const finalEl = document.getElementById("mobile-summary-final");
+    if (finalEl) {
+      finalEl.style.color = finalColor;
+      finalEl.textContent = displayFinal;
+    }
+
+    const summaryBadgeEl = document.getElementById("mobile-summary-badge");
+    if (summaryBadgeEl) {
+      summaryBadgeEl.style.color = finalColor;
+      summaryBadgeEl.style.background = badgeBg;
+      summaryBadgeEl.style.borderColor = finalColor;
+      summaryBadgeEl.textContent = badgeText;
+    }
   },
 
   // Filtrado instantáneo en vivo (DOM Directo sin destruir la tabla)
@@ -2262,8 +2632,8 @@ const App = {
   },
 
   submitCreateCourse: function() {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para crear materias.", "warning");
       return;
     }
     const nombre = document.getElementById("newCourseNombre")?.value.trim();
@@ -2317,8 +2687,8 @@ const App = {
   },
 
   submitEditCourse: function() {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para editar la materia.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -2342,8 +2712,8 @@ const App = {
   },
 
   duplicateCurrentCourse: function() {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para duplicar listas.", "warning");
       return;
     }
     const course = this.getActiveCourse();
@@ -2370,8 +2740,8 @@ const App = {
   },
 
   deleteCurrentCourse: function() {
-    if (this.isSupervising) {
-      this.showToast("⚠️ Modo Supervisión: Acción restringida en modo solo lectura.", "warning");
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para eliminar listas.", "warning");
       return;
     }
     if (!this.data || !this.data.courses || this.data.courses.length <= 1) {
@@ -2598,8 +2968,9 @@ const App = {
       // Descarga quirúrgica de calificaciones ÚNICAMENTE para este docente (VULN-3.0-02)
       const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
       let teacherData = teacher.data;
-      if (!teacherData && cloud && cloud.fetchTeacherData) {
-        teacherData = await cloud.fetchTeacherData(teacher.id);
+      if (cloud && cloud.fetchTeacherData) {
+        const freshData = await cloud.fetchTeacherData(teacher.id);
+        if (freshData) teacherData = freshData;
       }
       teacher.data = teacherData || { courses: [], students: [] };
       this.currentUser = teacher;
@@ -2691,8 +3062,14 @@ const App = {
     }
   },
 
-  logout: function() {
+  logout: async function() {
     this.stopInactivityTimer();
+    try {
+      // Mini-guardado forzado antes de revocar sesión
+      await this.flushSave();
+    } catch (e) {
+      console.error("Error al guardar calificaciones antes del logout:", e);
+    }
     const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
     if (cloud && cloud.stopListening) {
       cloud.stopListening();
@@ -2735,19 +3112,23 @@ const App = {
     // Descarga quirúrgica de calificaciones del docente supervisado (VULN-3.0-02)
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     let teacherData = teacher.data;
-    if (!teacherData && cloud && cloud.fetchTeacherData) {
-      this.showToast("Cargando calificaciones del docente...", "info");
-      teacherData = await cloud.fetchTeacherData(teacherId);
-      teacher.data = teacherData;
+    if (cloud && cloud.fetchTeacherData) {
+      this.showToast("Cargando calificaciones en vivo desde Supabase...", "info");
+      const freshData = await cloud.fetchTeacherData(teacherId);
+      if (freshData) {
+        teacherData = freshData;
+        teacher.data = freshData;
+      }
     }
 
     this.isSupervising = true;
     this.supervisingTeacherId = teacherId;
+    this.supervisionEditMode = true; // Por defecto habilitado para agilizar captura docente
     this.data = teacherData || { courses: [], students: [] };
     this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
     this.activeTab = "gradebook";
     this.render();
-    this.showToast(`Modo Supervisión: Auditando a ${teacher.nombre} (Solo Lectura)`);
+    this.showToast(`Supervisando a ${teacher.nombre} • Modo Edición Administrativa Activo`);
 
     // Suscripción en tiempo real a Supabase para ver las notas del profesor en vivo
     if (cloud && cloud.listenToTeacher) {
@@ -2768,6 +3149,43 @@ const App = {
     }
   },
 
+  toggleSupervisionEditMode: function() {
+    this.supervisionEditMode = !this.supervisionEditMode;
+    this.render();
+    if (this.supervisionEditMode) {
+      this.showToast("✏️ Modo Edición Administrativa HABILITADO. Las notas se guardarán en Supabase.", "success");
+    } else {
+      this.showToast("👁️ Modo Auditoría (Solo Lectura) activado.", "info");
+    }
+  },
+
+  isGradebookFocused: false,
+  toggleGradebookFocusMode: function() {
+    this.isGradebookFocused = !this.isGradebookFocused;
+    document.body.classList.toggle("gradebook-focus-mode", this.isGradebookFocused);
+    const iconEl = document.getElementById("btnFocusIcon");
+    const textEl = document.getElementById("btnFocusText");
+    if (iconEl) iconEl.textContent = this.isGradebookFocused ? "⤡" : "⤢";
+    if (textEl) textEl.textContent = this.isGradebookFocused ? "Restaurar Vista" : "Maximizar Calificador";
+    setTimeout(() => {
+      this.fitGradebookTableHeight();
+    }, 0);
+    this.showToast(this.isGradebookFocused ? "⤢ Modo Enfoque Máximo activado" : "⤡ Vista normal restaurada", "info");
+  },
+
+  fitGradebookTableHeight: function() {
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+    const container = document.getElementById("tabContentContainer");
+    if (container) container.scrollTop = 0;
+    const wrapper = document.querySelector(".notion-table-wrapper");
+    if (!wrapper) return;
+    wrapper.style.height = "";
+    wrapper.style.maxHeight = "";
+    wrapper.style.overflow = "auto";
+  },
+
   exitSupervision: function() {
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     if (cloud && cloud.stopListening) {
@@ -2775,6 +3193,7 @@ const App = {
     }
     this.isSupervising = false;
     this.supervisingTeacherId = null;
+    this.supervisionEditMode = true;
     this.data = this.currentUser ? (this.currentUser.data || null) : null;
     this.activeTab = "admin_dashboard";
     this.render();
@@ -2920,34 +3339,34 @@ const App = {
     container.innerHTML = `
       <div class="admin-dashboard-container">
         <div class="admin-header-area">
-          <div style="display: flex; align-items: center; gap: 16px;">
-            <div style="background: #ffffff; padding: 6px 12px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); border: 1px solid var(--border-color); flex-shrink: 0;">
-              <img src="Logos/FI-COLOR-HORIZONTAL-trim.png" alt="FIUAT" style="height: 38px; width: auto; display: block;" />
+          <div class="admin-header-brand">
+            <div class="admin-header-logo">
+              <img src="Logos/FI-COLOR-HORIZONTAL-trim.png" alt="FIUAT" />
             </div>
-            <div>
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                <h1 style="font-size: 20px; font-weight: 800; color: var(--text-primary);">
+            <div class="admin-header-titles">
+              <div class="admin-header-title-wrap">
+                <h1 class="admin-header-title">
                   Panel Central de Control y Supervisión Docente
                 </h1>
                 <span class="badge-role-admin">DIRECCIÓN FIUAT</span>
               </div>
-              <p style="font-size: 13px; color: var(--text-secondary); max-width: 800px;">
+              <p class="admin-header-desc">
                 Supervisión de actas, avance de firmas y calificaciones de todos los profesores de la <b>Facultad de Ingeniería Tampico</b>.
               </p>
             </div>
           </div>
 
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button class="btn btn-primary" style="background: var(--uat-orange); border-color: var(--uat-orange); font-weight: 700; display: inline-flex; align-items: center; gap: 7px;" onclick="App.openSyncRosterModal()">
+          <div class="admin-header-actions">
+            <button class="btn btn-primary admin-btn-sync" onclick="App.openSyncRosterModal()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-              Sincronizar Roster Oficial (153 Docentes)
+              <span>Sincronizar Roster Oficial (153 Docentes)</span>
             </button>
             <button class="btn btn-default" onclick="App.downloadAllFacultyBackup()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Respaldo (.json)
+              <span>Respaldo (.json)</span>
             </button>
             <button class="btn btn-default" onclick="App.openRegisterTeacherModal()">
-              + Nuevo Docente
+              <span>+ Nuevo Docente</span>
             </button>
           </div>
         </div>
@@ -3003,12 +3422,12 @@ const App = {
           </span>
         </div>
 
-        <div style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center;">
+        <div class="admin-search-wrap" style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; width: 100%;">
           <input type="text" id="adminTeacherSearch" class="form-control" 
             placeholder="Buscar docente por nombre o materia (ej. Treviño, Estructuras, Cálculo)..." 
             oninput="App.filterAdminTeachers(this.value)" autocomplete="off" 
-            style="font-size: 14px; padding: 10px 14px; border-radius: var(--radius-md);" />
-          <span id="adminTeacherCountBadge" style="font-size: 12.5px; color: var(--text-secondary); font-weight: 600; white-space: nowrap;">
+            style="font-size: 14px; padding: 10px 14px; border-radius: var(--radius-md); flex: 1 1 240px; min-width: 0;" />
+          <span id="adminTeacherCountBadge" style="font-size: 12.5px; color: var(--text-secondary); font-weight: 600;">
             Mostrando ${teachersList.length} profesores
           </span>
         </div>
@@ -3496,6 +3915,24 @@ const App = {
       window.addEventListener(evt, () => {
         App.resetInactivityTimer();
       }, { passive: true });
+    });
+
+    // Blindaje reactivo: Mini-guardado inmediato ante suspensión de pestaña, cambio de app en celular o cierre
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        App.flushSave();
+      }
+    });
+    window.addEventListener("pagehide", () => {
+      App.flushSave();
+    });
+    window.addEventListener("beforeunload", () => {
+      App.flushSave();
+    });
+
+    // Ajuste dinámico de altura de tabla estilo Excel en redimensionamiento de ventana
+    window.addEventListener("resize", () => {
+      App.fitGradebookTableHeight();
     });
   }
 };
