@@ -279,6 +279,11 @@ const App = {
             const fetchedData = await cloud.fetchTeacherData(this.currentUser.id);
             if (fetchedData) {
               this.data = fetchedData;
+              this.currentUser.data = fetchedData;
+              if (Array.isArray(this.teachers)) {
+                const idx = this.teachers.findIndex(t => t.id === this.currentUser.id);
+                if (idx !== -1) this.teachers[idx].data = JSON.parse(JSON.stringify(fetchedData));
+              }
             } else {
               // Respaldo de resiliencia local en sessionStorage si hubo desconexión puntual
               try {
@@ -428,6 +433,14 @@ const App = {
           }));
         }
       } catch (e) {}
+
+      // Sincronizar en memoria el arreglo maestro de profesores
+      if (Array.isArray(this.teachers)) {
+        const tIndex = this.teachers.findIndex(t => t.id === targetTeacher.id);
+        if (tIndex !== -1) {
+          this.teachers[tIndex].data = JSON.parse(JSON.stringify(this.data));
+        }
+      }
 
       if (cloud) {
         await cloud.saveTeacher(targetTeacher);
@@ -1215,11 +1228,7 @@ const App = {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Nueva Lista
             </button>
-            <button class="btn btn-default" onclick="App.openMaxFirmasModal()" title="Configurar metas de firmas para todas las unidades de esta materia">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-              Metas de Firmas
-            </button>
-            <button class="btn btn-default btn-course-pair" onclick="App.openManageCourseModal()" title="Ajustes de esta lista (renombrar, duplicar grupo, eliminar)">
+            <button class="btn btn-default btn-course-pair" onclick="App.openManageCourseModal()" title="Ajustes de esta lista (renombrar, unidades, metas de firmas, duplicar grupo, eliminar)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               Ajustes
             </button>
@@ -2844,6 +2853,23 @@ const App = {
       }
     }
 
+    // Sincronizar explícitamente en memoria todas las capas activas antes de persistir
+    if (this.currentUser) {
+      this.currentUser.data = this.data;
+      if (Array.isArray(this.teachers)) {
+        const tIdx = this.teachers.findIndex(t => t.id === this.currentUser.id);
+        if (tIdx !== -1) {
+          this.teachers[tIdx].data = JSON.parse(JSON.stringify(this.data));
+        }
+      }
+      try {
+        sessionStorage.setItem("fiuat_active_grades_buffer_" + this.currentUser.id, JSON.stringify({
+          data: this.data,
+          timestamp: Date.now()
+        }));
+      } catch(e) {}
+    }
+
     // Feedback visual bloqueante en el botón mientras se guarda en Supabase
     const btnSubmit = document.getElementById("btnSubmitEditCourse");
     if (btnSubmit) {
@@ -2856,8 +2882,21 @@ const App = {
       `;
     }
 
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
+
     try {
       await this.saveData();
+
+      // Verificación activa contra Supabase (Write-Through Confirmation)
+      if (cloud && cloud.fetchTeacherData && this.currentUser) {
+        const cloudVerify = await cloud.fetchTeacherData(this.currentUser.id);
+        if (cloudVerify && Array.isArray(cloudVerify.courses)) {
+          const vCourse = cloudVerify.courses.find(c => c.id === course.id);
+          if (vCourse && Number(vCourse.unidadesCount) === newCount) {
+            console.log(`✓ Verificación exitosa en Supabase: ${course.nombre} confirmada con ${newCount} unidades.`);
+          }
+        }
+      }
     } catch (err) {
       console.error("Error al persistir cambios en Supabase:", err);
     }
@@ -3128,14 +3167,36 @@ const App = {
     } else {
       // Descarga quirúrgica de calificaciones ÚNICAMENTE para este docente (VULN-3.0-02)
       const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
-      let teacherData = teacher.data;
+      let teacherData = null;
       if (cloud && cloud.fetchTeacherData) {
         const freshData = await cloud.fetchTeacherData(teacher.id);
         if (freshData) teacherData = freshData;
       }
-      teacher.data = teacherData || { courses: [], students: [] };
+      if (!teacherData) {
+        // Respaldo de resiliencia local en sessionStorage
+        try {
+          const bufStr = sessionStorage.getItem("fiuat_active_grades_buffer_" + teacher.id);
+          if (bufStr) {
+            const bufObj = JSON.parse(bufStr);
+            if (bufObj && bufObj.data) teacherData = bufObj.data;
+          }
+        } catch(e) {}
+      }
+      if (!teacherData) {
+        teacherData = teacher.data || { courses: [], students: [] };
+      }
+      teacher.data = teacherData;
       this.currentUser = teacher;
       this.data = teacher.data;
+
+      // Sincronizar en el catálogo de profesores en memoria
+      if (Array.isArray(this.teachers)) {
+        const idx = this.teachers.findIndex(t => t.id === teacher.id);
+        if (idx !== -1) {
+          this.teachers[idx].data = JSON.parse(JSON.stringify(teacherData));
+        }
+      }
+
       this.activeCourseId = (teacher.data && teacher.data.courses && teacher.data.courses[0]) ? teacher.data.courses[0].id : "";
       this.activeTab = "gradebook";
     }
@@ -3225,6 +3286,7 @@ const App = {
 
   logout: async function() {
     this.stopInactivityTimer();
+    const leavingTeacherId = this.currentUser ? this.currentUser.id : null;
     try {
       // Mini-guardado forzado antes de revocar sesión
       await this.flushSave();
@@ -3242,6 +3304,9 @@ const App = {
     sessionStorage.removeItem("notion_active_teacher_id");
     sessionStorage.removeItem("notion_session_token");
     sessionStorage.removeItem("notion_session_signature");
+    if (leavingTeacherId) {
+      sessionStorage.removeItem("fiuat_active_grades_buffer_" + leavingTeacherId);
+    }
     try { 
       localStorage.removeItem("notion_active_teacher_id"); 
       localStorage.removeItem("notion_teachers_db");
