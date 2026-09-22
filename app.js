@@ -2012,157 +2012,23 @@ const App = {
   },
 
   // Configuración de Máximo de Firmas y Unidades Dinámicas (3, 4, 5 o más unidades)
-  _tempModalUnitsCount: 5,
-  _tempModalMaxFirmas: {},
+  _tempManageUnitsCount: 5,
+  _tempManageMaxFirmas: {},
 
   openMaxFirmasModal: function() {
-    const course = this.getActiveCourse();
-    if (!course) return;
-    this._tempModalUnitsCount = Number(course.unidadesCount) || 5;
-    this._tempModalMaxFirmas = { ...(course.firmasMaxConfig || {}) };
-    
-    // Asegurar que existan valores por defecto si no están definidos
-    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
-      if (!this._tempModalMaxFirmas[`u${u}`]) {
-        this._tempModalMaxFirmas[`u${u}`] = 10;
-      }
-    }
-
-    const nameEl = document.getElementById("maxFirmasModalCourseName");
-    if (nameEl) nameEl.textContent = `${course.nombre} (${course.grupo || 'Grupo A'})`;
-
-    this.renderMaxFirmasModalInputs();
-
-    const modal = document.getElementById("maxFirmasModal");
-    if (modal) modal.classList.add("open");
-  },
-
-  renderMaxFirmasModalInputs: function() {
-    const course = this.getActiveCourse();
-    const countDisplay = document.getElementById("modalUnitsCountDisplay");
-    if (countDisplay) countDisplay.textContent = this._tempModalUnitsCount;
-
-    const btnRemove = document.getElementById("btnRemoveUnitModal");
-    const btnAdd = document.getElementById("btnAddUnitModal");
-    if (btnRemove) btnRemove.disabled = this._tempModalUnitsCount <= 1;
-    if (btnAdd) btnAdd.disabled = this._tempModalUnitsCount >= 8;
-
-    const warningEl = document.getElementById("maxFirmasUnitWarning");
-    const currentCourseUnits = (course && course.unidadesCount) ? Number(course.unidadesCount) : 5;
-    if (warningEl) {
-      if (this._tempModalUnitsCount < currentCourseUnits) {
-        warningEl.style.display = "block";
-        warningEl.innerHTML = `⚠️ <b>Aviso de ajuste:</b> Al reducir de ${currentCourseUnits} a ${this._tempModalUnitsCount} unidades, las firmas y exámenes de las unidades sobrantes (U${this._tempModalUnitsCount + 1}${currentCourseUnits > this._tempModalUnitsCount + 1 ? ' a U' + currentCourseUnits : ''}) se retirarán de la lista y el promedio final se dividirá exactamente entre <b>${this._tempModalUnitsCount}</b> unidades.`;
-      } else {
-        warningEl.style.display = "none";
-      }
-    }
-
-    const container = document.getElementById("maxFirmasModalInputsContainer");
-    if (!container) return;
-
-    let html = "";
-    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
-      const uKey = `u${u}`;
-      const val = this._tempModalMaxFirmas[uKey] || 10;
-      html += `
-        <div>
-          <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U${u}</label>
-          <input type="number" min="1" max="100" id="modalMaxF_u${u}" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" value="${val}"
-            oninput="App._syncModalInputFirmas('${uKey}', this.value)" />
-        </div>
-      `;
-    }
-    const cols = Math.min(this._tempModalUnitsCount, 5);
-    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    container.innerHTML = html;
-  },
-
-  _syncModalInputFirmas: function(uKey, val) {
-    const num = Math.max(1, Number(val) || 10);
-    this._tempModalMaxFirmas[uKey] = num;
-  },
-
-  changeModalUnitsCount: function(delta) {
-    // Guardar los valores actuales de los inputs antes de redimensionar
-    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
-      const inp = document.getElementById(`modalMaxF_u${u}`);
-      if (inp) {
-        this._tempModalMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
-      }
-    }
-
-    const newCount = this._tempModalUnitsCount + delta;
-    if (newCount < 1 || newCount > 8) return;
-
-    // Si aumentamos, asegurar un valor default para la nueva unidad
-    if (delta > 0 && !this._tempModalMaxFirmas[`u${newCount}`]) {
-      this._tempModalMaxFirmas[`u${newCount}`] = 10;
-    }
-
-    this._tempModalUnitsCount = newCount;
-    this.renderMaxFirmasModalInputs();
+    this.openManageCourseModal();
   },
 
   closeMaxFirmasModal: function() {
-    const modal = document.getElementById("maxFirmasModal");
-    if (modal) modal.classList.remove("open");
+    this.closeManageCourseModal();
   },
 
   saveMaxFirmasModal: function() {
-    const course = this.getActiveCourse();
-    if (!course) return;
+    return this.submitEditCourse();
+  },
 
-    // Recoger los valores finales de los inputs visibles
-    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
-      const inp = document.getElementById(`modalMaxF_u${u}`);
-      if (inp) {
-        this._tempModalMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
-      }
-    }
-
-    const oldCount = Number(course.unidadesCount) || 5;
-    const newCount = this._tempModalUnitsCount;
-    course.unidadesCount = newCount;
-
-    if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
-    for (let u = 1; u <= newCount; u++) {
-      course.firmasMaxConfig[`u${u}`] = this._tempModalMaxFirmas[`u${u}`] || 10;
-    }
-
-    // Si se redujeron unidades, depurar llaves sobrantes y registros de alumnos
-    if (newCount < oldCount) {
-      // 1. Limpiar firmasMaxConfig de unidades eliminadas
-      for (let u = newCount + 1; u <= 12; u++) {
-        delete course.firmasMaxConfig[`u${u}`];
-      }
-      // 2. Limpiar candados de bloqueo de unidades eliminadas
-      if (course.lockedUnits) {
-        for (let u = newCount + 1; u <= 12; u++) {
-          delete course.lockedUnits[`u${u}`];
-        }
-      }
-      // 3. Limpiar firmas y exámenes de las unidades eliminadas en todos los registros
-      if (course.records) {
-        course.records.forEach(r => {
-          if (r.firmas) {
-            for (let u = newCount + 1; u <= 12; u++) {
-              delete r.firmas[`u${u}`];
-            }
-          }
-          if (r.examenes) {
-            for (let u = newCount + 1; u <= 12; u++) {
-              delete r.examenes[`u${u}`];
-            }
-          }
-        });
-      }
-    }
-
-    this.saveData();
-    this.render();
-    this.closeMaxFirmasModal();
-    this.showToast(`¡Materia configurada con ${newCount} unidades! Exámenes y promedios recalculados exitosamente.`);
+  changeModalUnitsCount: function(delta) {
+    return this.changeManageModalUnitsCount(delta);
   },
 
   updateMaxFirmasConfig: function(uKey, val) {
@@ -2777,6 +2643,8 @@ const App = {
 
   openManageCourseModal: function() {
     const course = this.getActiveCourse();
+    if (!course) return;
+
     const inputNombre = document.getElementById("editCourseNombre");
     const inputGrupo = document.getElementById("editCourseGrupo");
     const inputPeriodo = document.getElementById("editCoursePeriodo");
@@ -2785,8 +2653,90 @@ const App = {
     if (inputGrupo) inputGrupo.value = course.grupo || "Grupo A";
     if (inputPeriodo) inputPeriodo.value = course.periodo || "2026-1";
 
+    this._tempManageUnitsCount = Number(course.unidadesCount) || 5;
+    this._tempManageMaxFirmas = { ...(course.firmasMaxConfig || {}) };
+
+    for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+      if (!this._tempManageMaxFirmas[`u${u}`]) {
+        this._tempManageMaxFirmas[`u${u}`] = 10;
+      }
+    }
+
+    this.renderManageCourseUnitsInputs();
+
+    const btnSubmit = document.getElementById("btnSubmitEditCourse");
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = "Guardar Cambios";
+    }
+
     const modal = document.getElementById("manageCourseModal");
     if (modal) modal.classList.add("open");
+  },
+
+  renderManageCourseUnitsInputs: function() {
+    const course = this.getActiveCourse();
+    const countDisplay = document.getElementById("manageModalUnitsCountDisplay");
+    if (countDisplay) countDisplay.textContent = this._tempManageUnitsCount;
+
+    const btnRemove = document.getElementById("btnRemoveUnitManageModal");
+    const btnAdd = document.getElementById("btnAddUnitManageModal");
+    if (btnRemove) btnRemove.disabled = this._tempManageUnitsCount <= 1;
+    if (btnAdd) btnAdd.disabled = this._tempManageUnitsCount >= 8;
+
+    const warningEl = document.getElementById("manageCourseUnitWarning");
+    const currentCourseUnits = (course && course.unidadesCount) ? Number(course.unidadesCount) : 5;
+    if (warningEl) {
+      if (this._tempManageUnitsCount < currentCourseUnits) {
+        warningEl.style.display = "block";
+        warningEl.innerHTML = `⚠️ <b>Aviso de ajuste:</b> Al reducir de ${currentCourseUnits} a ${this._tempManageUnitsCount} unidades, las firmas y exámenes de las unidades sobrantes (U${this._tempManageUnitsCount + 1}${currentCourseUnits > this._tempManageUnitsCount + 1 ? ' a U' + currentCourseUnits : ''}) se retirarán de la lista y el promedio final se dividirá exactamente entre <b>${this._tempManageUnitsCount}</b> unidades.`;
+      } else {
+        warningEl.style.display = "none";
+      }
+    }
+
+    const container = document.getElementById("manageCourseFirmasInputs");
+    if (!container) return;
+
+    let html = "";
+    for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+      const uKey = `u${u}`;
+      const val = this._tempManageMaxFirmas[uKey] || 10;
+      html += `
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U${u}</label>
+          <input type="number" min="1" max="100" id="manageModalMaxF_u${u}" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" value="${val}"
+            oninput="App._syncManageModalInputFirmas('${uKey}', this.value)" />
+        </div>
+      `;
+    }
+    const cols = Math.min(this._tempManageUnitsCount, 5);
+    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    container.innerHTML = html;
+  },
+
+  _syncManageModalInputFirmas: function(uKey, val) {
+    const num = Math.max(1, Number(val) || 10);
+    this._tempManageMaxFirmas[uKey] = num;
+  },
+
+  changeManageModalUnitsCount: function(delta) {
+    for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+      const inp = document.getElementById(`manageModalMaxF_u${u}`);
+      if (inp) {
+        this._tempManageMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
+      }
+    }
+
+    const newCount = this._tempManageUnitsCount + delta;
+    if (newCount < 1 || newCount > 8) return;
+
+    if (delta > 0 && !this._tempManageMaxFirmas[`u${newCount}`]) {
+      this._tempManageMaxFirmas[`u${newCount}`] = 10;
+    }
+
+    this._tempManageUnitsCount = newCount;
+    this.renderManageCourseUnitsInputs();
   },
 
   closeManageCourseModal: function() {
@@ -2794,12 +2744,14 @@ const App = {
     if (modal) modal.classList.remove("open");
   },
 
-  submitEditCourse: function() {
+  submitEditCourse: async function() {
     if (this.isSupervising && !this.supervisionEditMode) {
       this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para editar la materia.", "warning");
       return;
     }
     const course = this.getActiveCourse();
+    if (!course) return;
+
     const nombre = document.getElementById("editCourseNombre")?.value.trim();
     const grupo = document.getElementById("editCourseGrupo")?.value.trim();
     const periodo = document.getElementById("editCoursePeriodo")?.value.trim();
@@ -2809,14 +2761,79 @@ const App = {
       return;
     }
 
+    // Recoger valores de firmas de los inputs visibles
+    for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+      const inp = document.getElementById(`manageModalMaxF_u${u}`);
+      if (inp) {
+        this._tempManageMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
+      }
+    }
+
+    const oldCount = Number(course.unidadesCount) || 5;
+    const newCount = this._tempManageUnitsCount;
+
     course.nombre = nombre;
     course.grupo = grupo || "Grupo A";
     course.periodo = periodo || "2026-1";
+    course.unidadesCount = newCount;
 
-    this.saveData();
+    if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
+    for (let u = 1; u <= newCount; u++) {
+      course.firmasMaxConfig[`u${u}`] = this._tempManageMaxFirmas[`u${u}`] || 10;
+    }
+
+    // Si se redujeron unidades, depurar llaves sobrantes y registros de alumnos
+    if (newCount < oldCount) {
+      for (let u = newCount + 1; u <= 12; u++) {
+        delete course.firmasMaxConfig[`u${u}`];
+      }
+      if (course.lockedUnits) {
+        for (let u = newCount + 1; u <= 12; u++) {
+          delete course.lockedUnits[`u${u}`];
+        }
+      }
+      if (course.records) {
+        course.records.forEach(r => {
+          if (r.firmas) {
+            for (let u = newCount + 1; u <= 12; u++) {
+              delete r.firmas[`u${u}`];
+            }
+          }
+          if (r.examenes) {
+            for (let u = newCount + 1; u <= 12; u++) {
+              delete r.examenes[`u${u}`];
+            }
+          }
+        });
+      }
+    }
+
+    // Feedback visual bloqueante en el botón mientras se guarda en Supabase
+    const btnSubmit = document.getElementById("btnSubmitEditCourse");
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block; vertical-align:middle; animation:spin 1s linear infinite; margin-right:4px;">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+          <path d="M12 2a10 10 0 0 1 10 10"/>
+        </svg> Guardando en Supabase...
+      `;
+    }
+
+    try {
+      await this.saveData();
+    } catch (err) {
+      console.error("Error al persistir cambios en Supabase:", err);
+    }
+
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = "Guardar Cambios";
+    }
+
     this.closeManageCourseModal();
     this.render();
-    this.showToast(`Datos actualizados: ${nombre} • ${course.grupo}`);
+    this.showToast(`¡Ajustes guardados! Materia configurada con ${newCount} unidades y sincronizada en la nube.`);
   },
 
   duplicateCurrentCourse: function() {
@@ -3190,7 +3207,6 @@ const App = {
     sessionStorage.removeItem("notion_session_token");
     sessionStorage.removeItem("notion_session_signature");
     try { 
-      sessionStorage.clear();
       localStorage.removeItem("notion_active_teacher_id"); 
       localStorage.removeItem("notion_teachers_db");
       localStorage.removeItem("notion_grades_data");

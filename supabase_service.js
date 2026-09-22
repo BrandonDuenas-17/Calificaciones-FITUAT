@@ -13,6 +13,7 @@ const SupabaseService = {
   isOnline: navigator.onLine,
   status: "connecting", // "connected", "offline", "error"
   activeChannel: null,
+  _rpcSaveAvailable: null,
 
   init: async function() {
     if (typeof supabase === "undefined") {
@@ -233,22 +234,30 @@ const SupabaseService = {
       }
 
       // BLINDAJE VULN-3.0-01 (Anti-IDOR):
-      // 1. Intento primario vía función RPC segura en PostgreSQL
+      // 1. Intento primario vía función RPC segura en PostgreSQL (si está disponible)
       const payloadData = teacher.data || { courses: [], students: [] };
-      try {
-        const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("save_teacher_grades", {
-          p_teacher_id: teacher.id,
-          p_data: payloadData
-        });
-        if (!rpcErr && rpcSuccess === true) {
-          this.status = "connected";
-          this.notifyStatusChange();
-          if (typeof App !== "undefined" && App.setCloudSaveStatus) {
-            App.setCloudSaveStatus("saved");
+      if (this._rpcSaveAvailable !== false) {
+        try {
+          const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("save_teacher_grades", {
+            p_teacher_id: teacher.id,
+            p_data: payloadData
+          });
+          if (!rpcErr && rpcSuccess === true) {
+            this._rpcSaveAvailable = true;
+            this.status = "connected";
+            this.notifyStatusChange();
+            if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+              App.setCloudSaveStatus("saved");
+            }
+            return true;
           }
-          return true;
+          if (rpcErr && (rpcErr.code === "PGRST202" || rpcErr.message?.includes("not found"))) {
+            this._rpcSaveAvailable = false;
+          }
+        } catch (rpcEx) {
+          this._rpcSaveAvailable = false;
         }
-      } catch (rpcEx) {}
+      }
 
       // 2. Respaldo directo en tabla (solo columnas data y updated_at)
       const payload = {
