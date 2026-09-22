@@ -431,49 +431,51 @@
     </div>
   </div>
 
-  <!-- Modal para Configurar Máximo de Firmas de la Materia -->
+  <!-- Modal para Configurar Máximo de Firmas y Unidades de la Materia -->
   <div class="modal-backdrop" id="maxFirmasModal">
-    <div class="modal-content" style="max-width: 450px;">
+    <div class="modal-content" style="max-width: 500px;">
       <div class="modal-header">
         <h3 style="display: flex; align-items: center; gap: 8px;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--uat-orange);"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-          Meta de Firmas por Unidad
+          Meta de Firmas y Unidades por Materia
         </h3>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeMaxFirmasModal()">✕</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
-          Define cuántas firmas equivalen al <b>100% de firmas (50% de la calificación)</b> en cada unidad para <b id="maxFirmasModalCourseName" style="color: var(--uat-blue-night);">esta materia</b>:
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+          Define la cantidad de unidades/exámenes y la meta de firmas (50% de la calificación) para <b id="maxFirmasModalCourseName" style="color: var(--uat-blue-night);">esta materia</b>:
         </p>
-        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px;">
+
+        <!-- Selector / Stepper de Cantidad de Unidades -->
+        <div style="background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
           <div>
-            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U1</label>
-            <input type="number" min="1" max="100" id="modalMaxF_u1" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
+            <span style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: block;">Unidades del Curso:</span>
+            <span style="font-size: 11.5px; color: var(--text-tertiary);">Determina cuántas unidades y exámenes aplican a esta materia</span>
           </div>
-          <div>
-            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U2</label>
-            <input type="number" min="1" max="100" id="modalMaxF_u2" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
-          </div>
-          <div>
-            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U3</label>
-            <input type="number" min="1" max="100" id="modalMaxF_u3" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
-          </div>
-          <div>
-            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U4</label>
-            <input type="number" min="1" max="100" id="modalMaxF_u4" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
-          </div>
-          <div>
-            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U5</label>
-            <input type="number" min="1" max="100" id="modalMaxF_u5" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" />
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button type="button" class="btn btn-default btn-sm" id="btnRemoveUnitModal" onclick="App.changeModalUnitsCount(-1)" style="font-weight: 800; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; border-radius: var(--radius-sm);" title="Quitar última unidad">-</button>
+            <span id="modalUnitsCountDisplay" style="font-size: 16px; font-weight: 800; color: var(--uat-orange); min-width: 24px; text-align: center;">5</span>
+            <button type="button" class="btn btn-default btn-sm" id="btnAddUnitModal" onclick="App.changeModalUnitsCount(1)" style="font-weight: 800; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; border-radius: var(--radius-sm);" title="Agregar unidad">+</button>
           </div>
         </div>
+
+        <!-- Aviso dinámico al reducir unidades -->
+        <div id="maxFirmasUnitWarning" style="display: none; background: rgba(224, 90, 43, 0.08); border: 1px solid rgba(224, 90, 43, 0.3); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: var(--text-secondary); line-height: 1.45;">
+          ⚠️ <b>Aviso de ajuste:</b> Al reducir unidades, las columnas de firmas y exámenes sobrantes se retirarán de la lista y el promedio final se dividirá exactamente entre el nuevo número de unidades.
+        </div>
+
+        <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; display: block;">Meta de firmas al 100% por cada unidad:</label>
+        
+        <!-- Contenedor dinámico de inputs de firmas -->
+        <div id="maxFirmasModalInputsContainer" style="display: grid; gap: 10px; margin-bottom: 16px;"></div>
+
         <div style="background: var(--bg-secondary); padding: 12px; border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
           <b>Cálculo oficial UAT:</b> Si fijas la meta en <b>10 firmas</b> y un alumno entrega <b>8</b>, obtiene el 80% de las firmas (<b>40 puntos</b>). Al examen (50 pts) se le suman estos 40 pts para obtener la nota final de la unidad.
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-default" onclick="App.closeMaxFirmasModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="App.saveMaxFirmasModal()">Guardar y Aplicar</button>
+        <button class="btn btn-primary" style="background: var(--uat-orange); border-color: var(--uat-orange); font-weight: 700;" onclick="App.saveMaxFirmasModal()">Guardar y Aplicar</button>
       </div>
     </div>
   </div>

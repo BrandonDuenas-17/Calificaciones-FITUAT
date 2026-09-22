@@ -629,7 +629,9 @@ const App = {
     const count = records.length;
     if (count === 0) return stats;
 
-    for (let u = 1; u <= (course.unidadesCount || 5); u++) {
+    const numUnits = Number(course.unidadesCount) || 5;
+
+    for (let u = 1; u <= numUnits; u++) {
       const uKey = `u${u}`;
       
       // Firmas
@@ -650,8 +652,12 @@ const App = {
     // Evaluaciones
     let sumFinal = 0;
     let finalCount = 0;
-    const evalSums = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    const evalCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const evalSums = {};
+    const evalCounts = {};
+    for (let u = 1; u <= numUnits; u++) {
+      evalSums[u] = 0;
+      evalCounts[u] = 0;
+    }
 
     records.forEach(r => {
       const c = this.calculateStudentGrades(r, course);
@@ -659,7 +665,7 @@ const App = {
         sumFinal += c.evalFinal;
         finalCount++;
       }
-      for (let u = 1; u <= 5; u++) {
+      for (let u = 1; u <= numUnits; u++) {
         if (c.evalU[u] !== null && c.evalU[u] !== undefined) {
           evalSums[u] += c.evalU[u];
           evalCounts[u]++;
@@ -668,7 +674,7 @@ const App = {
     });
 
     stats.avgFinal = finalCount > 0 ? (sumFinal / finalCount).toFixed(1) : "0.0";
-    for (let u = 1; u <= 5; u++) {
+    for (let u = 1; u <= numUnits; u++) {
       stats.avgEvaluaciones[u] = evalCounts[u] > 0 ? (evalSums[u] / evalCounts[u]).toFixed(2) : "0.00";
     }
 
@@ -889,6 +895,7 @@ const App = {
   // 1. VISTA DE CALIFICADOR (RÉPLICA DE NOTION)
   renderGradebook: function(container) {
     const course = this.getActiveCourse();
+    const numUnits = Number(course.unidadesCount) || 5;
     const studentsMap = this.getStudentsMap();
     const stats = this.calculateCourseStats(course);
     const maxFirmasConfig = course.firmasMaxConfig || {};
@@ -912,9 +919,9 @@ const App = {
       if (calcs.evalFinal < 60) finalColor = "var(--color-red)";
       else if (calcs.evalFinal < 70) finalColor = "var(--color-orange)";
 
-      // Celdas de Firmas U1 a U5
+      // Celdas de Firmas U1 a Un
       let firmasCells = "";
-      for (let u = 1; u <= 5; u++) {
+      for (let u = 1; u <= numUnits; u++) {
         const uKey = `u${u}`;
         const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
         const isFieldReadOnly = isLocked || isAuditReadOnly;
@@ -944,9 +951,9 @@ const App = {
         `;
       }
 
-      // Celdas de Exámenes U1 a U5
+      // Celdas de Exámenes U1 a Un
       let examenesCells = "";
-      for (let u = 1; u <= 5; u++) {
+      for (let u = 1; u <= numUnits; u++) {
         const uKey = `u${u}`;
         const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
         const isFieldReadOnly = isLocked || isAuditReadOnly;
@@ -974,9 +981,9 @@ const App = {
         `;
       }
 
-      // Celdas de Evaluación calculada U1 a U5
+      // Celdas de Evaluación calculada U1 a Un
       let evalCells = "";
-      for (let u = 1; u <= 5; u++) {
+      for (let u = 1; u <= numUnits; u++) {
         const uKey = `u${u}`;
         const val = calcs.evalU[u];
         const hasVal = val !== null && val !== undefined;
@@ -1084,7 +1091,7 @@ const App = {
     });
 
     let firmasHeadersHtml = "";
-    for (let u = 1; u <= 5; u++) {
+    for (let u = 1; u <= numUnits; u++) {
       const uKey = `u${u}`;
       const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
       firmasHeadersHtml += `
@@ -1100,7 +1107,7 @@ const App = {
     }
 
     let examenesHeadersHtml = "";
-    for (let u = 1; u <= 5; u++) {
+    for (let u = 1; u <= numUnits; u++) {
       const uKey = `u${u}`;
       const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
       examenesHeadersHtml += `
@@ -1112,6 +1119,46 @@ const App = {
             <span class="unit-lock-btn ${isLocked ? 'locked' : ''}" onclick="event.stopPropagation(); App.toggleUnitLock('${uKey}')" title="${isLocked ? `Unidad ${u} bloqueada (Solo Lectura). Haz clic para desbloquear` : `Bloquear Unidad ${u} para congelar calificaciones`}">${isLocked ? '🔒' : '🔓'}</span>
           </div>
         </th>
+      `;
+    }
+
+    let evalHeadersHtml = "";
+    for (let u = 1; u <= numUnits; u++) {
+      evalHeadersHtml += `
+        <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U${u}</div></th>
+      `;
+    }
+
+    let footerMaxFirmasHtml = "";
+    for (let u = 1; u <= numUnits; u++) {
+      const uKey = `u${u}`;
+      footerMaxFirmasHtml += `
+        <td>
+          <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad ${u}">
+            <span class="summary-label">MAX:</span>
+            <input type="number" min="1" max="100" class="footer-max-firmas-input" 
+              id="footer-max-${uKey}" 
+              value="${maxFirmasConfig[uKey] || 10}" 
+              onfocus="this.select()"
+              onchange="App.updateMaxFirmasConfig('${uKey}', this.value)"
+              title="Haz clic para cambiar el máximo de firmas de la Unidad ${u}" />
+          </div>
+        </td>
+      `;
+    }
+
+    let footerAvgExamenesHtml = "";
+    for (let u = 1; u <= numUnits; u++) {
+      const uKey = `u${u}`;
+      footerAvgExamenesHtml += `
+        <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-exam-${uKey}" class="summary-value">${stats.avgExamenes[uKey] || '0.00'}</span></span></td>
+      `;
+    }
+
+    let footerAvgEvalsHtml = "";
+    for (let u = 1; u <= numUnits; u++) {
+      footerAvgEvalsHtml += `
+        <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-eval-u${u}" class="summary-value">${stats.avgEvaluaciones[u] || '0.00'}</span></span></td>
       `;
     }
 
@@ -1222,18 +1269,14 @@ const App = {
               <th class="col-sticky-2 col-alumno" style="width: 270px;"><div class="th-content"><span class="th-icon">Q</span> Alumno (Rollup)</div></th>
               <th style="width: 160px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación Final</div></th>
               
-              <!-- Firmas U1-U5 con Candado de Bloqueo -->
+              <!-- Firmas U1-Un con Candado de Bloqueo -->
               ${firmasHeadersHtml}
 
-              <!-- Exámenes U1-U5 con Candado de Bloqueo -->
+              <!-- Exámenes U1-Un con Candado de Bloqueo -->
               ${examenesHeadersHtml}
 
-              <!-- Evaluaciones Calculadas U1-U5 -->
-              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U1</div></th>
-              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U2</div></th>
-              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U3</div></th>
-              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U4</div></th>
-              <th style="width: 95px;"><div class="th-content"><span class="th-icon">Σ</span> Evaluación U5</div></th>
+              <!-- Evaluaciones Calculadas U1-Un -->
+              ${evalHeadersHtml}
 
               <th style="width: 95px;"><div class="th-content"><span class="th-icon">#</span> Proyecto Final</div></th>
               <th style="width: 95px;"><div class="th-content"><span class="th-icon">#</span> Puntos Extra</div></th>
@@ -1241,7 +1284,7 @@ const App = {
             </tr>
           </thead>
           <tbody id="gradebookTableBody">
-            ${rowsHtml || `<tr><td colspan="21" style="text-align: center; padding: 24px; color: var(--text-tertiary);">No se encontraron alumnos registrados.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${6 + (numUnits * 3)}" style="text-align: center; padding: 24px; color: var(--text-tertiary);">No se encontraron alumnos registrados.</td></tr>`}
           </tbody>
           <tfoot>
             <tr class="notion-table-footer">
@@ -1249,75 +1292,13 @@ const App = {
               <td><span class="summary-chip"><span class="summary-label">AVERAGE:</span> <span id="stat-avg-final" class="summary-value">${stats.avgFinal}</span></span></td>
               
               <!-- Max Firmas con Edición Directa en Pie de Tabla -->
-              <td>
-                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 1">
-                  <span class="summary-label">MAX:</span>
-                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
-                    id="footer-max-u1" 
-                    value="${maxFirmasConfig.u1 || 10}" 
-                    onfocus="this.select()"
-                    onchange="App.updateMaxFirmasConfig('u1', this.value)"
-                    title="Haz clic para cambiar el máximo de firmas de la Unidad 1" />
-                </div>
-              </td>
-              <td>
-                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 2">
-                  <span class="summary-label">MAX:</span>
-                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
-                    id="footer-max-u2" 
-                    value="${maxFirmasConfig.u2 || 10}" 
-                    onfocus="this.select()"
-                    onchange="App.updateMaxFirmasConfig('u2', this.value)"
-                    title="Haz clic para cambiar el máximo de firmas de la Unidad 2" />
-                </div>
-              </td>
-              <td>
-                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 3">
-                  <span class="summary-label">MAX:</span>
-                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
-                    id="footer-max-u3" 
-                    value="${maxFirmasConfig.u3 || 10}" 
-                    onfocus="this.select()"
-                    onchange="App.updateMaxFirmasConfig('u3', this.value)"
-                    title="Haz clic para cambiar el máximo de firmas de la Unidad 3" />
-                </div>
-              </td>
-              <td>
-                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 4">
-                  <span class="summary-label">MAX:</span>
-                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
-                    id="footer-max-u4" 
-                    value="${maxFirmasConfig.u4 || 10}" 
-                    onfocus="this.select()"
-                    onchange="App.updateMaxFirmasConfig('u4', this.value)"
-                    title="Haz clic para cambiar el máximo de firmas de la Unidad 4" />
-                </div>
-              </td>
-              <td>
-                <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de firmas de la Unidad 5">
-                  <span class="summary-label">MAX:</span>
-                  <input type="number" min="1" max="100" class="footer-max-firmas-input" 
-                    id="footer-max-u5" 
-                    value="${maxFirmasConfig.u5 || 10}" 
-                    onfocus="this.select()"
-                    onchange="App.updateMaxFirmasConfig('u5', this.value)"
-                    title="Haz clic para cambiar el máximo de firmas de la Unidad 5" />
-                </div>
-              </td>
+              ${footerMaxFirmasHtml}
 
               <!-- Promedio Exámenes -->
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-exam-u1" class="summary-value">${stats.avgExamenes.u1}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-exam-u2" class="summary-value">${stats.avgExamenes.u2}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-exam-u3" class="summary-value">${stats.avgExamenes.u3}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-exam-u4" class="summary-value">${stats.avgExamenes.u4}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-exam-u5" class="summary-value">${stats.avgExamenes.u5}</span></span></td>
+              ${footerAvgExamenesHtml}
 
               <!-- Promedio Evaluaciones -->
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-eval-u1" class="summary-value">${stats.avgEvaluaciones[1]}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-eval-u2" class="summary-value">${stats.avgEvaluaciones[2]}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-eval-u3" class="summary-value">${stats.avgEvaluaciones[3]}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-eval-u4" class="summary-value">${stats.avgEvaluaciones[4]}</span></span></td>
-              <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-eval-u5" class="summary-value">${stats.avgEvaluaciones[5]}</span></span></td>
+              ${footerAvgEvalsHtml}
 
               <td colspan="3"></td>
             </tr>
@@ -1525,6 +1506,10 @@ const App = {
     const course = this.getActiveCourse();
     const maxF = course.firmasMaxConfig || { u1: 6, u2: 14, u3: 17, u4: 23, u5: 10 };
 
+    const numUnits = Number(course.unidadesCount) || 5;
+    const unitIndices = Array.from({ length: numUnits }, (_, i) => i + 1);
+    const unitListStr = unitIndices.map(u => `U${u}`).join(', ');
+
     container.innerHTML = `
       <div class="page-title-area">
         <h1 class="page-title">
@@ -1538,10 +1523,10 @@ const App = {
       <div style="max-width: 750px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;">
         <h3 style="font-size: 15px; margin-bottom: 14px;">Máximo de Firmas por Unidad (${this.escapeHtml(course.nombre)})</h3>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
-          Define la cantidad máxima de firmas para la escala del 50% en cada unidad:
+          Define la cantidad máxima de firmas para la escala del 50% en cada una de las <b>${numUnits} unidades</b> de esta materia:
         </p>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 20px;">
-          ${[1, 2, 3, 4, 5].map(u => `
+          ${unitIndices.map(u => `
             <div>
               <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Unidad ${u}</label>
               <input type="number" min="1" max="100" class="form-control" value="${maxF[`u${u}`] || 10}" 
@@ -1552,7 +1537,7 @@ const App = {
 
         <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 24px 0;" />
 
-        <h3 style="font-size: 15px; margin-bottom: 12px;">Fórmulas Matemáticas Activas</h3>
+        <h3 style="font-size: 15px; margin-bottom: 12px;">Fórmulas Matemáticas Activas (${numUnits} Unidades)</h3>
         
         <div style="background: var(--bg-secondary); padding: 14px; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 12.5px; margin-bottom: 14px; line-height: 1.6;">
           <b style="color: var(--accent-color);">// Evaluación por Unidad:</b><br />
@@ -1561,7 +1546,7 @@ const App = {
 
         <div style="background: var(--bg-secondary); padding: 14px; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6;">
           <b style="color: var(--accent-color);">// Evaluación Final:</b><br />
-          if(round(mean(U1, U2, U3, U4, U5, Proyecto) + (PuntosExtra * 5)) > 100, 100, round(...))
+          if(round(mean(${unitListStr}, Proyecto) + (PuntosExtra * 5)) > 100, 100, round(...))
         </div>
       </div>
     `;
@@ -1734,8 +1719,9 @@ const App = {
       }
     }
 
-    // 3. Actualizar los números y anillos de Evaluación calculada U1 a U5
-    for (let u = 1; u <= 5; u++) {
+    // 3. Actualizar los números y anillos de Evaluación calculada U1 a Un
+    const numUnits = Number(course.unidadesCount) || 5;
+    for (let u = 1; u <= numUnits; u++) {
       const uK = `u${u}`;
       const valEl = document.getElementById(`val-eval-${recIdx}-${uK}`);
       const ringEl = document.getElementById(`ring-eval-${recIdx}-${uK}`);
@@ -1803,11 +1789,12 @@ const App = {
     const course = this.getActiveCourse();
     const stats = this.calculateCourseStats(course);
     const maxFirmasConfig = course.firmasMaxConfig || {};
+    const numUnits = Number(course.unidadesCount) || 5;
 
     const avgFinalEl = document.getElementById('stat-avg-final');
     if (avgFinalEl) avgFinalEl.textContent = stats.avgFinal;
 
-    for (let u = 1; u <= 5; u++) {
+    for (let u = 1; u <= numUnits; u++) {
       const uK = `u${u}`;
       const maxFEl = document.getElementById(`stat-max-firmas-${uK}`);
       if (maxFEl) maxFEl.textContent = stats.maxFirmas[uK] || maxFirmasConfig[uK] || 0;
@@ -2024,19 +2011,97 @@ const App = {
     }
   },
 
-  // Configuración de Máximo de Firmas
+  // Configuración de Máximo de Firmas y Unidades Dinámicas (3, 4, 5 o más unidades)
+  _tempModalUnitsCount: 5,
+  _tempModalMaxFirmas: {},
+
   openMaxFirmasModal: function() {
     const course = this.getActiveCourse();
     if (!course) return;
-    const maxF = course.firmasMaxConfig || { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 };
+    this._tempModalUnitsCount = Number(course.unidadesCount) || 5;
+    this._tempModalMaxFirmas = { ...(course.firmasMaxConfig || {}) };
+    
+    // Asegurar que existan valores por defecto si no están definidos
+    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
+      if (!this._tempModalMaxFirmas[`u${u}`]) {
+        this._tempModalMaxFirmas[`u${u}`] = 10;
+      }
+    }
+
     const nameEl = document.getElementById("maxFirmasModalCourseName");
     if (nameEl) nameEl.textContent = `${course.nombre} (${course.grupo || 'Grupo A'})`;
-    for (let u = 1; u <= 5; u++) {
-      const inp = document.getElementById(`modalMaxF_u${u}`);
-      if (inp) inp.value = maxF[`u${u}`] || 10;
-    }
+
+    this.renderMaxFirmasModalInputs();
+
     const modal = document.getElementById("maxFirmasModal");
     if (modal) modal.classList.add("open");
+  },
+
+  renderMaxFirmasModalInputs: function() {
+    const course = this.getActiveCourse();
+    const countDisplay = document.getElementById("modalUnitsCountDisplay");
+    if (countDisplay) countDisplay.textContent = this._tempModalUnitsCount;
+
+    const btnRemove = document.getElementById("btnRemoveUnitModal");
+    const btnAdd = document.getElementById("btnAddUnitModal");
+    if (btnRemove) btnRemove.disabled = this._tempModalUnitsCount <= 1;
+    if (btnAdd) btnAdd.disabled = this._tempModalUnitsCount >= 8;
+
+    const warningEl = document.getElementById("maxFirmasUnitWarning");
+    const currentCourseUnits = (course && course.unidadesCount) ? Number(course.unidadesCount) : 5;
+    if (warningEl) {
+      if (this._tempModalUnitsCount < currentCourseUnits) {
+        warningEl.style.display = "block";
+        warningEl.innerHTML = `⚠️ <b>Aviso de ajuste:</b> Al reducir de ${currentCourseUnits} a ${this._tempModalUnitsCount} unidades, las firmas y exámenes de las unidades sobrantes (U${this._tempModalUnitsCount + 1}${currentCourseUnits > this._tempModalUnitsCount + 1 ? ' a U' + currentCourseUnits : ''}) se retirarán de la lista y el promedio final se dividirá exactamente entre <b>${this._tempModalUnitsCount}</b> unidades.`;
+      } else {
+        warningEl.style.display = "none";
+      }
+    }
+
+    const container = document.getElementById("maxFirmasModalInputsContainer");
+    if (!container) return;
+
+    let html = "";
+    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
+      const uKey = `u${u}`;
+      const val = this._tempModalMaxFirmas[uKey] || 10;
+      html += `
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U${u}</label>
+          <input type="number" min="1" max="100" id="modalMaxF_u${u}" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" value="${val}"
+            oninput="App._syncModalInputFirmas('${uKey}', this.value)" />
+        </div>
+      `;
+    }
+    const cols = Math.min(this._tempModalUnitsCount, 5);
+    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    container.innerHTML = html;
+  },
+
+  _syncModalInputFirmas: function(uKey, val) {
+    const num = Math.max(1, Number(val) || 10);
+    this._tempModalMaxFirmas[uKey] = num;
+  },
+
+  changeModalUnitsCount: function(delta) {
+    // Guardar los valores actuales de los inputs antes de redimensionar
+    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
+      const inp = document.getElementById(`modalMaxF_u${u}`);
+      if (inp) {
+        this._tempModalMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
+      }
+    }
+
+    const newCount = this._tempModalUnitsCount + delta;
+    if (newCount < 1 || newCount > 8) return;
+
+    // Si aumentamos, asegurar un valor default para la nueva unidad
+    if (delta > 0 && !this._tempModalMaxFirmas[`u${newCount}`]) {
+      this._tempModalMaxFirmas[`u${newCount}`] = 10;
+    }
+
+    this._tempModalUnitsCount = newCount;
+    this.renderMaxFirmasModalInputs();
   },
 
   closeMaxFirmasModal: function() {
@@ -2047,18 +2112,57 @@ const App = {
   saveMaxFirmasModal: function() {
     const course = this.getActiveCourse();
     if (!course) return;
-    if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
-    for (let u = 1; u <= 5; u++) {
+
+    // Recoger los valores finales de los inputs visibles
+    for (let u = 1; u <= this._tempModalUnitsCount; u++) {
       const inp = document.getElementById(`modalMaxF_u${u}`);
       if (inp) {
-        const val = Math.max(1, Number(inp.value) || 10);
-        course.firmasMaxConfig[`u${u}`] = val;
+        this._tempModalMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
       }
     }
+
+    const oldCount = Number(course.unidadesCount) || 5;
+    const newCount = this._tempModalUnitsCount;
+    course.unidadesCount = newCount;
+
+    if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
+    for (let u = 1; u <= newCount; u++) {
+      course.firmasMaxConfig[`u${u}`] = this._tempModalMaxFirmas[`u${u}`] || 10;
+    }
+
+    // Si se redujeron unidades, depurar llaves sobrantes y registros de alumnos
+    if (newCount < oldCount) {
+      // 1. Limpiar firmasMaxConfig de unidades eliminadas
+      for (let u = newCount + 1; u <= 12; u++) {
+        delete course.firmasMaxConfig[`u${u}`];
+      }
+      // 2. Limpiar candados de bloqueo de unidades eliminadas
+      if (course.lockedUnits) {
+        for (let u = newCount + 1; u <= 12; u++) {
+          delete course.lockedUnits[`u${u}`];
+        }
+      }
+      // 3. Limpiar firmas y exámenes de las unidades eliminadas en todos los registros
+      if (course.records) {
+        course.records.forEach(r => {
+          if (r.firmas) {
+            for (let u = newCount + 1; u <= 12; u++) {
+              delete r.firmas[`u${u}`];
+            }
+          }
+          if (r.examenes) {
+            for (let u = newCount + 1; u <= 12; u++) {
+              delete r.examenes[`u${u}`];
+            }
+          }
+        });
+      }
+    }
+
     this.saveData();
     this.render();
     this.closeMaxFirmasModal();
-    this.showToast(`Metas de firmas actualizadas y sincronizadas en la nube`);
+    this.showToast(`¡Materia configurada con ${newCount} unidades! Exámenes y promedios recalculados exitosamente.`);
   },
 
   updateMaxFirmasConfig: function(uKey, val) {
@@ -2131,9 +2235,10 @@ const App = {
     const bodyEl = document.getElementById("studentModalBody");
     if (!bodyEl) return;
 
-    // Generar desglose de unidades U1 a U5
+    // Generar desglose de unidades U1 a Un
+    const numUnits = Number(course.unidadesCount) || 5;
     let unitsHtml = "";
-    for (let u = 1; u <= 5; u++) {
+    for (let u = 1; u <= numUnits; u++) {
       const uKey = `u${u}`;
       const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
       const maxF = maxFirmasConfig[uKey] || 10;
@@ -2237,7 +2342,7 @@ const App = {
             Calificación Final Oficial
           </div>
           <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">
-            Promedio de 5 Unidades + Proyecto + P. Extra
+            Promedio de ${numUnits} Unidades + Proyecto + P. Extra
           </div>
         </div>
         <div style="text-align: right; display: flex; align-items: center; gap: 12px;">
@@ -2258,9 +2363,10 @@ const App = {
 
     const rec = course.records[index];
     const calcs = this.calculateStudentGrades(rec, course);
+    const numUnits = Number(course.unidadesCount) || 5;
 
     // Actualizar badges de cada unidad sin reconstruir inputs para preservar foco
-    for (let u = 1; u <= 5; u++) {
+    for (let u = 1; u <= numUnits; u++) {
       const uKey = `u${u}`;
       const uGrade = calcs.evalU[u];
       const hasUGrade = uGrade !== null && uGrade !== undefined;
@@ -2354,6 +2460,8 @@ const App = {
     const estatus = hasEvals ? (calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO") : "SIN EVALUAR";
     const statusClass = hasEvals ? (calcs.evalFinal >= 70 ? 'status-aprobado' : 'status-reprobado') : 'status-pending';
     const finalPtsText = hasEvals ? `${calcs.evalFinal} PTS` : 'PENDIENTE';
+    const lookupUnits = Number(course.unidadesCount) || 5;
+    const lookupUnitIndices = Array.from({ length: lookupUnits }, (_, i) => i + 1);
 
     resultDiv.innerHTML = `
       <div class="student-result-card">
@@ -2367,8 +2475,8 @@ const App = {
           </span>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; text-align: center; margin: 16px 0; background: var(--bg-secondary); padding: 10px; border-radius: 6px;">
-          ${[1, 2, 3, 4, 5].map(u => {
+        <div style="display: grid; grid-template-columns: repeat(${lookupUnits}, 1fr); gap: 8px; text-align: center; margin: 16px 0; background: var(--bg-secondary); padding: 10px; border-radius: 6px;">
+          ${lookupUnitIndices.map(u => {
             const ev = calcs.evalU[u];
             const hasEv = ev !== null && ev !== undefined;
             const evColor = hasEv ? (ev >= 70 ? 'var(--color-green)' : (ev >= 60 ? 'var(--color-orange)' : 'var(--color-red)')) : 'var(--text-tertiary)';

@@ -10,12 +10,16 @@ const Exporter = {
     let headers = [];
     let rows = [];
 
+    const numUnits = Number(course.unidadesCount) || 5;
+    const unitIndices = Array.from({ length: numUnits }, (_, i) => i + 1);
+
     if (mode === 'teams') {
       // Modo Publicación para Alumnos en Teams
       const includeNames = options.includeNames !== false;
+      const evalHeaders = unitIndices.map(u => `Eval U${u}`);
       headers = includeNames 
-        ? ["Matrícula", "Nombre del Alumno", "Eval U1", "Eval U2", "Eval U3", "Eval U4", "Eval U5", "Proyecto Final", "Puntos Extra", "Calificación Final", "Estatus"]
-        : ["Matrícula (ID)", "Eval U1", "Eval U2", "Eval U3", "Eval U4", "Eval U5", "Proyecto Final", "Puntos Extra", "Calificación Final", "Estatus"];
+        ? ["Matrícula", "Nombre del Alumno", ...evalHeaders, "Proyecto Final", "Puntos Extra", "Calificación Final", "Estatus"]
+        : ["Matrícula (ID)", ...evalHeaders, "Proyecto Final", "Puntos Extra", "Calificación Final", "Estatus"];
 
       rows = records.map(rec => {
         const student = studentsMap[rec.matricula] || { nombre: "NO REGISTRADO" };
@@ -24,15 +28,12 @@ const Exporter = {
           ? (calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO") 
           : "PENDIENTE";
         const getEval = (u) => (calcs.evalU[u] !== null && calcs.evalU[u] !== undefined) ? calcs.evalU[u] : "-";
+        const evalVals = unitIndices.map(u => getEval(u));
 
         const baseRow = includeNames ? [rec.matricula, student.nombre] : [rec.matricula];
         return [
           ...baseRow,
-          getEval(1),
-          getEval(2),
-          getEval(3),
-          getEval(4),
-          getEval(5),
+          ...evalVals,
           rec.proyecto !== null && rec.proyecto !== undefined ? rec.proyecto : "-",
           rec.puntosExtra || 0,
           calcs.hasEvaluations ? calcs.evalFinal : "-",
@@ -41,11 +42,15 @@ const Exporter = {
       });
     } else {
       // Modo Docente Completo
+      const firmasHeaders = unitIndices.map(u => `Firmas U${u}`);
+      const examenesHeaders = unitIndices.map(u => `Examen U${u}`);
+      const evalHeaders = unitIndices.map(u => (u === 1 ? `Eval U1 (50%+50%)` : `Eval U${u}`));
+
       headers = [
         "Matrícula", "Nombre Completo (Rollup)", "Calificación Final", "Estatus",
-        "Firmas U1", "Firmas U2", "Firmas U3", "Firmas U4", "Firmas U5",
-        "Examen U1", "Examen U2", "Examen U3", "Examen U4", "Examen U5",
-        "Eval U1 (50%+50%)", "Eval U2", "Eval U3", "Eval U4", "Eval U5",
+        ...firmasHeaders,
+        ...examenesHeaders,
+        ...evalHeaders,
         "Proyecto Final", "Puntos Extra (+5 c/u)"
       ];
 
@@ -60,26 +65,18 @@ const Exporter = {
         const f = rec.firmas || {};
         const e = rec.examenes || {};
 
+        const firmasVals = unitIndices.map(u => f[`u${u}`] ?? "");
+        const examenesVals = unitIndices.map(u => e[`u${u}`] ?? "");
+        const evalVals = unitIndices.map(u => getEval(u));
+
         return [
           rec.matricula,
           student.nombre,
           calcs.hasEvaluations ? calcs.evalFinal : "-",
           estatus,
-          f.u1 ?? "",
-          f.u2 ?? "",
-          f.u3 ?? "",
-          f.u4 ?? "",
-          f.u5 ?? "",
-          e.u1 ?? "",
-          e.u2 ?? "",
-          e.u3 ?? "",
-          e.u4 ?? "",
-          e.u5 ?? "",
-          getEval(1),
-          getEval(2),
-          getEval(3),
-          getEval(4),
-          getEval(5),
+          ...firmasVals,
+          ...examenesVals,
+          ...evalVals,
           rec.proyecto ?? "",
           rec.puntosExtra || 0
         ];
