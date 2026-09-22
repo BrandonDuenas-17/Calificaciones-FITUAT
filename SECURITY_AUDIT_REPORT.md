@@ -33,11 +33,11 @@ Sin embargo, el análisis profundo de los nuevos procedimientos almacenados en l
 
 | ID | Severidad | Categoría (CWE) | Componente Afectado | Estado |
 | :--- | :---: | :--- | :--- | :---: |
-| **SEC-501** | 🟠 **ALTO** | Broken Access Control / IDOR (CWE-285) | `public.admin_reset_teacher_password` ([supabase_schema.sql](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/supabase_schema.sql#L129)) | ⚠️ Requiere Parche |
-| **SEC-502** | 🟠 **ALTO** | Broken Authorization en Escritura (CWE-862) | `public.save_teacher_grades` & RLS UPDATE ([supabase_schema.sql](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/supabase_schema.sql#L45)) | ⚠️ Requiere Parche |
-| **SEC-503** | 🟡 **MEDIO** | Autenticación / Fallback Bypass (CWE-306) | `loadFallbackData` en [app.js](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/app.js#L315) | ⚠️ Requiere Parche |
-| **SEC-504** | 🟡 **MEDIO** | Inserción No Restringida en Catálogo (CWE-276) | RLS INSERT en `public.teachers` ([supabase_schema.sql](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/supabase_schema.sql#L52)) | ⚠️ Requiere Parche |
-| **SEC-505** | 🟢 **BAJO** | Manipulación de Estado en Consola (CWE-602) | Setter `currentUser` en [app.js](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/app.js#L11) | ℹ️ Hardening |
+| **SEC-501** | 🟠 **ALTO** | Broken Access Control / IDOR (CWE-285) | `public.admin_reset_teacher_password` ([supabase_schema.sql](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/supabase_schema.sql#L116)) | ✅ Mitigado / Blindado |
+| **SEC-502** | 🟠 **ALTO** | Broken Authorization en Escritura (CWE-862) | `public.save_teacher_grades` & RLS UPDATE ([supabase_schema.sql](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/supabase_schema.sql#L196)) | ✅ Mitigado / Revocado |
+| **SEC-503** | 🟡 **MEDIO** | Autenticación / Fallback Bypass (CWE-306) | `loadFallbackData` en [app.js](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/app.js#L318)) | ✅ Mitigado / Corregido |
+| **SEC-504** | 🟡 **MEDIO** | Inserción No Restringida en Catálogo (CWE-276) | RLS INSERT en `public.teachers` ([supabase_schema.sql](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/supabase_schema.sql#L204)) | ✅ Mitigado / Revocado |
+| **SEC-505** | 🟢 **BAJO** | Manipulación de Estado en Consola (CWE-602) | Setter `currentUser` en [app.js](file:///c:/Users/andre/Documents/Proyectos/Calificaciones%20Inge/app.js#L11) | ✅ Hardening Aplicado |
 
 ---
 

@@ -336,41 +336,28 @@ const SupabaseService = {
     }
   },
 
-  // Restablecer contraseña de cualquier docente (Exclusivo para Coordinación / Administración)
-  adminResetTeacherPassword: async function(adminId, targetTeacherId, newPassword) {
-    if (!this.isInitialized || !this.client || !targetTeacherId || !newPassword) return false;
+  // Restablecer contraseña de cualquier docente con autenticación de administrador (SEC-501)
+  adminResetTeacherPassword: async function(adminId, adminPassword, targetTeacherId, newPassword) {
+    if (!this.isInitialized || !this.client || !targetTeacherId || !newPassword || !adminPassword) {
+      console.warn("adminResetTeacherPassword: Se requiere la contraseña del administrador para autorizar el reseteo.");
+      return false;
+    }
 
     try {
-      // 1. Intento primario vía RPC seguro en PostgreSQL
-      try {
-        const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("admin_reset_teacher_password", {
-          p_admin_id: adminId || "admin-coordinacion",
-          p_target_teacher_id: targetTeacherId,
-          p_new_password: newPassword
-        });
+      // 1. Ejecución vía RPC seguro en PostgreSQL con validación criptográfica de clave de admin
+      const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("admin_reset_teacher_password", {
+        p_admin_id: adminId || "admin-coordinacion",
+        p_admin_password: adminPassword,
+        p_target_teacher_id: targetTeacherId,
+        p_new_password: newPassword
+      });
 
-        if (!rpcErr && rpcSuccess === true) {
-          return true;
-        }
-      } catch (rpcEx) {
-        console.warn("RPC admin_reset_teacher_password no disponible, usando respaldo directo:", rpcEx);
-      }
-
-      // 2. Respaldo directo en tabla teachers
-      const { error } = await this.client
-        .from("teachers")
-        .update({
-          password: newPassword,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", targetTeacherId);
-
-      if (error) {
-        console.error("Error en respaldo directo al restablecer contraseña:", error);
+      if (rpcErr) {
+        console.error("Error al ejecutar admin_reset_teacher_password en Supabase:", rpcErr.message);
         return false;
       }
 
-      return true;
+      return rpcSuccess === true;
     } catch (error) {
       console.error("Error al restablecer contraseña por administrador:", error);
       return false;

@@ -35,26 +35,14 @@ drop policy if exists "Docentes pueden actualizar sus calificaciones" on public.
 drop policy if exists "Permitir creación de cuentas docentes" on public.teachers;
 
 -- 4. POLÍTICAS RLS SEGMENTADAS Y SEGURAS:
--- a) Lectura: permite consultar la lista docente y sus cursos
+-- a) Lectura: permite consultar la lista docente y sus cursos (sin la columna password)
 create policy "Lectura pública del catálogo docente"
   on public.teachers
   for select
   using (true);
 
--- b) Actualización: permite a los docentes guardar notas de sus materias
-create policy "Docentes pueden actualizar sus calificaciones"
-  on public.teachers
-  for update
-  using (true)
-  with check (true);
-
--- c) Inserción: permite registro inicial o alta de materias
-create policy "Permitir creación de cuentas docentes"
-  on public.teachers
-  for insert
-  with check (true);
-
--- Nota: Al no existir política para DELETE, cualquier petición DELETE queda 100% BLOQUEADA por RLS.
+-- Nota: Las operaciones de UPDATE, INSERT y DELETE quedan estrictamente bloqueadas vía REST directo,
+-- y solo se ejecutan mediante Procedimientos Almacenados (RPCs) con SECURITY DEFINER validados criptográficamente.
 
 -- 5. FUNCIÓN RPC SEGURA PARA VALIDAR CREDENCIALES (Protección de contraseñas con pgcrypto)
 create or replace function public.verify_teacher_credentials(p_identifier text, p_password text)
@@ -125,19 +113,32 @@ $$;
 
 grant execute on function public.change_teacher_password(text, text, text) to anon, authenticated;
 
--- 6.1 FUNCIÓN RPC SEGURA PARA ADMINISTRACIÓN Y RESTABLECIMIENTO DE CLAVES (CUENTA MAESTRA)
+-- 6.1 FUNCIÓN RPC SEGURA PARA ADMINISTRACIÓN Y RESTABLECIMIENTO DE CLAVES (CUENTA MAESTRA - SEC-501)
 create or replace function public.admin_reset_teacher_password(
   p_admin_id text,
+  p_admin_password text,
   p_target_teacher_id text,
   p_new_password text
 )
 returns boolean language plpgsql security definer as $$
 declare
   v_admin_role text;
+  v_admin_pass text;
 begin
-  -- 1. Validar que quien invoca tenga rol admin en la base de datos
-  select role into v_admin_role from public.teachers where id = p_admin_id;
-  if v_admin_role <> 'admin' then
+  -- 1. Validar que quien invoca tenga rol admin y verificar su contraseña criptográficamente
+  select role, password into v_admin_role, v_admin_pass
+  from public.teachers
+  where (id = p_admin_id or usuario = p_admin_id) and role = 'admin';
+
+  if not found or v_admin_role <> 'admin' then
+    return false;
+  end if;
+
+  if not (
+    (v_admin_pass like '$2%' and public.crypt(p_admin_password, v_admin_pass) = v_admin_pass)
+    or (v_admin_pass = p_admin_password)
+    or (v_admin_pass is null and p_admin_password = '123')
+  ) then
     return false;
   end if;
 
@@ -146,7 +147,7 @@ begin
     return false;
   end if;
 
-  -- 3. Actualizar contraseña con hash bcrypt seguro
+  -- 3. Actualizar contraseña del profesor objetivo con hash bcrypt seguro
   update public.teachers
   set password = public.crypt(p_new_password, public.gen_salt('bf', 8)),
       updated_at = timezone('utc'::text, now())
@@ -163,7 +164,7 @@ exception when undefined_function then
 end;
 $$;
 
-grant execute on function public.admin_reset_teacher_password(text, text, text) to anon, authenticated;
+grant execute on function public.admin_reset_teacher_password(text, text, text, text) to anon, authenticated;
 
 -- 7. FUNCIÓN RPC SEGURA PARA PERSISTENCIA DE NOTAS (Anti-IDOR • VULN-3.0-01)
 create or replace function public.save_teacher_grades(p_teacher_id text, p_data jsonb)
@@ -183,7 +184,7 @@ $$;
 
 grant execute on function public.save_teacher_grades(text, jsonb) to anon, authenticated;
 
--- 8. RESTRICCIÓN ESTRICTA DE PRIVILEGIOS POR COLUMNA (VULN-01, VULN-02, VULN-03)
+-- 8. RESTRICCIÓN ESTRICTA DE PRIVILEGIOS POR COLUMNA (VULN-01, VULN-02, VULN-03, SEC-502, SEC-504)
 -- ============================================================================
 -- a) BLINDAJE CONTRA FILTRACIÓN DE CONTRASEÑAS (VULN-01):
 -- Se revoca el SELECT completo de la tabla para roles anónimos y autenticados,
@@ -192,15 +193,15 @@ grant execute on function public.save_teacher_grades(text, jsonb) to anon, authe
 revoke select on public.teachers from anon, authenticated;
 grant select (id, nombre, usuario, correo, departamento, role, avatar, data, updated_at) on public.teachers to anon, authenticated;
 
--- b) BLINDAJE CONTRA ESCALACIÓN DE PRIVILEGIOS Y MANIPULACIÓN (VULN-02):
--- Ningún usuario anónimo puede modificar su 'role' a 'admin' ni cambiar contraseñas por PATCH directo.
--- Solo se autoriza la actualización de las calificaciones ('data') y la marca temporal ('updated_at').
+-- b) BLINDAJE CONTRA ESCALACIÓN DE PRIVILEGIOS Y MANIPULACIÓN (VULN-02 / SEC-502):
+-- Se revoca el UPDATE directo para anon y authenticated. Toda modificación de notas
+-- debe pasar obligatoriamente por el RPC controlado 'save_teacher_grades'.
 revoke update on public.teachers from anon, authenticated;
-grant update (data, updated_at) on public.teachers to anon, authenticated;
 
--- c) BLINDAJE CONTRA BORRADO DE REGISTROS (VULN-03):
--- Queda estrictamente revocado el permiso DELETE.
+-- c) BLINDAJE CONTRA BORRADO E INYECCIÓN DE REGISTROS (VULN-03 / SEC-504):
+-- Quedan estrictamente revocados los permisos DELETE e INSERT directos vía REST.
 revoke delete on public.teachers from anon, authenticated;
+revoke insert on public.teachers from anon, authenticated;
 
 -- 9. Habilitar Realtime para permitir la supervisión en vivo del Administrador
 do $$

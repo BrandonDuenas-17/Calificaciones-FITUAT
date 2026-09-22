@@ -13,10 +13,13 @@ const App = {
       _currentSessionUser = null;
       return;
     }
-    // Protección contra manipulación de rol en tiempo de ejecución
-    if (_currentSessionUser && val && val.role === 'admin' && _currentSessionUser.role !== 'admin') {
-      console.warn("Intento de escalación de privilegios bloqueado por seguridad.");
-      return;
+    // SEC-505: Protección contra escalación de privilegios directa desde consola
+    if (val.role === 'admin' && (!_currentSessionUser || _currentSessionUser.role !== 'admin')) {
+      const token = sessionStorage.getItem("fiuat_active_session_token") || sessionStorage.getItem("calificaciones_active_teacher_id");
+      if (!token || !token.includes("admin")) {
+        console.warn("Intento de escalación de privilegios bloqueado por seguridad.");
+        return;
+      }
     }
     _currentSessionUser = Object.freeze(JSON.parse(JSON.stringify(val)));
   },
@@ -317,13 +320,10 @@ const App = {
     if (typeof INITIAL_ADMIN !== 'undefined' && !this.teachers.some(t => t.role === 'admin')) {
       this.teachers.unshift(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
     }
-    this.currentUser = this.teachers.find(t => t.role === 'admin') || this.teachers[0] || null;
-    if (this.currentUser && this.currentUser.data) {
-      this.data = this.currentUser.data;
-      if (this.data.courses && this.data.courses[0]) {
-        this.activeCourseId = this.data.courses[0].id;
-      }
-    }
+    // SEC-503: Desactivar auto-login de admin en modo fallback/offline
+    this.currentUser = null;
+    this.data = null;
+    this.activeCourseId = null;
   },
 
   syncWithFirebase: async function() {
@@ -3793,6 +3793,7 @@ const App = {
     const deptoDiv = document.getElementById("adminManageTeacherDepto");
     const newPassInput = document.getElementById("adminManageNewPass");
     const confPassInput = document.getElementById("adminManageConfirmPass");
+    const adminPassInput = document.getElementById("adminManageAdminPass");
 
     if (idInput) idInput.value = teacher.id;
     if (nameDiv) nameDiv.textContent = teacher.nombre;
@@ -3800,12 +3801,15 @@ const App = {
     if (deptoDiv) deptoDiv.textContent = teacher.departamento || "Facultad de Ingeniería Tampico";
     if (newPassInput) newPassInput.value = "";
     if (confPassInput) confPassInput.value = "";
+    if (adminPassInput) adminPassInput.value = "";
 
     const modal = document.getElementById("adminManageTeacherModal");
     if (modal) modal.classList.add("open");
   },
 
   closeAdminManageTeacherModal: function() {
+    const adminPassInput = document.getElementById("adminManageAdminPass");
+    if (adminPassInput) adminPassInput.value = "";
     const modal = document.getElementById("adminManageTeacherModal");
     if (modal) modal.classList.remove("open");
   },
@@ -3833,9 +3837,16 @@ const App = {
     const teacherId = document.getElementById("adminManageTeacherId")?.value;
     const newPass = document.getElementById("adminManageNewPass")?.value;
     const confPass = document.getElementById("adminManageConfirmPass")?.value;
+    const adminPass = document.getElementById("adminManageAdminPass")?.value;
 
     if (!teacherId) {
       alert("Error: Identificador del docente inválido.");
+      return;
+    }
+
+    if (!adminPass) {
+      alert("Debes ingresar tu contraseña de administrador para autorizar esta operación.");
+      document.getElementById("adminManageAdminPass")?.focus();
       return;
     }
 
@@ -3857,34 +3868,28 @@ const App = {
     const teacher = this.teachers.find(t => t.id === teacherId);
     const teacherName = teacher ? teacher.nombre : "del docente";
 
-    this.showToast("Actualizando contraseña en Supabase...", "info");
+    this.showToast("Validando credenciales de administrador y actualizando contraseña...", "info");
 
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
     let saved = false;
 
     if (cloud && cloud.adminResetTeacherPassword) {
-      saved = await cloud.adminResetTeacherPassword(this.currentUser ? this.currentUser.id : "admin-coordinacion", teacherId, newPass);
-    } else if (cloud) {
-      // Respaldo directo en tabla teachers
-      const { error } = await cloud.client
-        .from("teachers")
-        .update({ password: newPass, updated_at: new Date().toISOString() })
-        .eq("id", teacherId);
-      saved = !error;
+      const adminId = this.currentUser ? this.currentUser.id : "admin-coordinacion";
+      saved = await cloud.adminResetTeacherPassword(adminId, adminPass, teacherId, newPass);
     }
 
-    // Actualizar en memoria local de la aplicación
+    if (!saved) {
+      alert("Error al restablecer contraseña: La contraseña de administrador es incorrecta o no tienes autorización en la base de datos.");
+      return;
+    }
+
+    // Actualizar en memoria local de la aplicación solo si la base de datos confirmó el cambio
     if (teacher) {
       teacher.password = newPass;
     }
 
     this.closeAdminManageTeacherModal();
-
-    if (saved) {
-      this.showToast(`¡Contraseña de ${teacherName} restablecida exitosamente!`);
-    } else {
-      this.showToast(`Contraseña actualizada en memoria local. (Aviso: revisa tu conexión a Supabase)`, "warning");
-    }
+    this.showToast(`¡Contraseña de ${teacherName} restablecida exitosamente!`);
   },
 
   setupEventListeners: function() {

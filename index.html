@@ -601,6 +601,21 @@
             </button>
           </div>
         </div>
+
+        <!-- Autorización Criptográfica del Administrador (SEC-501) -->
+        <div class="form-group" style="background: rgba(224, 90, 43, 0.05); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid rgba(224, 90, 43, 0.25); margin-top: 14px;">
+          <label style="font-weight: 700; color: var(--uat-orange); font-size: 13px; display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            Tu Contraseña de Administrador (para autorizar el cambio):
+          </label>
+          <div style="position: relative; margin-top: 4px;">
+            <input type="password" id="adminManageAdminPass" class="form-control" placeholder="Ingresa tu contraseña de Administrador actual" style="padding-right: 40px;" autocomplete="current-password" />
+            <button type="button" onclick="App.toggleAdminPasswordVisibility('adminManageAdminPass')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: transparent; cursor: pointer; color: var(--text-tertiary); padding: 4px;" title="Ver/Ocultar contraseña">
+              👁️
+            </button>
+          </div>
+          <small style="color: var(--text-tertiary); font-size: 11px; display: block; margin-top: 4px;">Requerido criptográficamente por la base de datos para validar la autorización.</small>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-default" onclick="App.closeAdminManageTeacherModal()">Cancelar</button>
