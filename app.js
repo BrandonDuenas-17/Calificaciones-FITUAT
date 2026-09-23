@@ -279,7 +279,9 @@ const App = {
             const fetchedData = await cloud.fetchTeacherData(this.currentUser.id);
             if (fetchedData) {
               this.data = fetchedData;
-              this.currentUser.data = fetchedData;
+              if (this.currentUser) {
+                this.currentUser = Object.assign({}, this.currentUser, { data: fetchedData });
+              }
               if (Array.isArray(this.teachers)) {
                 const idx = this.teachers.findIndex(t => t.id === this.currentUser.id);
                 if (idx !== -1) this.teachers[idx].data = JSON.parse(JSON.stringify(fetchedData));
@@ -411,39 +413,49 @@ const App = {
     }
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
     
-    let targetTeacher = null;
+    let targetTeacherId = null;
     if (this.isSupervising && this.supervisingTeacherId) {
       if (!this.supervisionEditMode) {
         console.warn("Modo Supervisión: Auditoría en Solo Lectura activa. Guardado omitido.");
         return;
       }
-      targetTeacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
+      targetTeacherId = this.supervisingTeacherId;
     } else if (this.currentUser) {
-      targetTeacher = this.currentUser;
+      targetTeacherId = this.currentUser.id;
     }
 
-    if (targetTeacher) {
-      targetTeacher.data = this.data;
-      // Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
+    if (targetTeacherId && this.data) {
+      // 1. Clon profundo fresco de los datos (sin mutar objetos congelados)
+      const clonedData = JSON.parse(JSON.stringify(this.data));
+
+      // 2. Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
       try {
-        if (targetTeacher.id && this.data) {
-          sessionStorage.setItem("fiuat_active_grades_buffer_" + targetTeacher.id, JSON.stringify({
-            data: this.data,
-            timestamp: Date.now()
-          }));
-        }
+        sessionStorage.setItem("fiuat_active_grades_buffer_" + targetTeacherId, JSON.stringify({
+          data: clonedData,
+          timestamp: Date.now()
+        }));
       } catch (e) {}
 
-      // Sincronizar en memoria el arreglo maestro de profesores
+      // 3. Sincronizar en memoria el arreglo maestro de profesores
       if (Array.isArray(this.teachers)) {
-        const tIndex = this.teachers.findIndex(t => t.id === targetTeacher.id);
+        const tIndex = this.teachers.findIndex(t => t.id === targetTeacherId);
         if (tIndex !== -1) {
-          this.teachers[tIndex].data = JSON.parse(JSON.stringify(this.data));
+          this.teachers[tIndex] = Object.assign({}, this.teachers[tIndex], { data: clonedData });
         }
       }
 
+      // 4. Actualizar currentUser de forma segura a través de su setter (evitando Object.freeze silencioso)
+      if (!this.isSupervising && this.currentUser && this.currentUser.id === targetTeacherId) {
+        this.currentUser = Object.assign({}, this.currentUser, { data: clonedData });
+      }
+
+      // 5. Guardado garantizado en Supabase con payload fresco y no congelado
       if (cloud) {
-        await cloud.saveTeacher(targetTeacher);
+        const payloadTeacher = {
+          id: targetTeacherId,
+          data: clonedData
+        };
+        await cloud.saveTeacher(payloadTeacher);
       }
     }
   },
@@ -1217,13 +1229,20 @@ const App = {
               </span>
             </h1>
             <p class="page-desc">
-              Control de evaluaciones por unidad y calificación final • Periodo <b>${this.escapeHtml(course.periodo)}</b>
+              Control de evaluaciones por unidad y calificación final • Periodo <b>${this.escapeHtml(course.periodo)}</b> • <span style="display: inline-block; font-size: 12px; font-weight: 700; background: rgba(224, 126, 51, 0.12); color: var(--uat-orange-dark); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(224, 126, 51, 0.25);">${numUnits} Unidades y Exámenes</span>
             </p>
           </div>
           <div class="header-actions">
             <select class="form-control" style="min-width: 210px; font-weight: 600;" onchange="App.switchCourse(this.value)">
               ${selectHtml}
             </select>
+            <!-- Control Rápido de Unidades Directo en el Calificador -->
+            <div class="units-quick-stepper" title="Ajustar cantidad de unidades y exámenes para ${this.escapeHtml(course.nombre)}" style="display: inline-flex; align-items: center; gap: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px 10px; font-weight: 600;">
+              <span style="font-size: 11px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Unidades:</span>
+              <button type="button" class="btn btn-xs btn-default" onclick="App.quickChangeCourseUnits(-1)" title="Quitar última unidad y su examen" ${numUnits <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} style="padding: 2px 8px; font-weight: 800; font-size: 14px; line-height: 1;">−</button>
+              <span style="min-width: 20px; text-align: center; font-size: 13.5px; font-weight: 700; color: var(--uat-orange);">${numUnits}</span>
+              <button type="button" class="btn btn-xs btn-default" onclick="App.quickChangeCourseUnits(1)" title="Agregar una unidad y su examen" ${numUnits >= 8 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} style="padding: 2px 8px; font-weight: 800; font-size: 14px; line-height: 1;">+</button>
+            </div>
             <button class="btn btn-primary btn-course-pair" onclick="App.openNewCourseModal()" title="Crear nueva materia o agregar otro grupo">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Nueva Lista
@@ -2855,16 +2874,17 @@ const App = {
 
     // Sincronizar explícitamente en memoria todas las capas activas antes de persistir
     if (this.currentUser) {
-      this.currentUser.data = this.data;
+      const clonedData = JSON.parse(JSON.stringify(this.data));
+      this.currentUser = Object.assign({}, this.currentUser, { data: clonedData });
       if (Array.isArray(this.teachers)) {
         const tIdx = this.teachers.findIndex(t => t.id === this.currentUser.id);
         if (tIdx !== -1) {
-          this.teachers[tIdx].data = JSON.parse(JSON.stringify(this.data));
+          this.teachers[tIdx] = Object.assign({}, this.teachers[tIdx], { data: clonedData });
         }
       }
       try {
         sessionStorage.setItem("fiuat_active_grades_buffer_" + this.currentUser.id, JSON.stringify({
-          data: this.data,
+          data: clonedData,
           timestamp: Date.now()
         }));
       } catch(e) {}
@@ -2909,6 +2929,76 @@ const App = {
     this.closeManageCourseModal();
     this.render();
     this.showToast(`¡Ajustes guardados! Materia configurada con ${newCount} unidades y sincronizada en la nube.`);
+  },
+
+  // Ajuste rápido e instantáneo de unidades directo desde la barra de calificaciones
+  quickChangeCourseUnits: async function(delta) {
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para modificar unidades.", "warning");
+      return;
+    }
+    const course = this.getActiveCourse();
+    if (!course) return;
+
+    const oldCount = Number(course.unidadesCount) || 5;
+    const newCount = Math.max(1, Math.min(8, oldCount + delta));
+    if (newCount === oldCount) return;
+
+    if (newCount < oldCount) {
+      const confirmReduce = confirm(`¿Deseas reducir "${course.nombre} (${course.grupo})" de ${oldCount} a ${newCount} unidades?\n\nLas columnas de firmas, exámenes y fórmulas se recalcularán automáticamente a ${newCount} unidades.`);
+      if (!confirmReduce) return;
+    }
+
+    course.unidadesCount = newCount;
+    if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
+    for (let u = 1; u <= newCount; u++) {
+      if (!course.firmasMaxConfig[`u${u}`]) {
+        course.firmasMaxConfig[`u${u}`] = 10;
+      }
+    }
+
+    if (newCount < oldCount) {
+      for (let u = newCount + 1; u <= 12; u++) {
+        delete course.firmasMaxConfig[`u${u}`];
+      }
+      if (course.lockedUnits) {
+        for (let u = newCount + 1; u <= 12; u++) {
+          delete course.lockedUnits[`u${u}`];
+        }
+      }
+      if (course.records) {
+        course.records.forEach(r => {
+          if (r.firmas) {
+            for (let u = newCount + 1; u <= 12; u++) {
+              delete r.firmas[`u${u}`];
+            }
+          }
+          if (r.examenes) {
+            for (let u = newCount + 1; u <= 12; u++) {
+              delete r.examenes[`u${u}`];
+            }
+          }
+        });
+      }
+    }
+
+    this.render();
+    this.showToast(`Materia actualizada a ${newCount} unidades y exámenes`);
+
+    await this.saveData();
+
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
+    if (cloud && cloud.fetchTeacherData && this.currentUser) {
+      try {
+        const cloudVerify = await cloud.fetchTeacherData(this.currentUser.id);
+        if (cloudVerify && Array.isArray(cloudVerify.courses)) {
+          const vCourse = cloudVerify.courses.find(c => c.id === course.id);
+          if (vCourse && Number(vCourse.unidadesCount) === newCount) {
+            console.log(`✓ Verificación exitosa en Supabase: ${course.nombre} confirmada con ${newCount} unidades.`);
+          }
+        }
+      } catch (e) {}
+    }
   },
 
   duplicateCurrentCourse: function() {
@@ -3186,14 +3276,15 @@ const App = {
         teacherData = teacher.data || { courses: [], students: [] };
       }
       teacher.data = teacherData;
-      this.currentUser = teacher;
-      this.data = teacher.data;
+      const activeTeacher = Object.assign({}, teacher, { data: teacherData });
+      this.currentUser = activeTeacher;
+      this.data = teacherData;
 
       // Sincronizar en el catálogo de profesores en memoria
       if (Array.isArray(this.teachers)) {
         const idx = this.teachers.findIndex(t => t.id === teacher.id);
         if (idx !== -1) {
-          this.teachers[idx].data = JSON.parse(JSON.stringify(teacherData));
+          this.teachers[idx] = Object.assign({}, this.teachers[idx], { data: teacherData });
         }
       }
 

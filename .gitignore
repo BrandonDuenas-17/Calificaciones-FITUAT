@@ -19,3 +19,7 @@ CUENTAS_DOCENTES_FIUAT.md
 faculty_roster.js
 *.xlsx
 ReporteGruposDetalle*.xlsx
+
+# Scripts temporales de diagnóstico
+.agents/*.ps1
+

@@ -15,7 +15,23 @@
       window.top.location = window.self.location;
     }
   </script>
-  <link rel="stylesheet" href="styles.css?v=26">
+  <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
+  <script>
+    (function() {
+      const CURRENT_APP_VERSION = "2026.09.22.v28";
+      const storedVersion = localStorage.getItem("fiuat_client_version");
+      if (storedVersion !== CURRENT_APP_VERSION) {
+        localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
+        if ('caches' in window) {
+          caches.keys().then(names => names.forEach(name => caches.delete(name)));
+        }
+        if (storedVersion) {
+          window.location.reload(true);
+        }
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css?v=28">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -646,9 +662,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=26"></script>
-  <script src="sample_data.js?v=26"></script>
-  <script src="exporter.js?v=26"></script>
-  <script src="app.js?v=26"></script>
+  <script src="supabase_service.js?v=28"></script>
+  <script src="sample_data.js?v=28"></script>
+  <script src="exporter.js?v=28"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>
