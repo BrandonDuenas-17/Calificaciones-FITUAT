@@ -1196,38 +1196,7 @@ const App = {
       `;
     }
 
-    let supervisionBannerHtml = "";
-    if (this.isAdmin() && this.isSupervising) {
-      const supTeacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
-      const sName = supTeacher ? supTeacher.nombre : "Docente";
-      const sUser = supTeacher ? supTeacher.usuario : "";
-      const isEdit = this.supervisionEditMode;
-
-      supervisionBannerHtml = `
-        <div class="supervision-banner ${isEdit ? 'supervision-banner-edit' : 'supervision-banner-audit'}">
-          <div class="supervision-banner-info">
-            <span class="supervision-banner-badge">
-              ${isEdit ? '✏️ MODO EDICIÓN' : '👁️ MODO AUDITORÍA'}
-            </span>
-            <span>Supervisando expediente de: <b>${this.escapeHtml(sName)}</b> (<code>${this.escapeHtml(sUser)}</code>)</span>
-            <span class="supervision-banner-hint">
-              ${isEdit ? '• Las notas capturadas se guardan en la nube para este docente' : '• Calificaciones en Solo Lectura (Activa edición para pasar o cambiar notas)'}
-            </span>
-          </div>
-          <div class="supervision-banner-actions">
-            <button class="btn btn-sm ${isEdit ? 'btn-default' : 'btn-primary'}" onclick="App.toggleSupervisionEditMode()">
-              ${isEdit ? '🔒 Cambiar a Solo Lectura' : '✏️ Habilitar Edición de Notas'}
-            </button>
-            <button class="btn btn-sm btn-default" onclick="App.exitSupervision()">
-              ✕ Salir al Panel Maestro
-            </button>
-          </div>
-        </div>
-      `;
-    }
-
     container.innerHTML = `
-      ${supervisionBannerHtml}
       <div class="page-title-area">
         <div class="page-title-row">
           <div>
@@ -3627,20 +3596,34 @@ const App = {
     if (this.isAdmin() && this.isSupervising && this.supervisingTeacherId) {
       const teacher = this.teachers.find(t => t.id === this.supervisingTeacherId);
       const name = teacher ? teacher.nombre : 'Docente';
-      const depto = teacher ? teacher.departamento : 'FIUAT';
+      const user = teacher ? teacher.usuario : '';
+      const depto = teacher ? teacher.departamento : 'Facultad de Ingeniería Tampico';
+      const isEdit = this.supervisionEditMode;
 
       container.innerHTML = `
-        <div class="supervision-banner">
-          <div class="supervision-banner-info">
-            <span class="supervision-pulse-icon" style="display: inline-flex; align-items: center;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <div class="supervision-top-bar ${isEdit ? 'supervision-bar-edit' : 'supervision-bar-audit'}">
+          <div class="supervision-bar-left">
+            <span class="supervision-badge ${isEdit ? 'badge-edit' : 'badge-audit'}">
+              ${isEdit ? '✏️ MODO EDICIÓN' : '👁️ MODO AUDITORÍA'}
             </span>
-            <span><b>Modo Supervisión Activo:</b> Auditando listas y calificaciones de <u>${name}</u> (${depto})</span>
+            <div class="supervision-info-text">
+              <span class="supervision-title">
+                Supervisando a: <b>${this.escapeHtml(name)}</b> (<code>@${this.escapeHtml(user)}</code>)
+              </span>
+              <span class="supervision-hint">
+                ${isEdit ? '• Las notas se guardan en vivo en Supabase' : '• Solo Lectura (habilita edición para modificar notas)'}
+              </span>
+            </div>
           </div>
-          <button type="button" class="btn-exit-supervision" onclick="App.exitSupervision()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Volver al Panel Maestro
-          </button>
+          <div class="supervision-bar-right">
+            <button type="button" class="btn btn-sm ${isEdit ? 'btn-default' : 'btn-primary'}" onclick="App.toggleSupervisionEditMode()" style="font-weight: 700;">
+              ${isEdit ? '🔒 Cambiar a Solo Lectura' : '✏️ Habilitar Edición'}
+            </button>
+            <button type="button" class="btn btn-sm btn-default btn-supervision-exit" onclick="App.exitSupervision()" style="font-weight: 700;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>
+              <span>Volver al Panel Maestro</span>
+            </button>
+          </div>
         </div>
       `;
     } else {
