@@ -3131,7 +3131,7 @@ const App = {
                 <div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color); text-align: center;">
                   <button type="button" class="btn btn-default btn-sm" onclick="App.loginAsAdminDirectly()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; color: var(--uat-orange); border-color: rgba(224, 90, 43, 0.4); background: rgba(224, 90, 43, 0.05); padding: 9px 12px; border-radius: 6px;">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                    <span>🔑 Entrar como Cuenta Maestra (Coordinación)</span>
+                    <span>🔑 Seleccionar Cuenta Maestra (Coordinación)</span>
                   </button>
                 </div>
               </form>
@@ -3188,14 +3188,16 @@ const App = {
     }
   },
 
-  loginAsAdminDirectly: async function() {
+  loginAsAdminDirectly: function() {
     this.clearLoginError();
     const userInput = document.getElementById("loginIdentifier");
     const passInput = document.getElementById("loginPassword");
     if (userInput) userInput.value = "admin";
-    if (passInput) passInput.value = "admin";
-    this.clearRateLimitState();
-    await this.login("admin", "admin");
+    if (passInput) {
+      passInput.value = "";
+      passInput.focus();
+    }
+    this.showToast("Usuario 'admin' seleccionado. Ingresa tu contraseña de Coordinación para ingresar.", "info");
   },
 
   switchLoginTab: function(tab) {
