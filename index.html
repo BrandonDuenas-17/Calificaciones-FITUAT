@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.09.23.v34";
+      const CURRENT_APP_VERSION = "2026.09.23.v35";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=34">
+  <link rel="stylesheet" href="styles.css?v=35">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -662,9 +662,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=34"></script>
-  <script src="sample_data.js?v=34"></script>
-  <script src="exporter.js?v=34"></script>
-  <script src="app.js?v=34"></script>
+  <script src="supabase_service.js?v=35"></script>
+  <script src="sample_data.js?v=35"></script>
+  <script src="exporter.js?v=35"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>

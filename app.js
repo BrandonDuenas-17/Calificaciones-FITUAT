@@ -1116,7 +1116,7 @@ const App = {
 
     let selectHtml = "";
     Object.keys(coursesBySubject).forEach(subject => {
-      selectHtml += `<optgroup label="${subject}">`;
+      selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
       coursesBySubject[subject].forEach(c => {
         const count = (c.records || []).length;
         selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${c.grupo || 'Grupo'} (${count} alumnos)</option>`;
@@ -1197,28 +1197,37 @@ const App = {
     }
 
     container.innerHTML = `
-      <div class="page-title-area">
-        <div class="page-title-row">
-          <div>
-            <h1 class="page-title">
-              ${this.escapeHtml(course.nombre)}
-              <span style="font-size: 13.5px; font-weight: 700; background: var(--uat-orange-light); color: var(--uat-orange-dark); padding: 3px 12px; border-radius: 12px; border: 1px solid rgba(224, 126, 51, 0.3); margin-left: 6px;">
+      <div class="page-title-area gradebook-header-container">
+        <!-- Fila 1: Título de la Materia y Selector de Grupo -->
+        <div class="gradebook-header-top">
+          <div class="gradebook-title-col">
+            <h1 class="page-title" title="${this.escapeHtml(course.nombre)}">
+              <span class="course-name-text">${this.escapeHtml(course.nombre)}</span>
+              <span class="course-group-badge">
                 ${this.escapeHtml(course.grupo || 'Grupo A')}
               </span>
             </h1>
-            <p class="page-desc">
-              Control de evaluaciones por unidad y calificación final • Periodo <b>${this.escapeHtml(course.periodo)}</b> • <span style="display: inline-block; font-size: 12px; font-weight: 700; background: rgba(224, 126, 51, 0.12); color: var(--uat-orange-dark); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(224, 126, 51, 0.25);">${numUnits} Unidades y Exámenes</span>
-            </p>
           </div>
-          <div class="header-actions">
-            <select class="form-control" style="min-width: 210px; font-weight: 600;" onchange="App.switchCourse(this.value)">
+          <div class="gradebook-switcher-col">
+            <select class="form-control gradebook-course-select" onchange="App.switchCourse(this.value)" title="Cambiar de materia o grupo">
               ${selectHtml}
             </select>
+          </div>
+        </div>
+
+        <!-- Fila 2: Subtítulo Descriptivo y Barra de Acciones del Calificador -->
+        <div class="gradebook-header-bottom">
+          <div class="gradebook-desc-col">
+            <p class="page-desc">
+              Control de evaluaciones por unidad y calificación final • Periodo <b>${this.escapeHtml(course.periodo)}</b> • <span class="page-desc-units-tag">${numUnits} Unidades y Exámenes</span>
+            </p>
+          </div>
+          <div class="gradebook-actions-col">
             <!-- Control Rápido de Unidades Directo en el Calificador -->
-            <div class="units-quick-stepper" title="Ajustar cantidad de unidades y exámenes para ${this.escapeHtml(course.nombre)}" style="display: inline-flex; align-items: center; gap: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px 10px; font-weight: 600;">
-              <span style="font-size: 11px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px;">Unidades:</span>
+            <div class="units-quick-stepper" title="Ajustar cantidad de unidades y exámenes para ${this.escapeHtml(course.nombre)}">
+              <span class="stepper-label">Unidades:</span>
               <button type="button" class="btn btn-xs btn-default" onclick="App.quickChangeCourseUnits(-1)" title="Quitar última unidad y su examen" ${numUnits <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} style="padding: 2px 8px; font-weight: 800; font-size: 14px; line-height: 1;">−</button>
-              <span style="min-width: 20px; text-align: center; font-size: 13.5px; font-weight: 700; color: var(--uat-orange);">${numUnits}</span>
+              <span class="stepper-val">${numUnits}</span>
               <button type="button" class="btn btn-xs btn-default" onclick="App.quickChangeCourseUnits(1)" title="Agregar una unidad y su examen" ${numUnits >= 8 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} style="padding: 2px 8px; font-weight: 800; font-size: 14px; line-height: 1;">+</button>
             </div>
             <button class="btn btn-primary btn-course-pair" onclick="App.openNewCourseModal()" title="Crear nueva materia o agregar otro grupo">
