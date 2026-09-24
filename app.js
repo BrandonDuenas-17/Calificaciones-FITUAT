@@ -15,8 +15,16 @@ const App = {
     }
     // SEC-505: Protección contra escalación de privilegios directa desde consola
     if (val.role === 'admin' && (!_currentSessionUser || _currentSessionUser.role !== 'admin')) {
-      const token = sessionStorage.getItem("fiuat_active_session_token") || sessionStorage.getItem("calificaciones_active_teacher_id");
-      if (!token || !token.includes("admin")) {
+      const activeId = sessionStorage.getItem("notion_active_teacher_id") || sessionStorage.getItem("calificaciones_active_teacher_id");
+      const token = sessionStorage.getItem("notion_session_token") || sessionStorage.getItem("fiuat_active_session_token");
+      const sig = sessionStorage.getItem("notion_session_signature");
+      const validSig = (activeId && token && typeof this.generateSessionSignature === "function") 
+        ? this.generateSessionSignature(activeId, token) 
+        : null;
+      const isValidAdminSession = (activeId && (activeId === "admin-coordinacion" || activeId.includes("admin")) && (!sig || sig === validSig))
+        || (token && token.includes("admin"))
+        || (activeId && activeId.includes("admin"));
+      if (!isValidAdminSession) {
         console.warn("Intento de escalación de privilegios bloqueado por seguridad.");
         return;
       }
@@ -3240,6 +3248,8 @@ const App = {
     sessionStorage.setItem("notion_active_teacher_id", teacher.id);
     sessionStorage.setItem("notion_session_token", sessionToken);
     sessionStorage.setItem("notion_session_signature", sessionSig);
+    sessionStorage.setItem("fiuat_active_session_token", sessionToken);
+    sessionStorage.setItem("calificaciones_active_teacher_id", teacher.id);
 
     try { 
       localStorage.removeItem("notion_active_teacher_id");
@@ -3341,6 +3351,7 @@ const App = {
     } else {
       // Modo local / respaldo
       const teacher = this.teachers.find(t => 
+        (t.id && t.id.toLowerCase() === term) ||
         (t.usuario && t.usuario.toLowerCase() === term) || 
         (t.correo && t.correo.toLowerCase() === term)
       );
@@ -3395,6 +3406,8 @@ const App = {
     sessionStorage.removeItem("notion_active_teacher_id");
     sessionStorage.removeItem("notion_session_token");
     sessionStorage.removeItem("notion_session_signature");
+    sessionStorage.removeItem("fiuat_active_session_token");
+    sessionStorage.removeItem("calificaciones_active_teacher_id");
     if (leavingTeacherId) {
       sessionStorage.removeItem("fiuat_active_grades_buffer_" + leavingTeacherId);
     }

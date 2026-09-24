@@ -167,7 +167,7 @@ const SupabaseService = {
       const { data, error } = await this.client
         .from("teachers")
         .select("id, password, nombre, usuario, correo, role")
-        .or(`usuario.ilike.${term},correo.ilike.${term}`)
+        .or(`usuario.ilike.${term},correo.ilike.${term},id.eq.${term}`)
         .limit(1);
 
       if (error || !data || data.length === 0) {

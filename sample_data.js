@@ -179,6 +179,7 @@ const INITIAL_ADMIN = {
   nombre: "Coordinación Académica FIUAT",
   usuario: "admin",
   correo: "coordinacion@ingenieria.uat.edu.mx",
+  password: "admin",
   departamento: "Dirección y Gestión Docente",
   role: "admin",
   avatar: "DIR"
