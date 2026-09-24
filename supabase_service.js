@@ -141,7 +141,7 @@ const SupabaseService = {
         term.startsWith("coordinacion@")
       );
 
-      // Verificación prioritaria y flexible para Cuenta Maestra (acepta 'admin' o '123')
+      // Verificación estricta de Cuenta Maestra contra la base de datos (sin bypasses)
       if (isMasterLookup) {
         const { data: adminRows, error: adminErr } = await this.client
           .from("teachers")
@@ -151,8 +151,10 @@ const SupabaseService = {
 
         if (!adminErr && adminRows && adminRows.length > 0) {
           const adm = adminRows[0];
-          const dbPass = (adm.password || "admin").trim();
-          if (cleanPass === "admin" || cleanPass === "123" || cleanPass === dbPass || password === adm.password) {
+          const dbPass = (adm.password || "").trim();
+          const expectedPass = dbPass || "admin";
+          // Validación estricta: solo se acepta la contraseña real almacenada en la base de datos
+          if (cleanPass === expectedPass || password === adm.password) {
             return {
               success: true,
               teacherId: adm.id,
@@ -213,7 +215,7 @@ const SupabaseService = {
       }
 
       const teacher = data[0];
-      const validPass = teacher.password || "123";
+      const validPass = teacher.password || (teacher.role === 'admin' ? "admin" : "123");
       if (validPass !== password && validPass !== cleanPass) {
         return { success: false, reason: "wrong_password" };
       }
@@ -390,16 +392,28 @@ const SupabaseService = {
         return false;
       }
 
-      const { error: updateErr } = await this.client
+      let updateRes = await this.client
         .from("teachers")
         .update({
           password: cleanNewPass,
           updated_at: new Date().toISOString()
         })
-        .eq("id", cleanId);
+        .eq("id", cleanId)
+        .select("id");
 
-      if (updateErr) {
-        console.error("Error al actualizar contraseña en base de datos:", updateErr);
+      if (!updateRes.error && (!updateRes.data || updateRes.data.length === 0)) {
+        updateRes = await this.client
+          .from("teachers")
+          .update({
+            password: cleanNewPass,
+            updated_at: new Date().toISOString()
+          })
+          .or(`id.eq.${cleanId},usuario.eq.${cleanId}`)
+          .select("id");
+      }
+
+      if (updateRes.error) {
+        console.error("Error al actualizar contraseña en base de datos:", updateRes.error);
         return false;
       }
 

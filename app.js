@@ -3402,7 +3402,7 @@ const App = {
       } else if (res && res.reason === "wrong_password") {
         restoreBtn();
         if (isMasterLookup) {
-          this.showLoginError("Contraseña incorrecta para la Cuenta Maestra. Ingresa 'admin' o '123'.");
+          this.showLoginError("Contraseña incorrecta para la Cuenta Maestra.");
         } else {
           const rateLimit = this.getRateLimitState();
           const newAttempts = rateLimit.failedAttempts + 1;
@@ -3442,13 +3442,12 @@ const App = {
       }
 
       const expectedPass = teacher.password || (teacher.role === 'admin' ? "admin" : "123");
-      const isPassValid = (expectedPass === password) || (expectedPass === cleanPass) ||
-        (teacher.role === 'admin' && (cleanPass === "admin" || cleanPass === "123"));
+      const isPassValid = (expectedPass === password) || (expectedPass === cleanPass);
 
       if (!isPassValid) {
         restoreBtn();
         if (isMasterLookup) {
-          this.showLoginError("Contraseña incorrecta para la Cuenta Maestra. Ingresa 'admin' o '123'.");
+          this.showLoginError("Contraseña incorrecta para la Cuenta Maestra.");
         } else {
           const rateLimit = this.getRateLimitState();
           const newAttempts = rateLimit.failedAttempts + 1;
@@ -4138,24 +4137,12 @@ const App = {
   submitChangePassword: async function() {
     if (!this.currentUser) return;
 
-    const currentPass = document.getElementById("changePassCurrent")?.value;
-    const newPass = document.getElementById("changePassNew")?.value;
-    const confirmPass = document.getElementById("changePassConfirm")?.value;
+    const currentPass = (document.getElementById("changePassCurrent")?.value || "").trim();
+    const newPass = (document.getElementById("changePassNew")?.value || "").trim();
+    const confirmPass = (document.getElementById("changePassConfirm")?.value || "").trim();
 
     if (!currentPass || !newPass || !confirmPass) {
       alert("Por favor completa todos los campos.");
-      return;
-    }
-
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
-    if (cloud) {
-      const verifyRes = await cloud.verifyCredentials(this.currentUser.usuario, currentPass);
-      if (!verifyRes || !verifyRes.success) {
-        alert("La contraseña actual es incorrecta.");
-        return;
-      }
-    } else if (this.currentUser.password && currentPass !== this.currentUser.password) {
-      alert("La contraseña actual es incorrecta.");
       return;
     }
 
@@ -4169,6 +4156,34 @@ const App = {
       return;
     }
 
+    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
+    if (cloud) {
+      const verifyRes = await cloud.verifyCredentials(this.currentUser.usuario || this.currentUser.id, currentPass);
+      if (!verifyRes || !verifyRes.success) {
+        alert("La contraseña actual es incorrecta.");
+        return;
+      }
+
+      this.showToast("Actualizando contraseña en la base de datos...", "info");
+      let updatedInCloud = false;
+      if (cloud.updatePassword) {
+        updatedInCloud = await cloud.updatePassword(this.currentUser.id, newPass, currentPass);
+      } else {
+        updatedInCloud = await cloud.saveTeacher(Object.assign({}, this.currentUser, { password: newPass }));
+      }
+
+      if (!updatedInCloud) {
+        alert("Error al actualizar la contraseña en Supabase. Verifica tu conexión e intenta de nuevo.");
+        return;
+      }
+    } else {
+      const expectedOld = this.currentUser.password || (this.currentUser.role === 'admin' ? "admin" : "123");
+      if (currentPass !== expectedOld) {
+        alert("La contraseña actual es incorrecta.");
+        return;
+      }
+    }
+
     this.currentUser.password = newPass;
 
     // Actualizar en el catálogo de profesores en memoria
@@ -4177,17 +4192,16 @@ const App = {
       this.teachers[tIndex].password = newPass;
     }
 
-    // Persistir directamente en Supabase vía método seguro de contraseña (SEC-01)
-    if (cloud) {
-      if (cloud.updatePassword) {
-        await cloud.updatePassword(this.currentUser.id, newPass, currentPass);
-      } else {
-        await cloud.saveTeacher(this.currentUser);
-      }
-    }
+    // Limpiar campos del formulario
+    const cPass = document.getElementById("changePassCurrent");
+    const nPass = document.getElementById("changePassNew");
+    const cfPass = document.getElementById("changePassConfirm");
+    if (cPass) cPass.value = "";
+    if (nPass) nPass.value = "";
+    if (cfPass) cfPass.value = "";
 
     this.closeChangePasswordModal();
-    this.showToast("¡Tu contraseña ha sido actualizada con éxito en la nube!");
+    this.showToast("¡Tu contraseña ha sido actualizada con éxito en la base de datos!");
   },
 
   // =========================================================================
@@ -4298,7 +4312,7 @@ const App = {
     } else {
       // Modo local / respaldo sin nube
       const currentAdminPass = this.currentUser ? (this.currentUser.password || "admin") : "admin";
-      if (adminPass === "admin" || adminPass === "123" || adminPass === currentAdminPass) {
+      if (adminPass === currentAdminPass) {
         saved = true;
       }
     }
