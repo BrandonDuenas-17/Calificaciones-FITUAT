@@ -131,6 +131,44 @@ const SupabaseService = {
 
     try {
       const term = (identifier || "").trim().toLowerCase();
+      const cleanPass = (password || "").trim();
+
+      const isMasterLookup = (
+        term === "admin" ||
+        term === "admin-coordinacion" ||
+        term === "coordinacion" ||
+        term === "dir_academica" ||
+        term.startsWith("coordinacion@")
+      );
+
+      // Verificación prioritaria y flexible para Cuenta Maestra (acepta 'admin' o '123')
+      if (isMasterLookup) {
+        const { data: adminRows, error: adminErr } = await this.client
+          .from("teachers")
+          .select("id, password, nombre, usuario, correo, role")
+          .or("id.eq.admin-coordinacion,role.eq.admin,usuario.eq.admin")
+          .limit(1);
+
+        if (!adminErr && adminRows && adminRows.length > 0) {
+          const adm = adminRows[0];
+          const dbPass = (adm.password || "admin").trim();
+          if (cleanPass === "admin" || cleanPass === "123" || cleanPass === dbPass || password === adm.password) {
+            return {
+              success: true,
+              teacherId: adm.id,
+              teacher: {
+                id: adm.id,
+                nombre: adm.nombre,
+                usuario: adm.usuario,
+                correo: adm.correo,
+                role: adm.role
+              }
+            };
+          } else {
+            return { success: false, reason: "wrong_password" };
+          }
+        }
+      }
 
       // 1. Intento primario vía RPC seguro (ejecutado dentro de PostgreSQL)
       try {
@@ -176,7 +214,7 @@ const SupabaseService = {
 
       const teacher = data[0];
       const validPass = teacher.password || "123";
-      if (validPass !== password) {
+      if (validPass !== password && validPass !== cleanPass) {
         return { success: false, reason: "wrong_password" };
       }
 
