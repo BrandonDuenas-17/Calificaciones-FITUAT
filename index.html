@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=35">
+  <link rel="stylesheet" href="styles.css?v=36">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -405,6 +405,88 @@
           </div>
         </div>
 
+        <!-- Sección de Ponderación de Criterios (Firmas, Exámenes, Asistencia, Participación) -->
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div>
+              <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Criterios de Evaluación por Unidad:</span>
+              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Define los porcentajes de cada criterio. Deben sumar 100%.</p>
+            </div>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
+              <input type="checkbox" id="manageToggleCriterios" onchange="App.toggleManageCriterios(this.checked)" style="accent-color: var(--uat-orange);" />
+              Activar Asistencia & Participación
+            </label>
+          </div>
+
+          <div id="manageWeightsContainer" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 12px; margin-top: 8px;">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px;">
+              <div>
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 4px;">Firmas / Tareas</label>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
+                  <input type="number" min="0" max="100" id="manageWeightFirmas" class="form-control" style="text-align: center; font-weight: 700;" value="30" oninput="App.onWeightsInputChange()" />
+                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                </div>
+              </div>
+              <div>
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 4px;">Exámenes</label>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
+                  <input type="number" min="0" max="100" id="manageWeightExamen" class="form-control" style="text-align: center; font-weight: 700;" value="40" oninput="App.onWeightsInputChange()" />
+                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                </div>
+              </div>
+              <div>
+                <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">Asistencia</label>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
+                  <input type="number" min="0" max="100" id="manageWeightAsist" class="form-control" style="text-align: center; font-weight: 700;" value="15" oninput="App.onWeightsInputChange()" />
+                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                </div>
+              </div>
+              <div>
+                <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">Participación</label>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
+                  <input type="number" min="0" max="100" id="manageWeightPart" class="form-control" style="text-align: center; font-weight: 700;" value="15" oninput="App.onWeightsInputChange()" />
+                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span id="manageWeightsTotalBadge" class="status-badge status-aprobado" style="font-size: 11px; padding: 4px 8px;">Suma: 100% (Correcto)</span>
+              <button type="button" class="btn btn-xs btn-default" onclick="App.resetWeightsToDefault()" style="font-size: 11px;">Restablecer a 50/50</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sección de Control de Derecho a Examen por Faltas (Completamente Opcional) -->
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Regla de Derecho a Examen por Faltas:</span>
+              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Sanciona a alumnos que superen el límite de inasistencias en la unidad.</p>
+            </div>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
+              <input type="checkbox" id="manageToggleLimiteFaltas" onchange="App.toggleManageLimiteFaltas(this.checked)" style="accent-color: var(--uat-orange);" />
+              Activar Límite (SD)
+            </label>
+          </div>
+
+          <div id="manageLimiteFaltasContainer" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 12px; margin-top: 10px;">
+            <div style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: center;">
+              <div>
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Máx. Faltas por Unidad:</label>
+                <input type="number" min="1" max="20" id="manageMaxFaltasInput" class="form-control" style="text-align: center; font-weight: 700;" value="3" />
+              </div>
+              <div>
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Acción al Exceder:</label>
+                <select id="manageModoExcederSelect" class="form-control" style="font-size: 12px;">
+                  <option value="alerta_sd">Alerta Visual Preventiva (Badge ⛔ SD - Recomendado)</option>
+                  <option value="reprobar_cero">Estricto (Asignar 0 / Cancelar Unidad)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Otras Acciones:</label>
           <div style="display: flex; gap: 8px;">
@@ -662,9 +744,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=35"></script>
-  <script src="sample_data.js?v=35"></script>
-  <script src="exporter.js?v=35"></script>
-  <script src="app.js?v=35"></script>
+  <script src="supabase_service.js?v=36"></script>
+  <script src="sample_data.js?v=36"></script>
+  <script src="exporter.js?v=36"></script>
+  <script src="app.js?v=36"></script>
 </body>
 </html>

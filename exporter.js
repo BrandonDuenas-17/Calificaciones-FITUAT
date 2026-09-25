@@ -42,14 +42,22 @@ const Exporter = {
       });
     } else {
       // Modo Docente Completo
+      const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+      const showAsist = Number(weights.asistencia) > 0;
+      const showPart = Number(weights.participacion) > 0;
+
       const firmasHeaders = unitIndices.map(u => `Firmas U${u}`);
       const examenesHeaders = unitIndices.map(u => `Examen U${u}`);
-      const evalHeaders = unitIndices.map(u => (u === 1 ? `Eval U1 (50%+50%)` : `Eval U${u}`));
+      const asistHeaders = showAsist ? unitIndices.map(u => `Asist U${u} (${weights.asistencia}%)`) : [];
+      const partHeaders = showPart ? unitIndices.map(u => `Part U${u} (${weights.participacion}%)`) : [];
+      const evalHeaders = unitIndices.map(u => `Eval U${u}`);
 
       headers = [
         "Matrícula", "Nombre Completo (Rollup)", "Calificación Final", "Estatus",
         ...firmasHeaders,
         ...examenesHeaders,
+        ...asistHeaders,
+        ...partHeaders,
         ...evalHeaders,
         "Proyecto Final", "Puntos Extra (+5 c/u)"
       ];
@@ -60,13 +68,20 @@ const Exporter = {
         const estatus = calcs.hasEvaluations 
           ? (calcs.evalFinal >= 70 ? "APROBADO" : "NO APROBADO") 
           : "PENDIENTE";
-        const getEval = (u) => (calcs.evalU[u] !== null && calcs.evalU[u] !== undefined) ? calcs.evalU[u] : "";
+        const getEval = (u) => {
+          if (calcs.isSinDerechoU && calcs.isSinDerechoU[u]) return "SD";
+          return (calcs.evalU[u] !== null && calcs.evalU[u] !== undefined) ? calcs.evalU[u] : "";
+        };
 
         const f = rec.firmas || {};
         const e = rec.examenes || {};
+        const a = rec.asistencia || {};
+        const p = rec.participacion || {};
 
         const firmasVals = unitIndices.map(u => f[`u${u}`] ?? "");
         const examenesVals = unitIndices.map(u => e[`u${u}`] ?? "");
+        const asistVals = showAsist ? unitIndices.map(u => (a[`u${u}`] !== undefined && a[`u${u}`] !== "") ? `${a[`u${u}`]}%` : "") : [];
+        const partVals = showPart ? unitIndices.map(u => p[`u${u}`] ?? "") : [];
         const evalVals = unitIndices.map(u => getEval(u));
 
         return [
@@ -76,6 +91,8 @@ const Exporter = {
           estatus,
           ...firmasVals,
           ...examenesVals,
+          ...asistVals,
+          ...partVals,
           ...evalVals,
           rec.proyecto ?? "",
           rec.puntosExtra || 0

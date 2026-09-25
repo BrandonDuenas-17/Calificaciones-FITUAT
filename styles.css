@@ -3570,4 +3570,466 @@ textarea.form-control {
   animation: cellSavedPulse 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
+/* ==========================================================================
+   VISTA Y CONTROL DE ASISTENCIAS Y PARTICIPACIÓN (MODO HÍBRIDO)
+   ========================================================================== */
+
+/* Badges de Faltas y Estado Sin Derecho (SD) */
+.badge-faltas {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .badge-faltas {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+}
+
+.badge-faltas-sd {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #dc2626 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  animation: pulse-sd 1.8s infinite ease-in-out;
+}
+
+[data-theme="dark"] .badge-faltas-sd {
+  background: rgba(239, 68, 68, 0.28) !important;
+  color: #f87171 !important;
+}
+
+@keyframes pulse-sd {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.cell-sin-derecho {
+  background-color: rgba(239, 68, 68, 0.07) !important;
+}
+
+.cell-sd-text {
+  color: var(--color-red) !important;
+  font-weight: 800 !important;
+}
+
+.row-sin-derecho {
+  background-color: rgba(239, 68, 68, 0.03);
+}
+
+.card-sin-derecho {
+  border-left: 3px solid var(--color-red) !important;
+}
+
+/* Fila de Controles de Navegación de Asistencias */
+.attendance-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0 4px 0;
+  border-top: 1px solid var(--border-color);
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.attendance-units-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.attendance-unit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.attendance-unit-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.attendance-unit-chip.active {
+  background: var(--uat-blue-night);
+  color: #ffffff;
+  border-color: var(--uat-blue-night);
+  box-shadow: 0 2px 6px rgba(11, 43, 91, 0.2);
+}
+
+[data-theme="dark"] .attendance-unit-chip.active {
+  background: var(--uat-orange);
+  border-color: var(--uat-orange);
+  color: #ffffff;
+}
+
+.attendance-unit-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--uat-orange);
+}
+
+[data-theme="dark"] .attendance-unit-dot {
+  background: #ffffff;
+}
+
+/* Selector de Modo (Pase Diario vs Vaciado Rápido) */
+.attendance-mode-selector {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 3px;
+}
+
+.attendance-mode-tab-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.attendance-mode-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.attendance-mode-tab-btn.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Área Principal */
+.attendance-main-area {
+  padding: 16px 24px;
+}
+
+/* Empty State de Asistencias */
+.attendance-empty-card {
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+  margin-top: 16px;
+}
+
+.attendance-empty-icon {
+  font-size: 44px;
+  margin-bottom: 12px;
+}
+
+/* Barra Superior de Sesiones de Pase de Lista Diario */
+.sessions-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.session-pills-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  width: 100%;
+}
+
+.session-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.session-pill:hover {
+  border-color: var(--uat-orange);
+  background: var(--bg-hover);
+}
+
+.session-pill.active {
+  background: var(--bg-primary);
+  border: 1.5px solid var(--uat-orange);
+  box-shadow: 0 2px 8px rgba(242, 107, 15, 0.15);
+}
+
+.session-pill-date {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.session-pill-title {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-delete-session {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+.btn-delete-session:hover {
+  color: var(--color-red);
+}
+
+.btn-add-session-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px dashed var(--uat-orange);
+  color: var(--uat-orange);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.btn-add-session-pill:hover {
+  background: rgba(242, 107, 15, 0.08);
+}
+
+/* Tarjeta Activa de Sesión y Estadísticas */
+.session-active-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+
+.session-meta-inputs {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.session-meta-inputs .meta-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.session-stats-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.stat-pill-p, .stat-pill-f, .stat-pill-r, .stat-pill-j, .stat-pill-pct {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-pill-p {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+.stat-pill-f {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+.stat-pill-r {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+}
+.stat-pill-j {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+.stat-pill-pct {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* Grupo de Botones P/F/R/J */
+.attendance-pills-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 2px 4px;
+  border-radius: 20px;
+}
+
+.btn-att-pill {
+  width: 28px;
+  height: 26px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition: all 0.15s ease;
+}
+
+.btn-att-pill:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-att-pill.att-p.active {
+  background: #22c55e;
+  color: #ffffff;
+  border-color: #16a34a;
+  box-shadow: 0 1px 4px rgba(34, 197, 94, 0.4);
+}
+
+.btn-att-pill.att-f.active {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #dc2626;
+  box-shadow: 0 1px 4px rgba(239, 68, 68, 0.4);
+}
+
+.btn-att-pill.att-r.active {
+  background: #f59e0b;
+  color: #ffffff;
+  border-color: #d97706;
+  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.4);
+}
+
+.btn-att-pill.att-j.active {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.4);
+}
+
+/* Stepper de Participación */
+.part-stepper-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-part-step {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.12s ease;
+}
+
+.btn-part-step:hover:not(:disabled) {
+  border-color: var(--uat-orange);
+  color: var(--uat-orange);
+  background: var(--bg-primary);
+}
+
+.btn-part-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.part-count-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  min-width: 32px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.part-count-badge.has-parts {
+  color: var(--uat-orange);
+  font-weight: 800;
+}
+
+/* Toolbar de Vaciado Rápido (Papel) */
+.quick-attendance-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+
 

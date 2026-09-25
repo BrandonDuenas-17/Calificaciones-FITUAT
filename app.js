@@ -45,6 +45,9 @@ const App = {
   lockoutUntil: 0,
   inactivityTimer: null,
   inactivityTimeoutMs: 20 * 60 * 1000, // 20 minutos de inactividad
+  attendanceActiveUnit: 1,
+  attendanceMode: "diario", // "diario" o "rapido"
+  attendanceActiveSessionId: null,
 
   isAdmin: function() {
     return !!(_currentSessionUser && _currentSessionUser.role === 'admin' && Object.isFrozen(_currentSessionUser));
@@ -575,14 +578,32 @@ const App = {
     return map;
   },
 
-  // MOTOR MATEMÁTICO: Fórmulas extraídas de las imágenes de Notion con cálculo progresivo
+  // MOTOR MATEMÁTICO: Fórmulas de cálculo con ponderaciones personalizadas y asistencia/participación opcionales
   calculateStudentGrades: function(record, course) {
     const maxFirmasConfig = course.firmasMaxConfig || {};
+    const maxPartConfig = course.participacionMaxConfig || {};
     const evalU = {};
     const validUnitsForMean = [];
     let evaluatedUnitsCount = 0;
 
-    // 1. Evaluación de cada Unidad (U1 a U5)
+    // Ponderaciones de criterios por unidad (Default 100% retrocompatible: 50% firmas, 50% examen)
+    const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+    const wFirmas = Number(weights.firmas) || 0;
+    const wExamen = Number(weights.examen) || 0;
+    const wAsist = Number(weights.asistencia) || 0;
+    const wPart = Number(weights.participacion) || 0;
+
+    // Configuración opcional de límite de faltas (Derecho a Examen - SD)
+    const asistCfg = course.asistenciaConfig || {};
+    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const modoExceder = asistCfg.modoExceder || "alerta_sd"; // "alerta_sd" o "reprobar_cero"
+
+    const isSinDerechoU = {};
+    const faltasU = {};
+    let hasAnySinDerecho = false;
+
+    // 1. Evaluación de cada Unidad (U1 a Un)
     for (let u = 1; u <= (course.unidadesCount || 5); u++) {
       const uKey = `u${u}`;
       const firmas = (record.firmas && record.firmas[uKey] !== undefined && record.firmas[uKey] !== "") 
@@ -591,30 +612,72 @@ const App = {
       const examen = (record.examenes && record.examenes[uKey] !== undefined && record.examenes[uKey] !== "") 
         ? record.examenes[uKey] 
         : null;
+      const asist = (record.asistencia && record.asistencia[uKey] !== undefined && record.asistencia[uKey] !== "") 
+        ? record.asistencia[uKey] 
+        : null;
+      const part = (record.participacion && record.participacion[uKey] !== undefined && record.participacion[uKey] !== "") 
+        ? record.participacion[uKey] 
+        : null;
+      const faltas = (record.faltas && record.faltas[uKey] !== undefined && record.faltas[uKey] !== "") 
+        ? Number(record.faltas[uKey]) 
+        : 0;
+
+      faltasU[u] = faltas;
+
       const maxF = maxFirmasConfig[uKey] || 10;
+      const maxP = maxPartConfig[uKey] || 5;
 
       const hasFirmas = firmas !== null;
       const hasExamen = examen !== null;
+      const hasAsist = asist !== null && wAsist > 0;
+      const hasPart = part !== null && wPart > 0;
 
-      // Si al menos hay firmas o examen registrado, la unidad cuenta con evaluación
-      if (hasFirmas || hasExamen) {
+      // Si al menos hay un criterio evaluado en la unidad
+      if (hasFirmas || hasExamen || hasAsist || hasPart) {
         let puntajeFirmas = 0;
-        if (hasFirmas && maxF > 0) {
-          puntajeFirmas = (Number(firmas) / maxF) * 50;
+        if (hasFirmas && maxF > 0 && wFirmas > 0) {
+          puntajeFirmas = (Number(firmas) / maxF) * wFirmas;
         }
 
         let puntajeExamen = 0;
-        if (hasExamen) {
-          puntajeExamen = Number(examen) * 0.5;
+        if (hasExamen && wExamen > 0) {
+          puntajeExamen = (Number(examen) / 100) * wExamen;
         }
 
-        const totalU = Math.round((puntajeFirmas + puntajeExamen) * 10) / 10;
+        let puntajeAsist = 0;
+        if (hasAsist && wAsist > 0) {
+          const numA = Math.min(100, Math.max(0, Number(asist)));
+          puntajeAsist = (numA / 100) * wAsist;
+        }
+
+        let puntajePart = 0;
+        if (hasPart && wPart > 0) {
+          const numP = Math.max(0, Number(part));
+          const pctP = maxP > 0 ? Math.min(1, numP / maxP) : 0;
+          puntajePart = pctP * wPart;
+        }
+
+        let totalU = Math.round((puntajeFirmas + puntajeExamen + puntajeAsist + puntajePart) * 10) / 10;
+        totalU = Math.min(100, Math.max(0, totalU));
+
+        // Regla opcional de Derecho a Examen por Faltas (SD)
+        if (limiteFaltasActivo && faltas > maxFaltas) {
+          isSinDerechoU[u] = true;
+          hasAnySinDerecho = true;
+          if (modoExceder === "reprobar_cero") {
+            totalU = 0;
+          }
+        } else {
+          isSinDerechoU[u] = false;
+        }
+
         evalU[u] = totalU;
         validUnitsForMean.push(totalU);
         evaluatedUnitsCount++;
       } else {
         // Unidad pendiente / no evaluada aún en el semestre
         evalU[u] = null;
+        isSinDerechoU[u] = false;
       }
     }
 
@@ -645,17 +708,23 @@ const App = {
       evalFinal,
       promedioParcial: Math.round(promedio * 10) / 10,
       hasEvaluations,
-      evaluatedUnitsCount
+      evaluatedUnitsCount,
+      isSinDerechoU,
+      faltasU,
+      hasAnySinDerecho,
+      weights
     };
   },
 
-  // Cálculo de estadísticas de columna (MAX para firmas, AVERAGE para exámenes y evaluaciones)
+  // Cálculo de estadísticas de columna (MAX para firmas, AVERAGE para exámenes, asistencias, participaciones y evaluaciones)
   calculateCourseStats: function(course) {
     const records = course.records || [];
     const stats = {
       maxFirmas: {},
       avgFirmas: {},
       avgExamenes: {},
+      avgAsistencia: {},
+      avgParticipacion: {},
       avgEvaluaciones: {},
       avgFinal: 0
     };
@@ -672,7 +741,6 @@ const App = {
       const firmasVals = records
         .map(r => r.firmas ? r.firmas[uKey] : null)
         .filter(v => v !== null && v !== undefined && v !== "");
-      
       stats.maxFirmas[uKey] = firmasVals.length > 0 ? Math.max(...firmasVals.map(Number)) : 0;
       stats.avgFirmas[uKey] = firmasVals.length > 0 ? (firmasVals.reduce((a, b) => a + Number(b), 0) / firmasVals.length).toFixed(1) : 0;
 
@@ -681,6 +749,18 @@ const App = {
         .map(r => r.examenes ? r.examenes[uKey] : null)
         .filter(v => v !== null && v !== undefined && v !== "");
       stats.avgExamenes[uKey] = examenVals.length > 0 ? (examenVals.reduce((a, b) => a + Number(b), 0) / examenVals.length).toFixed(2) : "0.00";
+
+      // Asistencias (%)
+      const asistVals = records
+        .map(r => r.asistencia ? r.asistencia[uKey] : null)
+        .filter(v => v !== null && v !== undefined && v !== "");
+      stats.avgAsistencia[uKey] = asistVals.length > 0 ? Math.round(asistVals.reduce((a, b) => a + Number(b), 0) / asistVals.length) : 0;
+
+      // Participaciones
+      const partVals = records
+        .map(r => r.participacion ? r.participacion[uKey] : null)
+        .filter(v => v !== null && v !== undefined && v !== "");
+      stats.avgParticipacion[uKey] = partVals.length > 0 ? (partVals.reduce((a, b) => a + Number(b), 0) / partVals.length).toFixed(1) : 0;
     }
 
     // Evaluaciones
@@ -742,7 +822,7 @@ const App = {
     if (nav) nav.style.display = "flex";
     this.renderNavTabs();
 
-    if (this.activeTab === "gradebook" || this.activeTab === "directory") {
+    if (this.activeTab === "gradebook" || this.activeTab === "directory" || this.activeTab === "attendance") {
       container.classList.add("has-table-view");
       document.body.style.overflow = "hidden";
       document.documentElement.style.overflow = "hidden";
@@ -760,6 +840,8 @@ const App = {
       this.renderAdminDashboard(container);
     } else if (this.activeTab === "gradebook") {
       this.renderGradebook(container);
+    } else if (this.activeTab === "attendance") {
+      this.renderAttendance(container);
     } else if (this.activeTab === "directory") {
       this.renderDirectory(container);
     } else if (this.activeTab === "teams") {
@@ -888,6 +970,11 @@ const App = {
         <span class="nav-tab-badge">${recordsCount} alumnos</span>
       </button>
 
+      <button class="nav-tab-btn ${this.activeTab === 'attendance' ? 'active' : ''}" onclick="App.switchTab('attendance')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Asistencias 📅
+      </button>
+
       <button class="nav-tab-btn ${this.activeTab === 'directory' ? 'active' : ''}" onclick="App.switchTab('directory')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Directorio de Alumnos (Base Maestra)
@@ -938,6 +1025,10 @@ const App = {
     let records = course.records || [];
     let visibleCount = 0;
     const searchLower = (this.searchTerm || "").toLowerCase().trim();
+
+    const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+    const showAsist = Number(weights.asistencia) > 0;
+    const showPart = Number(weights.participacion) > 0;
 
     let rowsHtml = "";
     records.forEach((rec, index) => {
@@ -1015,6 +1106,76 @@ const App = {
         `;
       }
 
+      // Celdas de Asistencia U1 a Un (solo si está activo el criterio)
+      let asistenciaCells = "";
+      if (showAsist) {
+        for (let u = 1; u <= numUnits; u++) {
+          const uKey = `u${u}`;
+          const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
+          const isFieldReadOnly = isLocked || isAuditReadOnly;
+          const val = rec.asistencia ? (rec.asistencia[uKey] ?? "") : "";
+          const faltas = (rec.faltas && rec.faltas[uKey] !== undefined && rec.faltas[uKey] !== "") ? Number(rec.faltas[uKey]) : 0;
+          const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[u]);
+          const isAuto = !!(rec.asistenciaAuto && rec.asistenciaAuto[uKey]);
+
+          const numVal = val !== "" && val !== null ? Number(val) : null;
+          let ringColor = "var(--color-green)";
+          if (isSd || (numVal !== null && numVal < 60)) ringColor = "var(--color-red)";
+          else if (numVal !== null && numVal < 80) ringColor = "var(--color-orange)";
+
+          const pct = numVal !== null ? Math.min(100, Math.max(0, numVal)) : 0;
+          const dashOffset = numVal !== null ? (44 - (44 * pct) / 100) : 44;
+          const strokeColor = numVal !== null ? ringColor : "var(--border-color)";
+
+          asistenciaCells += `
+            <td class="col-number-input ${isSd ? 'cell-sin-derecho' : ''}" style="min-width: 105px;">
+              <div class="firmas-cell-content" style="justify-content: flex-end; gap: 4px;">
+                ${isAuto ? '<span title="Sincronizado automáticamente desde el Pase de Lista" style="font-size: 10px; cursor: help; opacity: 0.85;">🔒</span>' : ''}
+                ${faltas > 0 ? `<span class="badge-faltas ${isSd ? 'badge-faltas-sd' : ''}" title="${faltas} falta(s) en Unidad ${u}">${isSd ? '⛔ SD ' : ''}${faltas}f</span>` : ''}
+                <input type="number" inputmode="numeric" min="0" max="100" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''} ${isSd ? 'cell-sd-text' : ''}" style="width: 44px; text-align: right; font-weight: 600;" 
+                  value="${val}" placeholder="-" data-col="asistencia-${uKey}"
+                  ${isFieldReadOnly ? `readonly title="${isAuditReadOnly ? 'Modo Auditoría (Solo Lectura)' : 'Unidad bloqueada'}"` : ''}
+                  onfocus="this.select()"
+                  onblur="App.handleCellBlur(this)"
+                  oninput="App.updateAsistencia(${index}, '${uKey}', this.value)"
+                  onkeydown="App.handleCellKeydown(event, this)" />
+                <svg class="progress-ring" viewBox="0 0 20 20">
+                  <circle class="progress-ring-circle-bg" cx="10" cy="10" r="7"/>
+                  <circle id="ring-asist-${index}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
+                    style="stroke-dasharray: 44; stroke-dashoffset: ${dashOffset}; stroke: ${strokeColor};"/>
+                </svg>
+              </div>
+            </td>
+          `;
+        }
+      }
+
+      // Celdas de Participación U1 a Un (solo si está activo el criterio)
+      let participacionCells = "";
+      if (showPart) {
+        for (let u = 1; u <= numUnits; u++) {
+          const uKey = `u${u}`;
+          const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
+          const isFieldReadOnly = isLocked || isAuditReadOnly;
+          const val = rec.participacion ? (rec.participacion[uKey] ?? "") : "";
+
+          participacionCells += `
+            <td class="col-number-input" style="min-width: 85px;">
+              <div class="firmas-cell-content" style="justify-content: flex-end; gap: 3px;">
+                <input type="number" inputmode="numeric" min="0" max="999" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" style="width: 40px; text-align: right; font-weight: 600;" 
+                  value="${val}" placeholder="-" data-col="participacion-${uKey}"
+                  ${isFieldReadOnly ? `readonly title="${isAuditReadOnly ? 'Modo Auditoría (Solo Lectura)' : 'Unidad bloqueada'}"` : ''}
+                  onfocus="this.select()"
+                  onblur="App.handleCellBlur(this)"
+                  oninput="App.updateParticipacion(${index}, '${uKey}', this.value)"
+                  onkeydown="App.handleCellKeydown(event, this)" />
+                <span style="font-size: 11px; color: var(--uat-orange); cursor: default;" title="Participaciones en Unidad ${u}">⭐</span>
+              </div>
+            </td>
+          `;
+        }
+      }
+
       // Celdas de Evaluación calculada U1 a Un
       let evalCells = "";
       for (let u = 1; u <= numUnits; u++) {
@@ -1023,9 +1184,10 @@ const App = {
         const hasVal = val !== null && val !== undefined;
         const displayVal = hasVal ? val : "-";
         const numVal = hasVal ? val : 0;
+        const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[u]);
 
         let ringColor = "var(--color-green)";
-        if (numVal < 60) ringColor = "var(--color-red)";
+        if (isSd || numVal < 60) ringColor = "var(--color-red)";
         else if (numVal < 70) ringColor = "var(--color-orange)";
 
         const pct = Math.min(100, numVal);
@@ -1033,9 +1195,9 @@ const App = {
         const strokeColor = hasVal ? ringColor : "var(--border-color)";
 
         evalCells += `
-          <td class="col-calc">
+          <td class="col-calc ${isSd ? 'cell-sin-derecho' : ''}">
             <div class="firmas-cell-content">
-              <span id="val-eval-${index}-${uKey}">${displayVal}</span>
+              <span id="val-eval-${index}-${uKey}" style="${isSd ? 'color: var(--color-red); font-weight: 800;' : ''}">${isSd ? 'SD' : displayVal}</span>
               <svg class="progress-ring" viewBox="0 0 20 20">
                 <circle class="progress-ring-circle-bg" cx="10" cy="10" r="7"/>
                 <circle id="ring-eval-${index}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
@@ -1082,6 +1244,8 @@ const App = {
           </td>
           ${firmasCells}
           ${examenesCells}
+          ${asistenciaCells}
+          ${participacionCells}
           ${evalCells}
           <td class="col-number-input">
             <input type="number" inputmode="decimal" min="0" max="100" class="cell-input ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" value="${rec.proyecto ?? ''}" placeholder="-" data-col="proyecto"
@@ -1156,6 +1320,24 @@ const App = {
       `;
     }
 
+    let asistenciaHeadersHtml = "";
+    if (showAsist) {
+      for (let u = 1; u <= numUnits; u++) {
+        asistenciaHeadersHtml += `
+          <th style="width: 105px;"><div class="th-content"><span class="th-icon">📅</span> Asist U${u} (${weights.asistencia}%)</div></th>
+        `;
+      }
+    }
+
+    let participacionHeadersHtml = "";
+    if (showPart) {
+      for (let u = 1; u <= numUnits; u++) {
+        participacionHeadersHtml += `
+          <th style="width: 85px;"><div class="th-content"><span class="th-icon">⭐</span> Part U${u} (${weights.participacion}%)</div></th>
+        `;
+      }
+    }
+
     let evalHeadersHtml = "";
     for (let u = 1; u <= numUnits; u++) {
       evalHeadersHtml += `
@@ -1189,12 +1371,34 @@ const App = {
       `;
     }
 
+    let footerAvgAsistHtml = "";
+    if (showAsist) {
+      for (let u = 1; u <= numUnits; u++) {
+        const uKey = `u${u}`;
+        footerAvgAsistHtml += `
+          <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-asist-${uKey}" class="summary-value">${stats.avgAsistencia[uKey] || 0}%</span></span></td>
+        `;
+      }
+    }
+
+    let footerAvgPartHtml = "";
+    if (showPart) {
+      for (let u = 1; u <= numUnits; u++) {
+        const uKey = `u${u}`;
+        footerAvgPartHtml += `
+          <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-part-${uKey}" class="summary-value">${stats.avgParticipacion[uKey] || '0.0'}</span></span></td>
+        `;
+      }
+    }
+
     let footerAvgEvalsHtml = "";
     for (let u = 1; u <= numUnits; u++) {
       footerAvgEvalsHtml += `
         <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-eval-u${u}" class="summary-value">${stats.avgEvaluaciones[u] || '0.00'}</span></span></td>
       `;
     }
+
+    const totalTableCols = 6 + (numUnits * 3) + (showAsist ? numUnits : 0) + (showPart ? numUnits : 0);
 
     container.innerHTML = `
       <div class="page-title-area gradebook-header-container">
@@ -1220,6 +1424,8 @@ const App = {
           <div class="gradebook-desc-col">
             <p class="page-desc">
               Control de evaluaciones por unidad y calificación final • Periodo <b>${this.escapeHtml(course.periodo)}</b> • <span class="page-desc-units-tag">${numUnits} Unidades y Exámenes</span>
+              ${showAsist ? ' • <span style="color: var(--uat-orange); font-weight: 600;">Asistencia (' + weights.asistencia + '%)</span>' : ''}
+              ${showPart ? ' • <span style="color: var(--uat-orange); font-weight: 600;">Participación (' + weights.participacion + '%)</span>' : ''}
             </p>
           </div>
           <div class="gradebook-actions-col">
@@ -1234,7 +1440,7 @@ const App = {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Nueva Lista
             </button>
-            <button class="btn btn-default btn-course-pair" onclick="App.openManageCourseModal()" title="Ajustes de esta lista (renombrar, unidades, metas de firmas, duplicar grupo, eliminar)">
+            <button class="btn btn-default btn-course-pair" onclick="App.openManageCourseModal()" title="Ajustes de esta lista (renombrar, unidades, ponderaciones, metas de firmas, duplicar grupo, eliminar)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               Ajustes
             </button>
@@ -1290,6 +1496,12 @@ const App = {
               <!-- Exámenes U1-Un con Candado de Bloqueo -->
               ${examenesHeadersHtml}
 
+              <!-- Asistencias U1-Un (Opcional) -->
+              ${asistenciaHeadersHtml}
+
+              <!-- Participaciones U1-Un (Opcional) -->
+              ${participacionHeadersHtml}
+
               <!-- Evaluaciones Calculadas U1-Un -->
               ${evalHeadersHtml}
 
@@ -1299,7 +1511,7 @@ const App = {
             </tr>
           </thead>
           <tbody id="gradebookTableBody">
-            ${rowsHtml || `<tr><td colspan="${6 + (numUnits * 3)}" style="text-align: center; padding: 24px; color: var(--text-tertiary);">No se encontraron alumnos registrados.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${totalTableCols}" style="text-align: center; padding: 24px; color: var(--text-tertiary);">No se encontraron alumnos registrados.</td></tr>`}
           </tbody>
           <tfoot>
             <tr class="notion-table-footer">
@@ -1311,6 +1523,12 @@ const App = {
 
               <!-- Promedio Exámenes -->
               ${footerAvgExamenesHtml}
+
+              <!-- Promedio Asistencias (Opcional) -->
+              ${footerAvgAsistHtml}
+
+              <!-- Promedio Participaciones (Opcional) -->
+              ${footerAvgPartHtml}
 
               <!-- Promedio Evaluaciones -->
               ${footerAvgEvalsHtml}
@@ -1331,6 +1549,666 @@ const App = {
         </div>
       </div>
     `;
+    setTimeout(() => {
+      this.fitGradebookTableHeight();
+    }, 0);
+  },
+
+  // 1.5 CONTROL DE ASISTENCIAS Y PARTICIPACIÓN (MODO HÍBRIDO: DIARIO Y PAPEL)
+  setAttendanceUnit: function(unitNum) {
+    this.attendanceActiveUnit = Number(unitNum) || 1;
+    this.attendanceActiveSessionId = null;
+    this.render();
+  },
+
+  setAttendanceMode: function(mode) {
+    this.attendanceMode = mode;
+    this.render();
+  },
+
+  setAttendanceActiveSession: function(sessionId) {
+    this.attendanceActiveSessionId = sessionId;
+    this.render();
+  },
+
+  addAttendanceSession: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    if (!course.attendanceSessions) course.attendanceSessions = [];
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const today = `${yyyy}-${mm}-${dd}`;
+
+    const currentUnit = this.attendanceActiveUnit;
+    const unitSessions = course.attendanceSessions.filter(s => s.unidad === currentUnit);
+    const sessionNum = unitSessions.length + 1;
+    const newSession = {
+      id: 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      unidad: currentUnit,
+      fecha: today,
+      tema: `Clase ${sessionNum}`
+    };
+
+    course.attendanceSessions.push(newSession);
+    this.attendanceActiveSessionId = newSession.id;
+
+    // Inicializar a todos los alumnos como Presente (P) de forma predeterminada
+    const records = course.records || [];
+    records.forEach(rec => {
+      if (!rec.attendanceDays) rec.attendanceDays = {};
+      rec.attendanceDays[newSession.id] = 'P';
+    });
+
+    this.recalculateAttendanceForUnit(course, currentUnit);
+    this.debouncedSave();
+    this.render();
+    this.showToast(`✅ Sesión "${newSession.tema}" creada para la Unidad ${currentUnit}`);
+  },
+
+  deleteAttendanceSession: function(sessionId) {
+    const course = this.getActiveCourse();
+    if (!course || !course.attendanceSessions) return;
+    const idx = course.attendanceSessions.findIndex(s => s.id === sessionId);
+    if (idx === -1) return;
+
+    const s = course.attendanceSessions[idx];
+    if (!confirm(`¿Deseas eliminar la clase del ${s.fecha} (${s.tema || 'Clase'})? Los registros de este día se borrarán.`)) {
+      return;
+    }
+
+    course.attendanceSessions.splice(idx, 1);
+    (course.records || []).forEach(r => {
+      if (r.attendanceDays) delete r.attendanceDays[sessionId];
+      if (r.participationDays) delete r.participationDays[sessionId];
+    });
+
+    const currentUnit = this.attendanceActiveUnit;
+    const remaining = course.attendanceSessions.filter(sess => sess.unidad === currentUnit);
+    this.attendanceActiveSessionId = remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+
+    this.recalculateAttendanceForUnit(course, currentUnit);
+    this.debouncedSave();
+    this.render();
+    this.showToast("🗑️ Sesión de clase eliminada.");
+  },
+
+  updateAttendanceSessionMeta: function(sessionId, field, value) {
+    const course = this.getActiveCourse();
+    if (!course || !course.attendanceSessions) return;
+    const session = course.attendanceSessions.find(s => s.id === sessionId);
+    if (!session) return;
+    session[field] = value;
+    this.debouncedSave();
+  },
+
+  markAllPresent: function(sessionId) {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    const records = course.records || [];
+    records.forEach(rec => {
+      if (!rec.attendanceDays) rec.attendanceDays = {};
+      rec.attendanceDays[sessionId] = 'P';
+    });
+    this.recalculateAttendanceForUnit(course, this.attendanceActiveUnit);
+    this.debouncedSave();
+    this.render();
+    this.showToast("⚡ Todos los alumnos marcados como Presentes (P)");
+  },
+
+  setStudentSessionStatus: function(recIndex, sessionId, status) {
+    const course = this.getActiveCourse();
+    if (!course || !course.records || !course.records[recIndex]) return;
+    const rec = course.records[recIndex];
+    if (!rec.attendanceDays) rec.attendanceDays = {};
+    rec.attendanceDays[sessionId] = status;
+
+    this.recalculateAttendanceForUnit(course, this.attendanceActiveUnit);
+    this.debouncedSave();
+    this.render();
+  },
+
+  adjustStudentSessionPart: function(recIndex, sessionId, delta) {
+    const course = this.getActiveCourse();
+    if (!course || !course.records || !course.records[recIndex]) return;
+    const rec = course.records[recIndex];
+    if (!rec.participationDays) rec.participationDays = {};
+    const curr = Number(rec.participationDays[sessionId]) || 0;
+    const next = Math.max(0, curr + delta);
+    rec.participationDays[sessionId] = next;
+
+    this.recalculateAttendanceForUnit(course, this.attendanceActiveUnit);
+    this.debouncedSave();
+    this.render();
+  },
+
+  recalculateAttendanceForUnit: function(course, u) {
+    const uKey = `u${u}`;
+    const sessions = (course.attendanceSessions || []).filter(s => s.unidad === u);
+    const totalSessions = sessions.length;
+
+    (course.records || []).forEach(rec => {
+      if (!rec.asistencia) rec.asistencia = {};
+      if (!rec.faltas) rec.faltas = {};
+      if (!rec.participacion) rec.participacion = {};
+      if (!rec.asistenciaAuto) rec.asistenciaAuto = {};
+
+      if (totalSessions === 0) {
+        return;
+      }
+
+      let pCount = 0;
+      let fCount = 0;
+      let rCount = 0;
+      let jCount = 0;
+      let partSum = 0;
+
+      sessions.forEach(s => {
+        const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+        if (st === 'P') pCount++;
+        else if (st === 'F') fCount++;
+        else if (st === 'R') rCount++;
+        else if (st === 'J') jCount++;
+
+        if (rec.participationDays && rec.participationDays[s.id]) {
+          partSum += Number(rec.participationDays[s.id]) || 0;
+        }
+      });
+
+      const effectivePresent = pCount + (rCount * 0.5) + jCount;
+      const pct = Math.min(100, Math.max(0, Math.round((effectivePresent / totalSessions) * 100)));
+      const effectiveFaltas = fCount + Math.floor(rCount / 2);
+
+      rec.asistencia[uKey] = pct;
+      rec.faltas[uKey] = effectiveFaltas;
+      rec.participacion[uKey] = partSum;
+      rec.asistenciaAuto[uKey] = true;
+    });
+  },
+
+  saveQuickAttendance: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    const u = this.attendanceActiveUnit;
+    const uKey = `u${u}`;
+    const records = course.records || [];
+
+    const totalClasesInp = document.getElementById("quickTotalClassesInput");
+    const totalClases = Math.max(1, Number(totalClasesInp?.value) || 10);
+    if (!course.asistenciaTotalClasses) course.asistenciaTotalClasses = {};
+    course.asistenciaTotalClasses[uKey] = totalClases;
+
+    records.forEach((rec, idx) => {
+      const asistInp = document.getElementById(`quick-asist-${idx}`);
+      const faltasInp = document.getElementById(`quick-faltas-${idx}`);
+      const retInp = document.getElementById(`quick-ret-${idx}`);
+      const justInp = document.getElementById(`quick-just-${idx}`);
+      const partInp = document.getElementById(`quick-part-${idx}`);
+
+      if (asistInp && faltasInp) {
+        let numAsist = Number(asistInp.value) || 0;
+        let numFaltas = Number(faltasInp.value) || 0;
+        let numRet = Number(retInp?.value) || 0;
+        let numJust = Number(justInp?.value) || 0;
+        let numPart = Number(partInp?.value) || 0;
+
+        let pct = 0;
+        if (numAsist > totalClases && numAsist <= 100) {
+          pct = numAsist;
+        } else {
+          const effectiveAtt = numAsist + (numRet * 0.5) + numJust;
+          pct = Math.min(100, Math.max(0, Math.round((effectiveAtt / totalClases) * 100)));
+        }
+
+        const effectiveFaltas = numFaltas + Math.floor(numRet / 2);
+
+        if (!rec.asistencia) rec.asistencia = {};
+        if (!rec.faltas) rec.faltas = {};
+        if (!rec.participacion) rec.participacion = {};
+        if (!rec.asistenciaAuto) rec.asistenciaAuto = {};
+
+        rec.asistencia[uKey] = pct;
+        rec.faltas[uKey] = effectiveFaltas;
+        rec.participacion[uKey] = numPart;
+        rec.asistenciaAuto[uKey] = false;
+      }
+    });
+
+    this.debouncedSave();
+    this.render();
+    this.showToast(`💾 Asistencias y faltas de Unidad ${u} sincronizadas con el Calificador.`);
+  },
+
+  onQuickRowInput: function(idx) {
+    const totalClasesInp = document.getElementById("quickTotalClassesInput");
+    const totalClases = Math.max(1, Number(totalClasesInp?.value) || 10);
+
+    const asistInp = document.getElementById(`quick-asist-${idx}`);
+    const retInp = document.getElementById(`quick-ret-${idx}`);
+    const justInp = document.getElementById(`quick-just-${idx}`);
+    const previewChip = document.getElementById(`quick-preview-pct-${idx}`);
+
+    if (asistInp && previewChip) {
+      let numAsist = Number(asistInp.value) || 0;
+      let numRet = Number(retInp?.value) || 0;
+      let numJust = Number(justInp?.value) || 0;
+
+      let pct = 0;
+      if (numAsist > totalClases && numAsist <= 100) {
+        pct = numAsist;
+      } else {
+        const effectiveAtt = numAsist + (numRet * 0.5) + numJust;
+        pct = Math.min(100, Math.max(0, Math.round((effectiveAtt / totalClases) * 100)));
+      }
+      previewChip.textContent = `${pct}%`;
+      previewChip.style.color = pct >= 80 ? 'var(--color-green)' : (pct >= 60 ? 'var(--color-orange)' : 'var(--color-red)');
+    }
+  },
+
+  renderAttendance: function(container) {
+    const course = this.getActiveCourse();
+    if (!course) {
+      container.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: var(--text-tertiary);">
+          <p>No se encontró ninguna materia seleccionada.</p>
+        </div>
+      `;
+      return;
+    }
+
+    if (!course.attendanceSessions) {
+      course.attendanceSessions = [];
+    }
+
+    const numUnits = Number(course.unidadesCount) || 5;
+    if (this.attendanceActiveUnit > numUnits || this.attendanceActiveUnit < 1) {
+      this.attendanceActiveUnit = 1;
+    }
+    const currentUnit = this.attendanceActiveUnit;
+    const uKey = `u${currentUnit}`;
+
+    const studentsMap = this.getStudentsMap();
+    const records = course.records || [];
+    const isAuditReadOnly = this.isAdmin() && this.isSupervising && !this.supervisionEditMode;
+
+    const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+    const wAsist = Number(weights.asistencia) || 0;
+    const wPart = Number(weights.participacion) || 0;
+
+    const asistCfg = course.asistenciaConfig || {};
+    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
+
+    // Agrupar cursos por nombre de materia para el selector
+    const coursesBySubject = {};
+    (this.data.courses || []).forEach(c => {
+      if (!coursesBySubject[c.nombre]) coursesBySubject[c.nombre] = [];
+      coursesBySubject[c.nombre].push(c);
+    });
+
+    let selectHtml = "";
+    Object.keys(coursesBySubject).forEach(subject => {
+      selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
+      coursesBySubject[subject].forEach(c => {
+        const count = (c.records || []).length;
+        selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${c.grupo || 'Grupo'} (${count} alumnos)</option>`;
+      });
+      selectHtml += `</optgroup>`;
+    });
+
+    // Chips de Unidad (U1 a Un)
+    let unitChipsHtml = "";
+    for (let u = 1; u <= numUnits; u++) {
+      const isAct = (u === currentUnit);
+      unitChipsHtml += `
+        <button type="button" class="attendance-unit-chip ${isAct ? 'active' : ''}" onclick="App.setAttendanceUnit(${u})">
+          <span>Unidad ${u}</span>
+          ${isAct ? '<span class="attendance-unit-dot"></span>' : ''}
+        </button>
+      `;
+    }
+
+    // Contenido del Modo Activo: 'diario' vs 'rapido'
+    let contentHtml = "";
+
+    if (this.attendanceMode === "diario") {
+      const unitSessions = course.attendanceSessions.filter(s => s.unidad === currentUnit);
+
+      if (unitSessions.length > 0) {
+        if (!this.attendanceActiveSessionId || !unitSessions.some(s => s.id === this.attendanceActiveSessionId)) {
+          this.attendanceActiveSessionId = unitSessions[unitSessions.length - 1].id;
+        }
+      } else {
+        this.attendanceActiveSessionId = null;
+      }
+
+      const activeSession = unitSessions.find(s => s.id === this.attendanceActiveSessionId);
+
+      // Barra de Sesiones (Pills horizontales)
+      let sessionPillsHtml = "";
+      if (unitSessions.length > 0) {
+        unitSessions.forEach((s, sIdx) => {
+          const isCurrentSess = (s.id === this.attendanceActiveSessionId);
+          sessionPillsHtml += `
+            <div class="session-pill ${isCurrentSess ? 'active' : ''}" onclick="App.setAttendanceActiveSession('${s.id}')">
+              <span class="session-pill-date">${this.escapeHtml(s.fecha || '')}</span>
+              <span class="session-pill-title">${this.escapeHtml(s.tema || `Clase ${sIdx + 1}`)}</span>
+              ${!isAuditReadOnly ? `
+                <button type="button" class="btn-delete-session" title="Eliminar esta clase" onclick="event.stopPropagation(); App.deleteAttendanceSession('${s.id}')">✕</button>
+              ` : ''}
+            </div>
+          `;
+        });
+      }
+
+      if (!activeSession) {
+        contentHtml = `
+          <div class="attendance-empty-card">
+            <div class="attendance-empty-icon">📅</div>
+            <h3 style="font-size: 16px; font-weight: 700; color: var(--uat-blue-night); margin-bottom: 6px;">Sin clases registradas en la Unidad ${currentUnit}</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); max-width: 480px; margin: 0 auto;">Comienza a pasar lista registrando la primera clase de esta unidad o cambia al modo vaciado rápido si tienes listas impresas.</p>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 16px;">
+              <button class="btn btn-primary" onclick="App.addAttendanceSession()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                + Registrar Clase de Hoy
+              </button>
+              <button class="btn btn-default" onclick="App.setAttendanceMode('rapido')">
+                Ir a Vaciado Rápido (Papel)
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        // Calcular estadísticas de la sesión activa
+        let countP = 0, countF = 0, countR = 0, countJ = 0;
+        records.forEach(r => {
+          const st = (r.attendanceDays && r.attendanceDays[activeSession.id]) || 'P';
+          if (st === 'P') countP++;
+          else if (st === 'F') countF++;
+          else if (st === 'R') countR++;
+          else if (st === 'J') countJ++;
+        });
+
+        const totalMarked = records.length;
+        const effectivePres = countP + (countR * 0.5) + countJ;
+        const classPct = totalMarked > 0 ? Math.round((effectivePres / totalMarked) * 100) : 0;
+
+        // Filas de alumnos para la sesión activa
+        let studentsRowsHtml = "";
+        records.forEach((rec, recIdx) => {
+          const student = studentsMap[rec.matricula] || { nombre: "Alumno no registrado en Base Maestra" };
+          const status = (rec.attendanceDays && rec.attendanceDays[activeSession.id]) || 'P';
+          const partCount = (rec.participationDays && Number(rec.participationDays[activeSession.id])) || 0;
+
+          // Acumulados de la unidad completa
+          const unitFaltas = (rec.faltas && rec.faltas[uKey] !== undefined) ? Number(rec.faltas[uKey]) : 0;
+          const unitPct = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? Number(rec.asistencia[uKey]) : 100;
+          const isSd = limiteFaltasActivo && (unitFaltas > maxFaltas);
+
+          studentsRowsHtml += `
+            <tr class="${isSd ? 'row-sin-derecho' : ''}">
+              <td class="col-index" style="width: 40px; text-align: center;">${recIdx + 1}</td>
+              <td class="col-matricula" style="width: 130px; font-weight: 600;">${this.escapeHtml(rec.matricula)}</td>
+              <td class="col-nombre" style="font-weight: 500;">${this.escapeHtml(student.nombre)}</td>
+              <td style="width: 220px; text-align: center;">
+                <div class="attendance-pills-group">
+                  <button type="button" class="btn-att-pill att-p ${status === 'P' ? 'active' : ''}" 
+                    title="Presente" onclick="App.setStudentSessionStatus(${recIdx}, '${activeSession.id}', 'P')">P</button>
+                  <button type="button" class="btn-att-pill att-f ${status === 'F' ? 'active' : ''}" 
+                    title="Falta" onclick="App.setStudentSessionStatus(${recIdx}, '${activeSession.id}', 'F')">F</button>
+                  <button type="button" class="btn-att-pill att-r ${status === 'R' ? 'active' : ''}" 
+                    title="Retardo (0.5 falta)" onclick="App.setStudentSessionStatus(${recIdx}, '${activeSession.id}', 'R')">R</button>
+                  <button type="button" class="btn-att-pill att-j ${status === 'J' ? 'active' : ''}" 
+                    title="Justificado" onclick="App.setStudentSessionStatus(${recIdx}, '${activeSession.id}', 'J')">J</button>
+                </div>
+              </td>
+              <td style="width: 140px; text-align: center;">
+                <div class="part-stepper-control">
+                  <button type="button" class="btn-part-step" onclick="App.adjustStudentSessionPart(${recIdx}, '${activeSession.id}', -1)" title="Restar participación" ${partCount <= 0 ? 'disabled' : ''}>−</button>
+                  <span class="part-count-badge ${partCount > 0 ? 'has-parts' : ''}">
+                    ${partCount > 0 ? '⭐ ' + partCount : '0'}
+                  </span>
+                  <button type="button" class="btn-part-step" onclick="App.adjustStudentSessionPart(${recIdx}, '${activeSession.id}', 1)" title="Sumar participación">+</button>
+                </div>
+              </td>
+              <td style="width: 180px; text-align: right;">
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+                  <span class="badge-faltas ${isSd ? 'badge-faltas-sd' : ''}" title="${unitFaltas} falta(s) acumuladas en Unidad ${currentUnit}">
+                    ${isSd ? '⛔ SD · ' : ''}${unitFaltas} faltas
+                  </span>
+                  <span class="summary-chip" style="min-width: 50px; text-align: center;">
+                    <b>${unitPct}%</b>
+                  </span>
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+
+        contentHtml = `
+          <!-- Barra de Sesiones / Clases Registradas -->
+          <div class="sessions-top-bar">
+            <div class="session-pills-scroll">
+              ${sessionPillsHtml}
+              <button type="button" class="btn-add-session-pill" onclick="App.addAttendanceSession()" title="Agregar nueva sesión de clase">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                + Nueva Clase
+              </button>
+            </div>
+          </div>
+
+          <!-- Barra de Detalle y Acciones Rápidas de la Sesión Activa -->
+          <div class="session-active-card">
+            <div class="session-meta-inputs">
+              <div class="meta-field">
+                <label>Fecha:</label>
+                <input type="date" class="form-control form-control-sm" value="${activeSession.fecha || ''}" 
+                  onchange="App.updateAttendanceSessionMeta('${activeSession.id}', 'fecha', this.value)" />
+              </div>
+              <div class="meta-field" style="flex: 1; min-width: 180px;">
+                <label>Tema de Clase:</label>
+                <input type="text" class="form-control form-control-sm" placeholder="Tema visto hoy (opcional)" 
+                  value="${this.escapeHtml(activeSession.tema || '')}" 
+                  onchange="App.updateAttendanceSessionMeta('${activeSession.id}', 'tema', this.value)" />
+              </div>
+            </div>
+
+            <div class="session-stats-chips">
+              <span class="stat-pill-p"><b>${countP}</b> Presentes</span>
+              <span class="stat-pill-f"><b>${countF}</b> Faltas</span>
+              <span class="stat-pill-r"><b>${countR}</b> Retardos</span>
+              <span class="stat-pill-j"><b>${countJ}</b> Justificados</span>
+              <span class="stat-pill-pct"><b>${classPct}%</b> Asistencia Hoy</span>
+            </div>
+
+            <div class="session-actions-right">
+              <button class="btn btn-sm btn-default" onclick="App.markAllPresent('${activeSession.id}')" title="Marcar a todos con Presente (P)">
+                ⚡ Marcar Todos Presentes
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabla de Pase de Lista Diario -->
+          <div class="notion-table-wrapper" style="margin-top: 12px;">
+            <table class="notion-table" style="table-layout: fixed;">
+              <thead>
+                <tr>
+                  <th style="width: 40px; text-align: center;">#</th>
+                  <th style="width: 130px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
+                  <th><div class="th-content"><span class="th-icon">Aa</span> Nombre del Alumno</div></th>
+                  <th style="width: 220px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">📋</span> Estado de Hoy</div></th>
+                  <th style="width: 140px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">⭐</span> Participación</div></th>
+                  <th style="width: 180px; text-align: right;"><div class="th-content" style="justify-content: flex-end;"><span class="th-icon">📊</span> Acumulado U${currentUnit}</div></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${studentsRowsHtml || `<tr><td colspan="6" style="text-align:center; padding: 24px;">No hay alumnos inscritos en este grupo.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+    } else {
+      // MODO B: VACIADO RÁPIDO (PAPEL)
+      const totalClasesMap = course.asistenciaTotalClasses || {};
+      const totalClases = totalClasesMap[uKey] || 10;
+
+      let quickRowsHtml = "";
+      records.forEach((rec, recIdx) => {
+        const student = studentsMap[rec.matricula] || { nombre: "Alumno no registrado en Base Maestra" };
+        const aVal = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? rec.asistencia[uKey] : "";
+        const fVal = (rec.faltas && rec.faltas[uKey] !== undefined) ? rec.faltas[uKey] : "";
+        const pVal = (rec.participacion && rec.participacion[uKey] !== undefined) ? rec.participacion[uKey] : "";
+
+        let numF = (fVal !== "" && fVal !== null) ? Number(fVal) : 0;
+        let numA = (aVal !== "" && aVal !== null) ? Number(aVal) : (totalClases - numF);
+        if (numA < 0) numA = 0;
+
+        const isSd = limiteFaltasActivo && (numF > maxFaltas);
+
+        quickRowsHtml += `
+          <tr class="${isSd ? 'row-sin-derecho' : ''}">
+            <td class="col-index" style="width: 40px; text-align: center;">${recIdx + 1}</td>
+            <td class="col-matricula" style="width: 130px; font-weight: 600;">${this.escapeHtml(rec.matricula)}</td>
+            <td class="col-nombre" style="font-weight: 500;">${this.escapeHtml(student.nombre)}</td>
+            <td style="width: 100px; text-align: center;">
+              <input type="number" min="0" max="100" id="quick-asist-${recIdx}" class="cell-input" style="text-align: center; font-weight: 600;" 
+                value="${numA}" oninput="App.onQuickRowInput(${recIdx})" onfocus="this.select()" />
+            </td>
+            <td style="width: 90px; text-align: center;">
+              <input type="number" min="0" max="99" id="quick-faltas-${recIdx}" class="cell-input ${isSd ? 'cell-sd-text' : ''}" style="text-align: center; font-weight: 600;" 
+                value="${fVal}" placeholder="0" oninput="App.onQuickRowInput(${recIdx})" onfocus="this.select()" />
+            </td>
+            <td style="width: 80px; text-align: center;">
+              <input type="number" min="0" max="99" id="quick-ret-${recIdx}" class="cell-input" style="text-align: center;" 
+                value="" placeholder="0" oninput="App.onQuickRowInput(${recIdx})" onfocus="this.select()" />
+            </td>
+            <td style="width: 80px; text-align: center;">
+              <input type="number" min="0" max="99" id="quick-just-${recIdx}" class="cell-input" style="text-align: center;" 
+                value="" placeholder="0" oninput="App.onQuickRowInput(${recIdx})" onfocus="this.select()" />
+            </td>
+            <td style="width: 90px; text-align: center;">
+              <span id="quick-preview-pct-${recIdx}" class="summary-chip" style="font-weight: 700;">
+                ${aVal !== "" ? aVal + '%' : '100%'}
+              </span>
+            </td>
+            <td style="width: 100px; text-align: center;">
+              <input type="number" min="0" max="999" id="quick-part-${recIdx}" class="cell-input" style="text-align: center; font-weight: 600; color: var(--uat-orange);" 
+                value="${pVal}" placeholder="0" onfocus="this.select()" />
+            </td>
+            <td style="width: 120px; text-align: center;">
+              ${isSd 
+                ? '<span class="status-badge status-reprobado" style="font-size: 11px;">⛔ Sin Derecho</span>' 
+                : '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>'}
+            </td>
+          </tr>
+        `;
+      });
+
+      contentHtml = `
+        <div class="quick-attendance-toolbar">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label style="font-size: 12.5px; font-weight: 600; color: var(--text-secondary);">Total de Clases Impartidas en Unidad ${currentUnit}:</label>
+              <input type="number" min="1" max="100" id="quickTotalClassesInput" class="form-control" style="width: 70px; text-align: center; font-weight: 700;" 
+                value="${totalClases}" />
+            </div>
+            <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 0;">
+              Captura las faltas y asistencias de tu lista en papel. El porcentaje (%) se recalculará automáticamente.
+            </p>
+          </div>
+          <button class="btn btn-primary" onclick="App.saveQuickAttendance()" title="Guardar cambios y actualizar el Calificador institucional">
+            💾 Guardar y Aplicar a Calificador
+          </button>
+        </div>
+
+        <div class="notion-table-wrapper" style="margin-top: 12px;">
+          <table class="notion-table" style="table-layout: fixed;">
+            <thead>
+              <tr>
+                <th style="width: 40px; text-align: center;">#</th>
+                <th style="width: 130px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
+                <th><div class="th-content"><span class="th-icon">Aa</span> Nombre del Alumno</div></th>
+                <th style="width: 100px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Asistencias</div></th>
+                <th style="width: 90px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Faltas</div></th>
+                <th style="width: 80px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Retardos</div></th>
+                <th style="width: 80px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Justif.</div></th>
+                <th style="width: 90px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">%</span> % Asist</div></th>
+                <th style="width: 100px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">⭐</span> Participación</div></th>
+                <th style="width: 120px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">🛡️</span> Derecho</div></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${quickRowsHtml || `<tr><td colspan="10" style="text-align:center; padding: 24px;">No hay alumnos inscritos en este grupo.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      <div class="page-title-area gradebook-header-container">
+        <!-- Fila 1: Título de la Materia y Selector de Grupo -->
+        <div class="gradebook-header-top">
+          <div class="gradebook-title-col">
+            <h1 class="page-title" title="${this.escapeHtml(course.nombre)}">
+              <span class="course-name-text">${this.escapeHtml(course.nombre)}</span>
+              <span class="course-group-badge">${this.escapeHtml(course.grupo || 'Grupo A')}</span>
+            </h1>
+          </div>
+          <div class="gradebook-switcher-col">
+            <select class="form-control gradebook-course-select" onchange="App.switchCourse(this.value)" title="Cambiar de materia o grupo">
+              ${selectHtml}
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 2: Subtítulo Descriptivo y Pestañas de Modo -->
+        <div class="gradebook-header-bottom">
+          <div class="gradebook-desc-col">
+            <p class="page-desc">
+              Control de Asistencias & Participación • Periodo <b>${this.escapeHtml(course.periodo)}</b>
+              ${wAsist > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación Asistencia: ${wAsist}%</span>` : ` • <span style="color: var(--text-tertiary);">(Criterio Asistencia 0% en Ajustes)</span>`}
+              ${wPart > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación Participación: ${wPart}%</span>` : ''}
+              ${limiteFaltasActivo ? ` • <span style="color: var(--color-red); font-weight: 700;">Límite SD: Máx ${maxFaltas} faltas</span>` : ''}
+            </p>
+          </div>
+          <div class="gradebook-actions-col">
+            <button class="btn btn-default" onclick="App.switchTab('gradebook')" title="Volver a la sábana principal de calificaciones">
+              ← Volver al Calificador
+            </button>
+            <button class="btn btn-default" onclick="App.openManageCourseModal()" title="Ajustes de criterios y ponderaciones">
+              Ajustes de Criterios
+            </button>
+          </div>
+        </div>
+
+        <!-- Fila 3: Selector de Unidad y Selector de Modo (Híbrido) -->
+        <div class="attendance-controls-row">
+          <div class="attendance-units-nav">
+            ${unitChipsHtml}
+          </div>
+          <div class="attendance-mode-selector">
+            <button type="button" class="attendance-mode-tab-btn ${this.attendanceMode === 'diario' ? 'active' : ''}" 
+              onclick="App.setAttendanceMode('diario')">
+              📋 Pase Diario en Clase
+            </button>
+            <button type="button" class="attendance-mode-tab-btn ${this.attendanceMode === 'rapido' ? 'active' : ''}" 
+              onclick="App.setAttendanceMode('rapido')">
+              📝 Vaciado Rápido (Papel)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="attendance-main-area">
+        ${contentHtml}
+      </div>
+    `;
+
     setTimeout(() => {
       this.fitGradebookTableHeight();
     }, 0);
@@ -1655,6 +2533,62 @@ const App = {
     }
   },
 
+  updateAsistencia: function(identifier, uKey, val) {
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para capturar notas.", "warning");
+      return;
+    }
+    const course = this.getActiveCourse();
+    if (!course) return;
+    if (course.lockedUnits && course.lockedUnits[uKey]) {
+      this.showToast(`⚠️ La Unidad ${uKey.replace('u', '')} está bloqueada. Desbloquéala para editar asistencias.`, "warning");
+      return;
+    }
+    const { rec, idx } = this._resolveRecord(identifier, course);
+    if (rec && idx !== -1) {
+      if (!rec.asistencia) rec.asistencia = {};
+      if (val === "" || val === null) {
+        rec.asistencia[uKey] = null;
+      } else {
+        let num = Number(val);
+        if (isNaN(num)) num = 0;
+        rec.asistencia[uKey] = Math.max(0, Math.min(100, num));
+      }
+      // Si el maestro edita manualmente, quitar la marca de sincronización automática pura
+      if (rec.asistenciaAuto) rec.asistenciaAuto[uKey] = false;
+      this.updateStudentRowView(idx, 'asistencia', uKey, rec.asistencia[uKey]);
+      this.updateSummaryStats();
+      this.debouncedSave();
+    }
+  },
+
+  updateParticipacion: function(identifier, uKey, val) {
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para capturar notas.", "warning");
+      return;
+    }
+    const course = this.getActiveCourse();
+    if (!course) return;
+    if (course.lockedUnits && course.lockedUnits[uKey]) {
+      this.showToast(`⚠️ La Unidad ${uKey.replace('u', '')} está bloqueada. Desbloquéala para editar participaciones.`, "warning");
+      return;
+    }
+    const { rec, idx } = this._resolveRecord(identifier, course);
+    if (rec && idx !== -1) {
+      if (!rec.participacion) rec.participacion = {};
+      if (val === "" || val === null) {
+        rec.participacion[uKey] = null;
+      } else {
+        let num = Number(val);
+        if (isNaN(num)) num = 0;
+        rec.participacion[uKey] = Math.max(0, Math.min(999, num));
+      }
+      this.updateStudentRowView(idx, 'participacion', uKey, rec.participacion[uKey]);
+      this.updateSummaryStats();
+      this.debouncedSave();
+    }
+  },
+
   updateProyecto: function(identifier, val) {
     if (this.isSupervising && !this.supervisionEditMode) {
       this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para capturar notas.", "warning");
@@ -1734,6 +2668,28 @@ const App = {
       }
     }
 
+    // 2.1 Si se actualizó asistencia de una unidad, actualizar anillo SVG correspondiente
+    if (field === 'asistencia' && uKey) {
+      const ring = document.getElementById(`ring-asist-${recIdx}-${uKey}`);
+      if (ring) {
+        const numVal = val !== "" && val !== null ? Number(val) : null;
+        if (numVal !== null) {
+          const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[uKey.replace('u', '')]);
+          let ringColor = "var(--color-green)";
+          if (isSd || numVal < 60) ringColor = "var(--color-red)";
+          else if (numVal < 80) ringColor = "var(--color-orange)";
+
+          const pct = Math.min(100, Math.max(0, numVal));
+          const dashOffset = 44 - (44 * pct) / 100;
+          ring.style.strokeDashoffset = dashOffset;
+          ring.style.stroke = ringColor;
+        } else {
+          ring.style.strokeDashoffset = 44;
+          ring.style.stroke = 'var(--border-color)';
+        }
+      }
+    }
+
     // 3. Actualizar los números y anillos de Evaluación calculada U1 a Un
     const numUnits = Number(course.unidadesCount) || 5;
     for (let u = 1; u <= numUnits; u++) {
@@ -1742,15 +2698,20 @@ const App = {
       const ringEl = document.getElementById(`ring-eval-${recIdx}-${uK}`);
       const evalVal = calcs.evalU[u];
       const hasEval = evalVal !== null && evalVal !== undefined;
-      const displayVal = hasEval ? evalVal : "-";
+      const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[u]);
+      const displayVal = isSd ? "SD" : (hasEval ? evalVal : "-");
 
-      if (valEl) valEl.textContent = displayVal;
+      if (valEl) {
+        valEl.textContent = displayVal;
+        valEl.style.color = isSd ? "var(--color-red)" : "";
+        valEl.style.fontWeight = isSd ? "800" : "";
+      }
       if (ringEl) {
-        if (hasEval) {
+        if (hasEval || isSd) {
           let ringColor = "var(--color-green)";
-          if (evalVal < 60) ringColor = "var(--color-red)";
+          if (isSd || evalVal < 60) ringColor = "var(--color-red)";
           else if (evalVal < 70) ringColor = "var(--color-orange)";
-          const pct = Math.min(100, evalVal);
+          const pct = Math.min(100, evalVal || 0);
           const dashOffset = 44 - (44 * pct) / 100;
           ringEl.style.strokeDashoffset = dashOffset;
           ringEl.style.stroke = ringColor;
@@ -2118,6 +3079,10 @@ const App = {
 
     // Generar desglose de unidades U1 a Un
     const numUnits = Number(course.unidadesCount) || 5;
+    const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+    const showAsist = Number(weights.asistencia) > 0;
+    const showPart = Number(weights.participacion) > 0;
+
     let unitsHtml = "";
     for (let u = 1; u <= numUnits; u++) {
       const uKey = `u${u}`;
@@ -2125,13 +3090,18 @@ const App = {
       const maxF = maxFirmasConfig[uKey] || 10;
       const fVal = rec.firmas ? (rec.firmas[uKey] ?? "") : "";
       const eVal = rec.examenes ? (rec.examenes[uKey] ?? "") : "";
+      const aVal = rec.asistencia ? (rec.asistencia[uKey] ?? "") : "";
+      const pVal = rec.participacion ? (rec.participacion[uKey] ?? "") : "";
+      const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[u]);
+      const faltas = (calcs.faltasU && calcs.faltasU[u]) || 0;
+
       const uGrade = calcs.evalU[u];
       const hasUGrade = uGrade !== null && uGrade !== undefined;
-      const displayUGrade = hasUGrade ? uGrade : "-";
+      const displayUGrade = isSd ? "SD" : (hasUGrade ? uGrade : "-");
 
       let badgeColor = "var(--color-green)";
       let badgeBg = "var(--color-green-bg)";
-      if (hasUGrade && uGrade < 60) {
+      if (isSd || (hasUGrade && uGrade < 60)) {
         badgeColor = "var(--color-red)";
         badgeBg = "var(--color-red-bg)";
       } else if (hasUGrade && uGrade < 70) {
@@ -2140,9 +3110,9 @@ const App = {
       }
 
       unitsHtml += `
-        <div class="student-mobile-unit-card">
+        <div class="student-mobile-unit-card ${isSd ? 'card-sin-derecho' : ''}">
           <div class="student-mobile-unit-header">
-            <span>Unidad ${u} ${isLocked ? '🔒 (Bloqueada)' : ''}</span>
+            <span>Unidad ${u} ${isLocked ? '🔒 (Bloqueada)' : ''} ${isSd ? '<span class="badge-faltas badge-faltas-sd">⛔ SD</span>' : ''}</span>
             <span id="mobile-unit-badge-${uKey}" style="font-size: 13px; font-weight: 800; color: ${badgeColor}; background: ${badgeBg}; padding: 2px 10px; border-radius: 12px;">
               Nota: ${displayUGrade}
             </span>
@@ -2166,6 +3136,28 @@ const App = {
                 onblur="App.handleCellBlur(this)"
                 oninput="App.updateExamen(${index}, '${uKey}', this.value); App.updateMobileStudentModalView(${index});" />
             </div>
+            ${showAsist ? `
+            <div class="student-mobile-input-field">
+              <label>Asistencia (%) ${faltas > 0 ? `<span class="badge-faltas ${isSd ? 'badge-faltas-sd' : ''}">${faltas}f</span>` : ''}</label>
+              <input type="number" inputmode="numeric" min="0" max="100" class="mobile-grade-input ${isLocked ? 'cell-locked' : ''} ${isSd ? 'cell-sd-text' : ''}" 
+                value="${aVal}" placeholder="-"
+                ${isLocked || (this.isSupervising && !this.supervisionEditMode) ? 'readonly' : ''}
+                onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
+                oninput="App.updateAsistencia(${index}, '${uKey}', this.value); App.updateMobileStudentModalView(${index});" />
+            </div>
+            ` : ''}
+            ${showPart ? `
+            <div class="student-mobile-input-field">
+              <label>Participación ⭐</label>
+              <input type="number" inputmode="numeric" min="0" max="999" class="mobile-grade-input ${isLocked ? 'cell-locked' : ''}" 
+                value="${pVal}" placeholder="-"
+                ${isLocked || (this.isSupervising && !this.supervisionEditMode) ? 'readonly' : ''}
+                onfocus="this.select()"
+                onblur="App.handleCellBlur(this)"
+                oninput="App.updateParticipacion(${index}, '${uKey}', this.value); App.updateMobileStudentModalView(${index});" />
+            </div>
+            ` : ''}
           </div>
         </div>
       `;
@@ -2251,11 +3243,12 @@ const App = {
       const uKey = `u${u}`;
       const uGrade = calcs.evalU[u];
       const hasUGrade = uGrade !== null && uGrade !== undefined;
-      const displayUGrade = hasUGrade ? uGrade : "-";
+      const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[u]);
+      const displayUGrade = isSd ? "SD" : (hasUGrade ? uGrade : "-");
 
       let badgeColor = "var(--color-green)";
       let badgeBg = "var(--color-green-bg)";
-      if (hasUGrade && uGrade < 60) {
+      if (isSd || (hasUGrade && uGrade < 60)) {
         badgeColor = "var(--color-red)";
         badgeBg = "var(--color-red-bg)";
       } else if (hasUGrade && uGrade < 70) {
@@ -2267,7 +3260,7 @@ const App = {
       if (badgeEl) {
         badgeEl.style.color = badgeColor;
         badgeEl.style.background = badgeBg;
-        badgeEl.textContent = `Nota: ${displayUGrade}`;
+        badgeEl.textContent = isSd ? "⛔ SD" : `Nota: ${displayUGrade}`;
       }
     }
 
@@ -2679,6 +3672,40 @@ const App = {
 
     this.renderManageCourseUnitsInputs();
 
+    // Inicializar controles de Ponderación de Criterios (Firmas, Exámenes, Asistencia, Participación)
+    const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+    const hasCustomWeights = (Number(weights.asistencia) > 0 || Number(weights.participacion) > 0);
+    const toggleCriterios = document.getElementById("manageToggleCriterios");
+    const containerWeights = document.getElementById("manageWeightsContainer");
+
+    if (toggleCriterios) toggleCriterios.checked = !!hasCustomWeights;
+    if (containerWeights) containerWeights.style.display = hasCustomWeights ? "block" : "none";
+
+    const inpW_F = document.getElementById("manageWeightFirmas");
+    const inpW_E = document.getElementById("manageWeightExamen");
+    const inpW_A = document.getElementById("manageWeightAsist");
+    const inpW_P = document.getElementById("manageWeightPart");
+
+    if (inpW_F) inpW_F.value = weights.firmas !== undefined ? weights.firmas : (hasCustomWeights ? 30 : 50);
+    if (inpW_E) inpW_E.value = weights.examen !== undefined ? weights.examen : (hasCustomWeights ? 40 : 50);
+    if (inpW_A) inpW_A.value = weights.asistencia !== undefined ? weights.asistencia : (hasCustomWeights ? 15 : 0);
+    if (inpW_P) inpW_P.value = weights.participacion !== undefined ? weights.participacion : (hasCustomWeights ? 15 : 0);
+    this.onWeightsInputChange();
+
+    // Inicializar controles de Regla Opcional de Derecho a Examen por Faltas (SD)
+    const asistCfg = course.asistenciaConfig || {};
+    const isLimiteActivo = !!asistCfg.limiteFaltasActivo;
+    const toggleLimite = document.getElementById("manageToggleLimiteFaltas");
+    const containerLimite = document.getElementById("manageLimiteFaltasContainer");
+
+    if (toggleLimite) toggleLimite.checked = isLimiteActivo;
+    if (containerLimite) containerLimite.style.display = isLimiteActivo ? "block" : "none";
+
+    const inpMaxFaltas = document.getElementById("manageMaxFaltasInput");
+    const selModo = document.getElementById("manageModoExcederSelect");
+    if (inpMaxFaltas) inpMaxFaltas.value = asistCfg.maxFaltasPorUnidad ?? 3;
+    if (selModo) selModo.value = asistCfg.modoExceder || "alerta_sd";
+
     const btnSubmit = document.getElementById("btnSubmitEditCourse");
     if (btnSubmit) {
       btnSubmit.disabled = false;
@@ -2687,6 +3714,61 @@ const App = {
 
     const modal = document.getElementById("manageCourseModal");
     if (modal) modal.classList.add("open");
+  },
+
+  toggleManageCriterios: function(checked) {
+    const container = document.getElementById("manageWeightsContainer");
+    if (container) container.style.display = checked ? "block" : "none";
+    if (checked) {
+      const inpW_F = document.getElementById("manageWeightFirmas");
+      const inpW_E = document.getElementById("manageWeightExamen");
+      const inpW_A = document.getElementById("manageWeightAsist");
+      const inpW_P = document.getElementById("manageWeightPart");
+      if (inpW_F && inpW_E && inpW_A && inpW_P) {
+        if (Number(inpW_A.value) === 0 && Number(inpW_P.value) === 0) {
+          inpW_F.value = 30;
+          inpW_E.value = 40;
+          inpW_A.value = 15;
+          inpW_P.value = 15;
+        }
+      }
+    }
+    this.onWeightsInputChange();
+  },
+
+  onWeightsInputChange: function() {
+    const inpF = Number(document.getElementById("manageWeightFirmas")?.value) || 0;
+    const inpE = Number(document.getElementById("manageWeightExamen")?.value) || 0;
+    const inpA = Number(document.getElementById("manageWeightAsist")?.value) || 0;
+    const inpP = Number(document.getElementById("manageWeightPart")?.value) || 0;
+    const sum = inpF + inpE + inpA + inpP;
+    const badge = document.getElementById("manageWeightsTotalBadge");
+    if (badge) {
+      if (sum === 100) {
+        badge.className = "status-badge status-aprobado";
+        badge.textContent = "Suma: 100% (Correcto)";
+      } else {
+        badge.className = "status-badge status-reprobado";
+        badge.textContent = `Suma: ${sum}% (Debe ser 100%)`;
+      }
+    }
+  },
+
+  resetWeightsToDefault: function() {
+    const inpF = document.getElementById("manageWeightFirmas");
+    const inpE = document.getElementById("manageWeightExamen");
+    const inpA = document.getElementById("manageWeightAsist");
+    const inpP = document.getElementById("manageWeightPart");
+    if (inpF) inpF.value = 50;
+    if (inpE) inpE.value = 50;
+    if (inpA) inpA.value = 0;
+    if (inpP) inpP.value = 0;
+    this.onWeightsInputChange();
+  },
+
+  toggleManageLimiteFaltas: function(checked) {
+    const container = document.getElementById("manageLimiteFaltasContainer");
+    if (container) container.style.display = checked ? "block" : "none";
   },
 
   onManageUnitsInputDirect: function(val) {
@@ -2833,6 +3915,42 @@ const App = {
       course.firmasMaxConfig[`u${u}`] = this._tempManageMaxFirmas[`u${u}`] || 10;
     }
 
+    // Recoger Ponderaciones de Criterios (Firmas, Exámenes, Asistencia, Participación)
+    const toggleCriterios = document.getElementById("manageToggleCriterios");
+    if (toggleCriterios && toggleCriterios.checked) {
+      const wF = Math.max(0, Math.min(100, Number(document.getElementById("manageWeightFirmas")?.value) || 0));
+      const wE = Math.max(0, Math.min(100, Number(document.getElementById("manageWeightExamen")?.value) || 0));
+      const wA = Math.max(0, Math.min(100, Number(document.getElementById("manageWeightAsist")?.value) || 0));
+      const wP = Math.max(0, Math.min(100, Number(document.getElementById("manageWeightPart")?.value) || 0));
+      const sum = wF + wE + wA + wP;
+      if (sum !== 100) {
+        if (!confirm(`La suma de los criterios de evaluación da ${sum}% (debería ser 100%). ¿Deseas guardar de todos modos?`)) {
+          return;
+        }
+      }
+      course.gradingWeights = { firmas: wF, examen: wE, asistencia: wA, participacion: wP };
+    } else {
+      course.gradingWeights = { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+    }
+
+    // Recoger Regla Opcional de Derecho a Examen por Faltas (SD)
+    const toggleLimiteFaltas = document.getElementById("manageToggleLimiteFaltas");
+    if (toggleLimiteFaltas && toggleLimiteFaltas.checked) {
+      const maxFaltasVal = Math.max(1, Math.min(20, Number(document.getElementById("manageMaxFaltasInput")?.value) || 3));
+      const modoVal = document.getElementById("manageModoExcederSelect")?.value || "alerta_sd";
+      course.asistenciaConfig = {
+        limiteFaltasActivo: true,
+        maxFaltasPorUnidad: maxFaltasVal,
+        modoExceder: modoVal
+      };
+    } else {
+      course.asistenciaConfig = {
+        limiteFaltasActivo: false,
+        maxFaltasPorUnidad: 3,
+        modoExceder: "alerta_sd"
+      };
+    }
+
     // Si se redujeron unidades, depurar llaves sobrantes y registros de alumnos
     if (newCount < oldCount) {
       for (let u = newCount + 1; u <= 12; u++) {
@@ -2846,14 +3964,19 @@ const App = {
       if (course.records) {
         course.records.forEach(r => {
           if (r.firmas) {
-            for (let u = newCount + 1; u <= 12; u++) {
-              delete r.firmas[`u${u}`];
-            }
+            for (let u = newCount + 1; u <= 12; u++) delete r.firmas[`u${u}`];
           }
           if (r.examenes) {
-            for (let u = newCount + 1; u <= 12; u++) {
-              delete r.examenes[`u${u}`];
-            }
+            for (let u = newCount + 1; u <= 12; u++) delete r.examenes[`u${u}`];
+          }
+          if (r.asistencia) {
+            for (let u = newCount + 1; u <= 12; u++) delete r.asistencia[`u${u}`];
+          }
+          if (r.participacion) {
+            for (let u = newCount + 1; u <= 12; u++) delete r.participacion[`u${u}`];
+          }
+          if (r.faltas) {
+            for (let u = newCount + 1; u <= 12; u++) delete r.faltas[`u${u}`];
           }
         });
       }
