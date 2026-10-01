@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.09.23.v35";
+      const CURRENT_APP_VERSION = "2026.10.01.v37";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=36">
+  <link rel="stylesheet" href="styles.css?v=37">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -336,8 +336,12 @@
             <input type="text" id="newCourseGrupo" class="form-control" placeholder="Ej. Grupo A, Grupo B, 1A" value="Grupo A" />
           </div>
           <div class="form-group">
-            <label>Periodo Escolar:</label>
-            <input type="text" id="newCoursePeriodo" class="form-control" placeholder="Ej. 2026-1" value="2026-1" />
+            <label>Periodo Escolar / Semestre:</label>
+            <input type="text" id="newCoursePeriodo" class="form-control" placeholder="Ej. 2026 - 3 OTOÑO" value="2026 - 3 OTOÑO" list="semestersList" />
+            <datalist id="semestersList">
+              <option value="2026 - 3 OTOÑO">
+              <option value="2026 - 1 PRIMAVERA">
+            </datalist>
           </div>
         </div>
         <div class="form-group">
@@ -370,8 +374,8 @@
             <input type="text" id="editCourseGrupo" class="form-control" />
           </div>
           <div class="form-group">
-            <label style="font-weight: 600;">Periodo Escolar:</label>
-            <input type="text" id="editCoursePeriodo" class="form-control" />
+            <label style="font-weight: 600;">Periodo Escolar / Semestre:</label>
+            <input type="text" id="editCoursePeriodo" class="form-control" placeholder="Ej. 2026 - 3 OTOÑO" list="semestersList" />
           </div>
         </div>
 
@@ -744,9 +748,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=36"></script>
-  <script src="sample_data.js?v=36"></script>
-  <script src="exporter.js?v=36"></script>
-  <script src="app.js?v=36"></script>
+  <script src="supabase_service.js?v=37"></script>
+  <script src="sample_data.js?v=37"></script>
+  <script src="exporter.js?v=37"></script>
+  <script src="app.js?v=37"></script>
 </body>
 </html>

@@ -34,6 +34,7 @@ const App = {
   },
   data: null, // Apunta a las calificaciones del docente activo
   activeCourseId: "algebra-lineal-ga",
+  selectedSemester: null, // Semestre / Periodo escolar seleccionado (filtro de listas)
   activeTab: "gradebook", // "admin_dashboard", "gradebook", "directory", "teams", "config"
   theme: "light",
   searchTerm: "",
@@ -566,8 +567,175 @@ const App = {
     }
   },
 
+  normalizePeriodo: function(p) {
+    if (!p || typeof p !== 'string' || !p.trim()) return "2026 - 3 OTOÑO";
+    const trimmed = p.trim();
+    const upper = trimmed.toUpperCase().replace(/\s+/g, " ");
+    if (upper === "2026-3" || upper === "2026-3 OTOÑO" || upper === "2026 - 3" || upper === "2026 - 3 OTOÑO") {
+      return "2026 - 3 OTOÑO";
+    }
+    if (upper === "2026-1" || upper === "2026-1 PRIMAVERA" || upper === "2026 - 1" || upper === "2026 - 1 PRIMAVERA") {
+      return "2026 - 1 PRIMAVERA";
+    }
+    return trimmed;
+  },
+
+  getAvailableSemesters: function() {
+    const semestersSet = new Set(["2026 - 3 OTOÑO", "2026 - 1 PRIMAVERA"]);
+    if (this.data && Array.isArray(this.data.courses)) {
+      this.data.courses.forEach(c => {
+        const norm = this.normalizePeriodo(c.periodo);
+        if (norm) semestersSet.add(norm);
+      });
+    }
+    const arr = Array.from(semestersSet);
+    arr.sort((a, b) => {
+      if (a === "2026 - 3 OTOÑO") return -1;
+      if (b === "2026 - 3 OTOÑO") return 1;
+      if (a === "2026 - 1 PRIMAVERA") return -1;
+      if (b === "2026 - 1 PRIMAVERA") return 1;
+      return b.localeCompare(a);
+    });
+    return arr;
+  },
+
+  getSelectedSemester: function() {
+    const available = this.getAvailableSemesters();
+    if (this.selectedSemester && available.includes(this.selectedSemester)) {
+      return this.selectedSemester;
+    }
+    const active = (this.data && Array.isArray(this.data.courses) && this.activeCourseId)
+      ? this.data.courses.find(c => c.id === this.activeCourseId)
+      : null;
+    if (active && active.periodo) {
+      const norm = this.normalizePeriodo(active.periodo);
+      if (available.includes(norm)) {
+        this.selectedSemester = norm;
+        return norm;
+      }
+    }
+    this.selectedSemester = available[0] || "2026 - 3 OTOÑO";
+    return this.selectedSemester;
+  },
+
+  getCoursesForSelectedSemester: function() {
+    if (!this.data || !Array.isArray(this.data.courses)) return [];
+    const currentSemester = this.getSelectedSemester();
+    return this.data.courses.filter(c => this.normalizePeriodo(c.periodo) === currentSemester);
+  },
+
+  switchSemester: function(semester) {
+    const normSemester = this.normalizePeriodo(semester);
+    this.selectedSemester = normSemester;
+
+    const coursesInSem = (this.data && Array.isArray(this.data.courses))
+      ? this.data.courses.filter(c => this.normalizePeriodo(c.periodo) === normSemester)
+      : [];
+
+    const activeCourse = this.data?.courses?.find(c => c.id === this.activeCourseId);
+    if (activeCourse && this.normalizePeriodo(activeCourse.periodo) === normSemester) {
+      // Ya pertenece a este semestre, se mantiene
+    } else if (coursesInSem.length > 0) {
+      this.activeCourseId = coursesInSem[0].id;
+    } else {
+      this.activeCourseId = null;
+    }
+
+    this.render();
+  },
+
   getActiveCourse: function() {
-    return this.data.courses.find(c => c.id === this.activeCourseId) || this.data.courses[0];
+    if (!this.data || !Array.isArray(this.data.courses) || this.data.courses.length === 0) {
+      return null;
+    }
+    const currentSemester = this.getSelectedSemester();
+    const coursesInSemester = this.data.courses.filter(c => this.normalizePeriodo(c.periodo) === currentSemester);
+
+    if (this.activeCourseId) {
+      const foundInSemester = coursesInSemester.find(c => c.id === this.activeCourseId);
+      if (foundInSemester) return foundInSemester;
+    }
+    if (coursesInSemester.length > 0) {
+      return coursesInSemester[0];
+    }
+    return null;
+  },
+
+  renderEmptyGradebook: function(container) {
+    const selectedSem = this.getSelectedSemester();
+    const availableSemesters = this.getAvailableSemesters();
+    let semesterSelectHtml = "";
+    availableSemesters.forEach(sem => {
+      const isSel = (sem === selectedSem);
+      semesterSelectHtml += `<option value="${this.escapeHtml(sem)}" ${isSel ? 'selected' : ''}>${this.escapeHtml(sem)}</option>`;
+    });
+
+    container.innerHTML = `
+      <div class="page-title-area gradebook-header-container">
+        <!-- Fila 1: Título y Selector de Semestre -->
+        <div class="gradebook-header-top">
+          <div class="gradebook-title-col">
+            <h1 class="page-title">
+              <span class="course-name-text">Sin materias registradas</span>
+              <span class="course-group-badge" style="background: rgba(100, 116, 139, 0.15); color: var(--text-secondary);">${this.escapeHtml(selectedSem)}</span>
+            </h1>
+          </div>
+          <div class="gradebook-switcher-col">
+            <div class="gradebook-switchers-row">
+              <div class="gradebook-select-pill gradebook-semester-pill" title="Seleccionar semestre / periodo escolar">
+                <span class="pill-prefix">Semestre:</span>
+                <select class="form-control gradebook-semester-select" onchange="App.switchSemester(this.value)">
+                  ${semesterSelectHtml}
+                </select>
+              </div>
+              <div class="gradebook-select-pill gradebook-course-pill" style="opacity: 0.6;">
+                <span class="pill-prefix">Lista / Grupo:</span>
+                <select class="form-control gradebook-course-select" disabled>
+                  <option>(Sin listas en este semestre)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fila 2: Subtítulo Descriptivo y Acciones -->
+        <div class="gradebook-header-bottom">
+          <div class="gradebook-desc-col">
+            <p class="page-desc">
+              Periodo <b>${this.escapeHtml(selectedSem)}</b> • 0 materias asignadas
+            </p>
+          </div>
+          <div class="gradebook-actions-col">
+            <button class="btn btn-primary btn-course-pair" onclick="App.openNewCourseModal()" title="Crear nueva lista para este semestre">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nueva Lista
+            </button>
+            <button class="btn btn-default" onclick="App.switchSemester('2026 - 3 OTOÑO')" title="Volver al semestre actual">
+              Volver a 2026 - 3 OTOÑO
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="empty-state-card" style="padding: 50px 20px; text-align: center; background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: 12px; margin-top: 16px;">
+        <div style="font-size: 44px; margin-bottom: 12px;">📂</div>
+        <h3 style="font-size: 18px; font-weight: 700; color: var(--uat-blue-night); margin-bottom: 6px;">
+          No tienes listas creadas para el semestre ${this.escapeHtml(selectedSem)}
+        </h3>
+        <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 520px; margin: 0 auto 20px;">
+          Tus calificaciones y listas del semestre <b>2026 - 3 OTOÑO</b> están completamente seguras e intactas. Puedes dar de alta una nueva materia para este periodo o regresar con el selector superior.
+        </p>
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+          <button class="btn btn-primary" onclick="App.openNewCourseModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Crear Nueva Lista para ${this.escapeHtml(selectedSem)}
+          </button>
+          <button class="btn btn-default" onclick="App.switchSemester('2026 - 3 OTOÑO')">
+            Volver a Semestre Actual (2026 - 3 OTOÑO)
+          </button>
+        </div>
+      </div>
+    `;
   },
 
   getStudentsMap: function() {
@@ -1010,12 +1178,20 @@ const App = {
 
   switchCourse: function(courseId) {
     this.activeCourseId = courseId;
+    const course = this.data?.courses?.find(c => c.id === courseId);
+    if (course && course.periodo) {
+      this.selectedSemester = this.normalizePeriodo(course.periodo);
+    }
     this.render();
   },
 
   // 1. VISTA DE CALIFICADOR (RÉPLICA DE NOTION)
   renderGradebook: function(container) {
     const course = this.getActiveCourse();
+    if (!course) {
+      this.renderEmptyGradebook(container);
+      return;
+    }
     const numUnits = Number(course.unidadesCount) || 5;
     const studentsMap = this.getStudentsMap();
     const stats = this.calculateCourseStats(course);
@@ -1271,21 +1447,35 @@ const App = {
       `;
     });
 
-    // Agrupar cursos por nombre de materia
+    // Agrupar cursos por nombre de materia para el semestre seleccionado
+    const selectedSem = this.getSelectedSemester();
+    const semesterCourses = this.getCoursesForSelectedSemester();
+
     const coursesBySubject = {};
-    (this.data.courses || []).forEach(c => {
+    semesterCourses.forEach(c => {
       if (!coursesBySubject[c.nombre]) coursesBySubject[c.nombre] = [];
       coursesBySubject[c.nombre].push(c);
     });
 
     let selectHtml = "";
-    Object.keys(coursesBySubject).forEach(subject => {
-      selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
-      coursesBySubject[subject].forEach(c => {
-        const count = (c.records || []).length;
-        selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${c.grupo || 'Grupo'} (${count} alumnos)</option>`;
+    if (semesterCourses.length === 0) {
+      selectHtml = `<option value="" disabled selected>(Sin listas en este semestre)</option>`;
+    } else {
+      Object.keys(coursesBySubject).forEach(subject => {
+        selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
+        coursesBySubject[subject].forEach(c => {
+          const count = (c.records || []).length;
+          selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${this.escapeHtml(c.grupo || 'Grupo')} (${count} alumnos)</option>`;
+        });
+        selectHtml += `</optgroup>`;
       });
-      selectHtml += `</optgroup>`;
+    }
+
+    const availableSemesters = this.getAvailableSemesters();
+    let semesterSelectHtml = "";
+    availableSemesters.forEach(sem => {
+      const isSel = (sem === selectedSem);
+      semesterSelectHtml += `<option value="${this.escapeHtml(sem)}" ${isSel ? 'selected' : ''}>${this.escapeHtml(sem)}</option>`;
     });
 
     let firmasHeadersHtml = "";
@@ -1413,9 +1603,20 @@ const App = {
             </h1>
           </div>
           <div class="gradebook-switcher-col">
-            <select class="form-control gradebook-course-select" onchange="App.switchCourse(this.value)" title="Cambiar de materia o grupo">
-              ${selectHtml}
-            </select>
+            <div class="gradebook-switchers-row">
+              <div class="gradebook-select-pill gradebook-semester-pill" title="Filtrar materias por Semestre / Periodo Escolar">
+                <span class="pill-prefix">Semestre:</span>
+                <select class="form-control gradebook-semester-select" onchange="App.switchSemester(this.value)" title="Seleccionar semestre">
+                  ${semesterSelectHtml}
+                </select>
+              </div>
+              <div class="gradebook-select-pill gradebook-course-pill" title="Seleccionar lista o grupo de este semestre">
+                <span class="pill-prefix">Lista / Grupo:</span>
+                <select class="form-control gradebook-course-select" onchange="App.switchCourse(this.value)" title="Cambiar de materia o grupo">
+                  ${selectHtml}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1841,21 +2042,35 @@ const App = {
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
     const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
 
-    // Agrupar cursos por nombre de materia para el selector
+    // Agrupar cursos por nombre de materia para el semestre seleccionado
+    const selectedSem = this.getSelectedSemester();
+    const semesterCourses = this.getCoursesForSelectedSemester();
+
     const coursesBySubject = {};
-    (this.data.courses || []).forEach(c => {
+    semesterCourses.forEach(c => {
       if (!coursesBySubject[c.nombre]) coursesBySubject[c.nombre] = [];
       coursesBySubject[c.nombre].push(c);
     });
 
     let selectHtml = "";
-    Object.keys(coursesBySubject).forEach(subject => {
-      selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
-      coursesBySubject[subject].forEach(c => {
-        const count = (c.records || []).length;
-        selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${c.grupo || 'Grupo'} (${count} alumnos)</option>`;
+    if (semesterCourses.length === 0) {
+      selectHtml = `<option value="" disabled selected>(Sin listas en este semestre)</option>`;
+    } else {
+      Object.keys(coursesBySubject).forEach(subject => {
+        selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
+        coursesBySubject[subject].forEach(c => {
+          const count = (c.records || []).length;
+          selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${this.escapeHtml(c.grupo || 'Grupo')} (${count} alumnos)</option>`;
+        });
+        selectHtml += `</optgroup>`;
       });
-      selectHtml += `</optgroup>`;
+    }
+
+    const availableSemesters = this.getAvailableSemesters();
+    let semesterSelectHtml = "";
+    availableSemesters.forEach(sem => {
+      const isSel = (sem === selectedSem);
+      semesterSelectHtml += `<option value="${this.escapeHtml(sem)}" ${isSel ? 'selected' : ''}>${this.escapeHtml(sem)}</option>`;
     });
 
     // Chips de Unidad (U1 a Un)
@@ -2160,9 +2375,20 @@ const App = {
             </h1>
           </div>
           <div class="gradebook-switcher-col">
-            <select class="form-control gradebook-course-select" onchange="App.switchCourse(this.value)" title="Cambiar de materia o grupo">
-              ${selectHtml}
-            </select>
+            <div class="gradebook-switchers-row">
+              <div class="gradebook-select-pill gradebook-semester-pill" title="Filtrar materias por Semestre / Periodo Escolar">
+                <span class="pill-prefix">Semestre:</span>
+                <select class="form-control gradebook-semester-select" onchange="App.switchSemester(this.value)" title="Seleccionar semestre">
+                  ${semesterSelectHtml}
+                </select>
+              </div>
+              <div class="gradebook-select-pill gradebook-course-pill" title="Seleccionar lista o grupo de este semestre">
+                <span class="pill-prefix">Lista / Grupo:</span>
+                <select class="form-control gradebook-course-select" onchange="App.switchCourse(this.value)" title="Cambiar de materia o grupo">
+                  ${selectHtml}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -3590,7 +3816,11 @@ const App = {
 
   // Métodos de Gestión de Materias y Grupos
   openNewCourseModal: function() {
-    const currentCourse = this.getActiveCourse();
+    if (this.isSupervising && !this.supervisionEditMode) {
+      this.showToast("⚠️ Modo Auditoría (Solo Lectura). Activa 'Habilitar Edición' para crear materias.", "warning");
+      return;
+    }
+    const currentCourse = this.getActiveCourse() || {};
     const inputNombre = document.getElementById("newCourseNombre");
     const inputGrupo = document.getElementById("newCourseGrupo");
     const inputPeriodo = document.getElementById("newCoursePeriodo");
@@ -3598,10 +3828,12 @@ const App = {
 
     if (inputNombre) inputNombre.value = currentCourse.nombre || "";
     if (inputGrupo) {
-      const existingSameSubject = this.data.courses.filter(c => c.nombre === currentCourse.nombre);
+      const existingSameSubject = (this.data && Array.isArray(this.data.courses))
+        ? this.data.courses.filter(c => c.nombre === currentCourse.nombre)
+        : [];
       inputGrupo.value = "Grupo " + String.fromCharCode(65 + (existingSameSubject.length % 26));
     }
-    if (inputPeriodo) inputPeriodo.value = currentCourse.periodo || "2026-1";
+    if (inputPeriodo) inputPeriodo.value = this.getSelectedSemester() || currentCourse.periodo || "2026 - 3 OTOÑO";
     if (inputUnidades) inputUnidades.value = currentCourse.unidadesCount || 5;
 
     const modal = document.getElementById("newCourseModal");
@@ -3620,7 +3852,7 @@ const App = {
     }
     const nombre = document.getElementById("newCourseNombre")?.value.trim();
     const grupo = document.getElementById("newCourseGrupo")?.value.trim() || "Grupo A";
-    const periodo = document.getElementById("newCoursePeriodo")?.value.trim() || "2026-1";
+    const periodo = document.getElementById("newCoursePeriodo")?.value.trim() || this.getSelectedSemester() || "2026 - 3 OTOÑO";
     const unidades = Number(document.getElementById("newCourseUnidades")?.value) || 5;
 
     if (!nombre) {
@@ -3641,12 +3873,15 @@ const App = {
       records: []
     };
 
+    if (!this.data) this.data = { courses: [], students: [] };
+    if (!this.data.courses) this.data.courses = [];
     this.data.courses.push(newCourse);
+    this.selectedSemester = this.normalizePeriodo(periodo);
     this.activeCourseId = newId;
     this.saveData();
     this.closeNewCourseModal();
     this.render();
-    this.showToast(`Lista creada: ${nombre} • ${grupo}`);
+    this.showToast(`Lista creada: ${nombre} • ${grupo} (${this.selectedSemester})`);
   },
 
   openManageCourseModal: function() {
@@ -3656,6 +3891,7 @@ const App = {
     const inputNombre = document.getElementById("editCourseNombre");
     const inputGrupo = document.getElementById("editCourseGrupo");
     const inputPeriodo = document.getElementById("editCoursePeriodo");
+    if (inputPeriodo) inputPeriodo.value = course.periodo || this.getSelectedSemester() || "2026 - 3 OTOÑO";
 
     if (inputNombre) inputNombre.value = course.nombre;
     if (inputGrupo) inputGrupo.value = course.grupo || "Grupo A";
@@ -3907,7 +4143,8 @@ const App = {
 
     course.nombre = nombre;
     course.grupo = grupo || "Grupo A";
-    course.periodo = periodo || "2026-1";
+    course.periodo = periodo || this.getSelectedSemester() || "2026 - 3 OTOÑO";
+    this.selectedSemester = this.normalizePeriodo(course.periodo);
     course.unidadesCount = newCount;
 
     if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
@@ -4132,6 +4369,7 @@ const App = {
     };
 
     this.data.courses.push(duplicated);
+    this.selectedSemester = this.normalizePeriodo(duplicated.periodo);
     this.activeCourseId = newId;
     this.saveData();
     this.closeManageCourseModal();
@@ -4163,7 +4401,8 @@ const App = {
       const idx = this.data.courses.findIndex(c => c.id === course.id);
       if (idx !== -1) {
         this.data.courses.splice(idx, 1);
-        this.activeCourseId = this.data.courses[0].id;
+        const remainingInSem = this.getCoursesForSelectedSemester();
+        this.activeCourseId = remainingInSem.length > 0 ? remainingInSem[0].id : (this.data.courses[0]?.id || null);
         this.saveData();
         this.closeManageCourseModal();
         this.render();
@@ -4646,6 +4885,7 @@ const App = {
     this.supervisingTeacherId = teacherId;
     this.supervisionEditMode = true; // Por defecto habilitado para agilizar captura docente
     this.data = teacherData || { courses: [], students: [] };
+    this.selectedSemester = null;
     this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
     this.activeTab = "gradebook";
     this.render();
@@ -4715,6 +4955,7 @@ const App = {
     this.isSupervising = false;
     this.supervisingTeacherId = null;
     this.supervisionEditMode = true;
+    this.selectedSemester = null;
     this.data = this.currentUser ? (this.currentUser.data || null) : null;
     this.activeTab = "admin_dashboard";
     this.render();

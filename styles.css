@@ -453,16 +453,120 @@ body {
   flex: 0 0 auto;
 }
 
-.gradebook-course-select {
-  width: 250px !important;
-  min-width: 200px !important;
-  max-width: 270px !important;
-  height: 36px !important;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  cursor: pointer;
-  padding: 0 10px;
+.gradebook-switchers-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gradebook-select-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  padding: 0 6px 0 10px;
+  height: 36px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
   box-sizing: border-box;
+}
+
+.gradebook-select-pill:hover {
+  border-color: rgba(224, 126, 51, 0.4);
+}
+
+.gradebook-select-pill:focus-within {
+  border-color: var(--uat-orange);
+  box-shadow: 0 0 0 2px rgba(224, 126, 51, 0.15);
+}
+
+.gradebook-select-pill .pill-prefix {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-tertiary);
+  margin-right: 4px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.gradebook-semester-pill {
+  border-color: rgba(224, 126, 51, 0.35);
+  background: rgba(224, 126, 51, 0.05);
+}
+
+.gradebook-semester-pill .pill-prefix {
+  color: var(--uat-orange-dark);
+}
+
+.gradebook-semester-select {
+  width: 175px !important;
+  min-width: 155px !important;
+  max-width: 200px !important;
+  height: 32px !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  color: var(--uat-orange-dark) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 4px !important;
+  cursor: pointer !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.gradebook-course-select {
+  width: 215px !important;
+  min-width: 170px !important;
+  max-width: 250px !important;
+  height: 32px !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  color: var(--text-primary) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 4px !important;
+  cursor: pointer !important;
+  outline: none !important;
+  box-shadow: none !important;
+  text-overflow: ellipsis;
+}
+
+.gradebook-semester-select option,
+.gradebook-course-select option {
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #1e293b);
+  font-weight: normal;
+}
+
+[data-theme="dark"] .gradebook-select-pill {
+  background: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .gradebook-semester-pill {
+  background: rgba(224, 126, 51, 0.12);
+  border-color: rgba(224, 126, 51, 0.45);
+}
+
+[data-theme="dark"] .gradebook-semester-pill .pill-prefix {
+  color: var(--uat-orange);
+}
+
+[data-theme="dark"] .gradebook-semester-select {
+  color: var(--uat-orange) !important;
+}
+
+[data-theme="dark"] .gradebook-course-select {
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .gradebook-semester-select option,
+[data-theme="dark"] .gradebook-course-select option {
+  background: #1e222d;
+  color: #f1f5f9;
 }
 
 .gradebook-header-bottom {
@@ -3027,11 +3131,25 @@ textarea.form-control {
     word-break: break-word !important;
   }
 
+  .gradebook-switchers-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .gradebook-select-pill {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    justify-content: space-between !important;
+  }
+
+  .gradebook-semester-select,
   .gradebook-course-select {
     width: 100% !important;
     max-width: 100% !important;
-    min-width: 100% !important;
-    height: 38px !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
   }
 
   .gradebook-header-bottom {
