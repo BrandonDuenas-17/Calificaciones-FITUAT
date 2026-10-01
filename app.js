@@ -676,8 +676,8 @@ const App = {
         <div class="gradebook-header-top">
           <div class="gradebook-title-col">
             <h1 class="page-title">
-              <span class="course-name-text">Sin materias registradas</span>
-              <span class="course-group-badge" style="background: rgba(100, 116, 139, 0.15); color: var(--text-secondary);">${this.escapeHtml(selectedSem)}</span>
+              <span class="course-name-text">Listas aún no cargadas</span>
+              <span class="course-group-badge" style="background: rgba(224, 126, 51, 0.15); color: var(--uat-orange); font-weight: 700;">${this.escapeHtml(selectedSem)}</span>
             </h1>
           </div>
           <div class="gradebook-switcher-col">
@@ -688,7 +688,7 @@ const App = {
                   ${semesterSelectHtml}
                 </select>
               </div>
-              <div class="gradebook-select-pill gradebook-course-pill" style="opacity: 0.6;">
+              <div class="gradebook-select-pill gradebook-course-pill" style="opacity: 0.65;">
                 <span class="pill-prefix">Lista / Grupo:</span>
                 <select class="form-control gradebook-course-select" disabled>
                   <option>(Sin listas en este semestre)</option>
@@ -702,35 +702,47 @@ const App = {
         <div class="gradebook-header-bottom">
           <div class="gradebook-desc-col">
             <p class="page-desc">
-              Periodo <b>${this.escapeHtml(selectedSem)}</b> • 0 materias asignadas
+              Periodo <b>${this.escapeHtml(selectedSem)}</b> • Las listas de alumnos para este periodo escolar aún no han sido cargadas en el sistema.
             </p>
           </div>
           <div class="gradebook-actions-col">
-            <button class="btn btn-primary btn-course-pair" onclick="App.openNewCourseModal()" title="Crear nueva lista para este semestre">
+            <button class="btn btn-primary btn-course-pair" onclick="App.openNewCourseModal()" title="Crear o cargar nueva lista para este semestre">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Nueva Lista
             </button>
-            <button class="btn btn-default" onclick="App.switchSemester('2026 - 3 OTOÑO')" title="Volver al semestre actual">
+            <button class="btn btn-default" onclick="App.switchSemester('2026 - 3 OTOÑO')" title="Volver al periodo escolar con listas cargadas">
               Volver a 2026 - 3 OTOÑO
             </button>
           </div>
         </div>
       </div>
 
-      <div class="empty-state-card" style="padding: 50px 20px; text-align: center; background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: 12px; margin-top: 16px;">
-        <div style="font-size: 44px; margin-bottom: 12px;">📂</div>
-        <h3 style="font-size: 18px; font-weight: 700; color: var(--uat-blue-night); margin-bottom: 6px;">
-          No tienes listas creadas para el semestre ${this.escapeHtml(selectedSem)}
-        </h3>
-        <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 520px; margin: 0 auto 20px;">
-          Tus calificaciones y listas del semestre <b>2026 - 3 OTOÑO</b> están completamente seguras e intactas. Puedes dar de alta una nueva materia para este periodo o regresar con el selector superior.
+      <div class="empty-state-card" style="padding: 56px 24px; text-align: center; background: var(--bg-card); border: 2px dashed var(--border-color); border-radius: 14px; margin-top: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+        <div style="width: 68px; height: 68px; margin: 0 auto 16px; background: rgba(224, 126, 51, 0.12); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--uat-orange);">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        </div>
+        <div style="display: inline-block; padding: 5px 16px; border-radius: 20px; background: rgba(224, 126, 51, 0.12); color: var(--uat-orange); font-weight: 700; font-size: 12px; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.6px;">
+          Aviso de Periodo Escolar
+        </div>
+        <h2 style="font-size: 22px; font-weight: 800; color: var(--uat-blue-night); margin-bottom: 10px;">
+          Las listas de este semestre aún no están cargadas
+        </h2>
+        <p style="font-size: 14.5px; color: var(--text-secondary); max-width: 580px; margin: 0 auto 20px; line-height: 1.55;">
+          Aún no se han subido las listas de alumnos ni se han registrado materias para el periodo escolar <b>${this.escapeHtml(selectedSem)}</b>. En cuanto se carguen o des de alta una materia, aparecerán organizadas en este apartado.
         </p>
-        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-          <button class="btn btn-primary" onclick="App.openNewCourseModal()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            + Crear Nueva Lista para ${this.escapeHtml(selectedSem)}
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 12px 18px; max-width: 560px; margin: 0 auto 24px; display: flex; align-items: center; gap: 12px; text-align: left;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2" style="flex-shrink: 0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span style="font-size: 13px; color: var(--uat-blue-night); line-height: 1.45;">
+            <b>Tus datos están protegidos:</b> Todas tus calificaciones, alumnos y materias del semestre <b>2026 - 3 OTOÑO</b> están 100% seguras y respaldadas en la base de datos.
+          </span>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+          <button class="btn btn-primary" onclick="App.openNewCourseModal()" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600; padding: 10px 20px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Cargar / Crear Lista para ${this.escapeHtml(selectedSem)}
           </button>
-          <button class="btn btn-default" onclick="App.switchSemester('2026 - 3 OTOÑO')">
+          <button class="btn btn-default" onclick="App.switchSemester('2026 - 3 OTOÑO')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             Volver a Semestre Actual (2026 - 3 OTOÑO)
           </button>
         </div>
@@ -1118,7 +1130,7 @@ const App = {
 
     const course = this.getActiveCourse();
     const studentsCount = (this.data && this.data.students) ? this.data.students.length : 0;
-    const recordsCount = (course.records || []).length;
+    const recordsCount = (course && course.records) ? course.records.length : 0;
 
     let adminBackBtn = "";
     if (this.isAdmin() && this.isSupervising) {
@@ -1130,11 +1142,18 @@ const App = {
       `;
     }
 
+    const courseTabTitle = course 
+      ? `${this.escapeHtml(course.nombre || 'Materia')} • ${this.escapeHtml(course.grupo || 'Grupo A')}`
+      : `Calificador (${this.escapeHtml(this.getSelectedSemester())})`;
+    const teamsTabTitle = course
+      ? `Publicar en Teams (${this.escapeHtml(course.grupo || 'Grupo A')})`
+      : `Publicar en Teams`;
+
     nav.innerHTML = `
       ${adminBackBtn}
       <button class="nav-tab-btn ${this.activeTab === 'gradebook' ? 'active' : ''}" onclick="App.switchTab('gradebook')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3zM3 9h18M9 21V9"/></svg>
-        ${this.escapeHtml(course.nombre || 'Materia')} • ${this.escapeHtml(course.grupo || 'Grupo A')}
+        ${courseTabTitle}
         <span class="nav-tab-badge">${recordsCount} alumnos</span>
       </button>
 
@@ -1151,7 +1170,7 @@ const App = {
 
       <button class="nav-tab-btn ${this.activeTab === 'teams' ? 'active' : ''}" onclick="App.switchTab('teams')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        Publicar en Teams (${this.escapeHtml(course.grupo || 'Grupo A')})
+        ${teamsTabTitle}
       </button>
 
       <button class="nav-tab-btn ${this.activeTab === 'config' ? 'active' : ''}" onclick="App.switchTab('config')">
@@ -2011,11 +2030,7 @@ const App = {
   renderAttendance: function(container) {
     const course = this.getActiveCourse();
     if (!course) {
-      container.innerHTML = `
-        <div style="padding: 40px; text-align: center; color: var(--text-tertiary);">
-          <p>No se encontró ninguna materia seleccionada.</p>
-        </div>
-      `;
+      this.renderEmptyGradebook(container);
       return;
     }
 
@@ -2529,6 +2544,10 @@ const App = {
   // 3. VISTA DE PUBLICACIÓN EN TEAMS
   renderTeamsPublication: function(container) {
     const course = this.getActiveCourse();
+    if (!course) {
+      this.renderEmptyGradebook(container);
+      return;
+    }
 
     container.innerHTML = `
       <div class="page-title-area">
@@ -2623,6 +2642,10 @@ const App = {
   // 4. VISTA DE CONFIGURACIÓN & FÓRMULAS
   renderConfig: function(container) {
     const course = this.getActiveCourse();
+    if (!course) {
+      this.renderEmptyGradebook(container);
+      return;
+    }
     const maxF = course.firmasMaxConfig || { u1: 6, u2: 14, u3: 17, u4: 23, u5: 10 };
 
     const numUnits = Number(course.unidadesCount) || 5;
