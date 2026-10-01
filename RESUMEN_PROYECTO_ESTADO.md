@@ -1,10 +1,10 @@
 # 📌 RESUMEN DE ESTADO, CONTEXTO Y BITÁCORA DIARIA DEL PROYECTO
-**Última actualización:** 23 de Septiembre de 2026  
+**Última actualización:** 1 de Octubre de 2026  
 **Proyecto:** Sistema de Calificaciones FIUAT • Control Docente y Supervisión Académica  
 **Organización:** Facultad de Ingeniería Tampico (Universidad Autónoma de Tamaulipas)  
 **Repositorio GitHub:** [https://github.com/BrandonDuenas-17/Calificaciones-FITUAT.git](https://github.com/BrandonDuenas-17/Calificaciones-FITUAT.git)  
 **Rama activa:** `main`  
-**Versión en Producción (Vercel):** `2026.09.23.v35` (URL: [https://calificaciones-fituat.vercel.app/](https://calificaciones-fituat.vercel.app/))  
+**Versión en Producción (Vercel):** `2026.10.01.v37` (URL: [https://calificaciones-fituat.vercel.app/](https://calificaciones-fituat.vercel.app/))  
 
 ---
 
@@ -25,6 +25,20 @@ Codificadas en `AGENTS.md` y `.agents/rules/project_rules.md` para todo agente d
 ---
 
 ## 🗓️ 2. Bitácora Diaria de Cambios y Contexto (Historial por Día)
+
+### 📅 1 de Octubre de 2026 (Versión v37)
+
+#### 1. Integración de Selector de Semestre y Filtrado Reactivo de Listas
+* **Requerimiento:** Integrar junto al selector de grupo un control para seleccionar el semestre (ej. `2026 - 3 OTOÑO`, `2026 - 1 PRIMAVERA`) que filtre de forma inmediata las listas del docente para mostrar solo las del periodo seleccionado, garantizando **cero mezcla de listas** y **preservación absoluta de calificaciones**.
+* **Solución Implementada:**
+  - **Doble Selector Encapsulado en Píldoras Estilizadas:** Se rediseñó la cabecera del calificador y del módulo de asistencias para albergar `.gradebook-switchers-row` con dos controles acoplados:
+    1. **Píldora de Semestre (`.gradebook-semester-pill`):** Dropdown con etiqueta `SEMESTRE:`, acento naranja institucional UAT y listado dinámico de periodos (`2026 - 3 OTOÑO`, `2026 - 1 PRIMAVERA` y cualquier periodo personalizado).
+    2. **Píldora de Materia/Grupo (`.gradebook-course-pill`):** Dropdown con etiqueta `LISTA / GRUPO:`, agrupado por materia con `<optgroup>`, filtrado reactivamente para mostrar únicamente los cursos del semestre activo.
+  - **Aislamiento Criptográfico y Reactivo:** Al cambiar de semestre, el sistema no altera ni sobrescribe ninguna calificación. Si el docente selecciona un semestre sin materias creadas aún, se despliega una vista limpia y segura (`renderEmptyGradebook`) con acceso directo a crear una materia en dicho periodo o volver con un clic a `2026 - 3 OTOÑO`.
+  - **Modal de Creación y Ajustes Actualizado:** Tanto al crear una nueva lista como al editar ajustes o duplicar grupos, el campo de periodo se sincroniza y preselecciona el semestre activo con un `<datalist>` institucional.
+  - **Despliegue y Cache-Busting:** Versión `2026.10.01.v37` desplegada en GitHub con cache-busting en `index.html`, `styles.css` y `app.js`.
+
+---
 
 ### 📅 23 de Septiembre de 2026 (Versiones v34 y v35)
 
