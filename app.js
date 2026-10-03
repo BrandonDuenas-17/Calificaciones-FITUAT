@@ -3158,28 +3158,20 @@ const App = {
         const overallPct = overallMarkedSum > 0 ? Math.round((overallPresSum / overallMarkedSum) * 100) : 100;
 
         contentHtml = `
-          <div class="notion-table-wrapper attendance-sabana-wrapper" id="attendanceSabanaWrapper" style="margin-top: 4px;">
+          <div class="attendance-table-info-bar" style="display: flex; align-items: center; justify-content: space-between; margin: 6px 0 4px 0; padding: 2px 4px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">
+              <span>📅 Fechas de Clase • Unidad ${currentUnit} (${unitSessions.length} sesiones registradas)</span>
+            </div>
+            ${!isAuditReadOnly ? `
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="App.promptAddAttendanceDate()" title="Añadir otra fecha de clase a esta unidad" style="border-radius: 6px; font-size: 12px; font-weight: 700; padding: 4px 12px; display: inline-flex; align-items: center; gap: 5px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                + Añadir Fecha
+              </button>
+            ` : ''}
+          </div>
+          <div class="notion-table-wrapper attendance-sabana-wrapper" id="attendanceSabanaWrapper" style="margin-top: 2px;">
             <table class="notion-table notion-table-gradebook attendance-sabana-table">
               <thead>
-                <!-- Fila 1 de Encabezado: Agrupadores -->
-                <tr class="th-group-row">
-                  <th class="col-sabana-col-1 col-sticky-index" style="width: 44px;">#</th>
-                  <th class="col-sabana-col-2 col-sticky-mat" style="width: 110px;">Matrícula</th>
-                  <th class="col-sabana-col-3 col-sticky-name" style="width: 240px;">Alumno (Rollup)</th>
-                  <th colspan="${unitSessions.length}" class="th-group-dates" style="text-align: center;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-                      <span>📅 Fechas de Clase • Unidad ${currentUnit} (${unitSessions.length} sesiones)</span>
-                      ${!isAuditReadOnly ? `
-                        <button type="button" class="btn-th-add-date" onclick="App.promptAddAttendanceDate()" title="Añadir otra fecha de clase">+ Fecha</button>
-                      ` : ''}
-                    </div>
-                  </th>
-                  <th colspan="6" class="th-group-totals" style="text-align: center;">
-                    <span>📊 Resumen U${currentUnit}</span>
-                  </th>
-                </tr>
-
-                <!-- Fila 2 de Encabezado: Columnas Individuales -->
                 <tr>
                   <th class="col-sabana-col-1 col-sticky-index" style="width: 44px; text-align: center;">#</th>
                   <th class="col-sabana-col-2 col-sticky-mat" style="width: 110px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>

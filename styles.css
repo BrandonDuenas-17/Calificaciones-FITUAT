@@ -4315,35 +4315,22 @@ textarea.form-control {
   vertical-align: middle;
 }
 
-/* Fila de Encabezado Superior (Agrupadores) */
-.th-group-row th {
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--border-color);
-  padding: 8px 10px;
+.attendance-sabana-table thead th {
+  vertical-align: middle !important;
+  background-color: var(--bg-secondary) !important;
+  border-bottom: 3px solid var(--uat-orange) !important;
 }
 
-.th-group-dates {
-  background: rgba(224, 126, 51, 0.08) !important;
-  color: var(--uat-orange) !important;
-  border-left: 2px solid var(--uat-orange) !important;
-  border-right: 2px solid var(--uat-orange) !important;
+[data-theme="dark"] .attendance-sabana-table thead th {
+  background-color: #252528 !important;
+  border-bottom: 3px solid var(--uat-orange) !important;
 }
 
-[data-theme="dark"] .th-group-dates {
-  background: rgba(224, 126, 51, 0.16) !important;
-}
-
-.th-group-totals {
-  background: rgba(33, 32, 82, 0.06) !important;
-  color: var(--uat-blue-night) !important;
-}
-
-[data-theme="dark"] .th-group-totals {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: var(--text-primary) !important;
+.attendance-sabana-table thead th .th-content {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100%;
 }
 
 .btn-th-add-date {
@@ -4371,7 +4358,6 @@ textarea.form-control {
   max-width: 128px;
   text-align: center;
   padding: 8px 6px !important;
-  position: relative;
   border-right: 1px solid var(--border-color);
 }
 
@@ -4887,25 +4873,25 @@ textarea.form-control {
    ========================================================================== */
 .col-attendance-date.col-att-header-altasbajas,
 .col-att-date.col-att-header-altasbajas {
-  background: rgba(2, 132, 199, 0.07) !important;
+  background: #edf6fd !important;
   border-top: 3px solid #0284c7 !important;
 }
 
 [data-theme="dark"] .col-attendance-date.col-att-header-altasbajas,
 [data-theme="dark"] .col-att-date.col-att-header-altasbajas {
-  background: rgba(2, 132, 199, 0.16) !important;
+  background: #1e293b !important;
   border-top: 3px solid #38bdf8 !important;
 }
 
 .col-attendance-date.col-att-header-limitebaja,
 .col-att-date.col-att-header-limitebaja {
-  background: rgba(245, 158, 11, 0.08) !important;
+  background: #fef8ee !important;
   border-top: 3px solid #d97706 !important;
 }
 
 [data-theme="dark"] .col-attendance-date.col-att-header-limitebaja,
 [data-theme="dark"] .col-att-date.col-att-header-limitebaja {
-  background: rgba(245, 158, 11, 0.18) !important;
+  background: #332717 !important;
   border-top: 3px solid #fbbf24 !important;
 }
 
