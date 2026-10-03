@@ -4448,26 +4448,44 @@ textarea.form-control {
   border-color: rgba(248, 113, 113, 0.4);
 }
 
-/* Badges / Botones de Asistencia en Celda */
+/* Badges / Casillas de Asistencia en Celda */
 .col-att-cell {
   text-align: center;
-  padding: 4px 2px !important;
+  padding: 3px 2px !important;
+  vertical-align: middle;
 }
 
-.att-grid-badge {
-  width: 32px;
+.att-grid-badge,
+.att-grid-input {
+  width: 34px;
   height: 28px;
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 800;
-  cursor: pointer;
+  text-align: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1.5px solid transparent;
   transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+  font-family: inherit;
+  text-transform: uppercase;
+}
+
+.att-grid-badge {
+  cursor: pointer;
   user-select: none;
+}
+
+.att-grid-input {
+  cursor: text;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  padding: 0;
+  margin: 0 auto;
 }
 
 .att-grid-badge:hover,
@@ -4479,71 +4497,89 @@ textarea.form-control {
   position: relative;
 }
 
-/* P: Presente */
-.att-grid-badge.att-status-p {
-  background: #dcfce7;
-  color: #15803d;
-  border-color: #86efac;
+.att-grid-input:focus {
+  outline: none;
+  border-color: var(--uat-orange) !important;
+  box-shadow: 0 0 0 3px rgba(242, 107, 15, 0.28) !important;
+  transform: scale(1.12);
+  z-index: 10;
+  position: relative;
 }
 
-[data-theme="dark"] .att-grid-badge.att-status-p {
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.4);
+/* P: Presente */
+.att-grid-badge.att-status-p,
+.att-grid-input.att-status-p {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border-color: #86efac !important;
+}
+
+[data-theme="dark"] .att-grid-badge.att-status-p,
+[data-theme="dark"] .att-grid-input.att-status-p {
+  background: rgba(34, 197, 94, 0.22) !important;
+  color: #4ade80 !important;
+  border-color: rgba(74, 222, 128, 0.45) !important;
 }
 
 /* F: Falta */
-.att-grid-badge.att-status-f {
-  background: #fee2e2;
-  color: #b91c1c;
-  border-color: #fca5a5;
+.att-grid-badge.att-status-f,
+.att-grid-input.att-status-f {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border-color: #fca5a5 !important;
 }
 
-[data-theme="dark"] .att-grid-badge.att-status-f {
-  background: rgba(239, 68, 68, 0.22);
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.4);
+[data-theme="dark"] .att-grid-badge.att-status-f,
+[data-theme="dark"] .att-grid-input.att-status-f {
+  background: rgba(239, 68, 68, 0.25) !important;
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.45) !important;
 }
 
 /* R: Retardo */
-.att-grid-badge.att-status-r {
-  background: #fef3c7;
-  color: #b45309;
-  border-color: #fcd34d;
+.att-grid-badge.att-status-r,
+.att-grid-input.att-status-r {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border-color: #fcd34d !important;
 }
 
-[data-theme="dark"] .att-grid-badge.att-status-r {
-  background: rgba(245, 158, 11, 0.22);
-  color: #fbbf24;
-  border-color: rgba(251, 191, 36, 0.4);
+[data-theme="dark"] .att-grid-badge.att-status-r,
+[data-theme="dark"] .att-grid-input.att-status-r {
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(251, 191, 36, 0.45) !important;
 }
 
 /* J: Justificado */
-.att-grid-badge.att-status-j {
-  background: #dbeafe;
-  color: #1d4ed8;
-  border-color: #93c5fd;
+.att-grid-badge.att-status-j,
+.att-grid-input.att-status-j {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+  border-color: #93c5fd !important;
 }
 
-[data-theme="dark"] .att-grid-badge.att-status-j {
-  background: rgba(59, 130, 246, 0.22);
-  color: #60a5fa;
-  border-color: rgba(96, 165, 250, 0.4);
+[data-theme="dark"] .att-grid-badge.att-status-j,
+[data-theme="dark"] .att-grid-input.att-status-j {
+  background: rgba(59, 130, 246, 0.25) !important;
+  color: #60a5fa !important;
+  border-color: rgba(96, 165, 250, 0.45) !important;
 }
 
-/* Leyendas en Subtítulo */
+/* Leyendas de Asistencia */
 .badge-legend {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   vertical-align: middle;
-  margin: 0 2px;
+  margin: 0 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .badge-legend-p {
@@ -4568,6 +4604,37 @@ textarea.form-control {
   background: #dbeafe;
   color: #1d4ed8;
   border: 1px solid #93c5fd;
+}
+
+.attendance-legend-quick {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.legend-quick-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.att-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.att-legend-item b {
+  color: var(--text-primary);
 }
 
 /* Resumen en Barra de Controles */

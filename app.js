@@ -2512,12 +2512,18 @@ const App = {
     const uKey = `u${currentUnit}`;
     const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === currentUnit);
 
-    // 1. Actualizar el botón en el DOM
+    // 1. Actualizar celda en el DOM (input o botón)
+    const inp = document.getElementById(`att-input-${recIndex}-${sessionId}`);
+    if (inp) {
+      if (inp.value !== newStatus) inp.value = newStatus;
+      inp.className = `att-grid-input att-status-${newStatus.toLowerCase()}`;
+      inp.setAttribute("title", `Estatus: ${newStatus} (P: Presente, F: Falta, R: Retardo, J: Justificado)`);
+    }
     const btn = document.getElementById(`att-btn-${recIndex}-${sessionId}`);
     if (btn) {
       btn.textContent = newStatus;
       btn.className = `att-grid-badge att-status-${newStatus.toLowerCase()}`;
-      btn.setAttribute("title", `Estatus: ${newStatus} (Clic o tecla P/F/R/J para cambiar)`);
+      btn.setAttribute("title", `Estatus: ${newStatus}`);
     }
 
     // 2. Recalcular métricas de la fila del alumno en memoria
@@ -2591,44 +2597,104 @@ const App = {
     this.debouncedSave();
   },
 
-  handleAttendanceKeydown: function(event, recIndex, sessionId) {
+  handleAttendanceInputKeydown: function(event, recIndex, sessionId) {
     const key = event.key.toUpperCase();
-    if (key === 'P' || key === 'F' || key === 'R' || key === 'J') {
-      event.preventDefault();
-      this.setAttendanceStatusDirect(recIndex, sessionId, key);
-      return;
-    }
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault();
-      this.cycleAttendanceStatus(recIndex, sessionId);
-      return;
-    }
-
     const course = this.getActiveCourse();
     if (!course) return;
-    const records = course.records || [];
     const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === this.attendanceActiveUnit);
     const sessionIdx = unitSessions.findIndex(s => s.id === sessionId);
 
-    if (event.key === 'ArrowDown') {
+    // Navegación con Enter o Flecha Abajo (pasa al alumno siguiente en la misma columna)
+    if (event.key === 'Enter' || event.key === 'ArrowDown') {
       event.preventDefault();
-      const nextBtn = document.getElementById(`att-btn-${recIndex + 1}-${sessionId}`);
-      if (nextBtn) nextBtn.focus();
-    } else if (event.key === 'ArrowUp') {
+      const nextInp = document.getElementById(`att-input-${recIndex + 1}-${sessionId}`);
+      if (nextInp) {
+        nextInp.focus();
+        nextInp.select();
+      }
+      return;
+    }
+
+    // Navegación con Flecha Arriba (pasa al alumno anterior en la misma columna)
+    if (event.key === 'ArrowUp') {
       event.preventDefault();
-      const prevBtn = document.getElementById(`att-btn-${recIndex - 1}-${sessionId}`);
-      if (prevBtn) prevBtn.focus();
-    } else if (event.key === 'ArrowRight' && sessionIdx !== -1 && sessionIdx < unitSessions.length - 1) {
+      const prevInp = document.getElementById(`att-input-${recIndex - 1}-${sessionId}`);
+      if (prevInp) {
+        prevInp.focus();
+        prevInp.select();
+      }
+      return;
+    }
+
+    // Navegación con Flecha Derecha (pasa a la siguiente fecha de clase)
+    if (event.key === 'ArrowRight' && sessionIdx !== -1 && sessionIdx < unitSessions.length - 1) {
       event.preventDefault();
       const nextSess = unitSessions[sessionIdx + 1];
-      const nextBtn = document.getElementById(`att-btn-${recIndex}-${nextSess.id}`);
-      if (nextBtn) nextBtn.focus();
-    } else if (event.key === 'ArrowLeft' && sessionIdx > 0) {
+      const targetInp = document.getElementById(`att-input-${recIndex}-${nextSess.id}`);
+      if (targetInp) {
+        targetInp.focus();
+        targetInp.select();
+      }
+      return;
+    }
+
+    // Navegación con Flecha Izquierda (pasa a la fecha de clase anterior)
+    if (event.key === 'ArrowLeft' && sessionIdx > 0) {
       event.preventDefault();
       const prevSess = unitSessions[sessionIdx - 1];
-      const prevBtn = document.getElementById(`att-btn-${recIndex}-${prevSess.id}`);
-      if (prevBtn) prevBtn.focus();
+      const targetInp = document.getElementById(`att-input-${recIndex}-${prevSess.id}`);
+      if (targetInp) {
+        targetInp.focus();
+        targetInp.select();
+      }
+      return;
     }
+
+    // Restricción estricta de letras: ÚNICAMENTE P, F, R o J
+    if (key === 'P' || key === 'F' || key === 'R' || key === 'J') {
+      event.preventDefault();
+      const inp = event.target;
+      inp.value = key;
+      this.setAttendanceStatusDirect(recIndex, sessionId, key);
+      inp.select();
+      return;
+    }
+
+    // Permitir teclas funcionales del sistema (Tabulador, Escape, Borrado)
+    if (event.key === 'Tab' || event.key === 'Escape' || event.key === 'Backspace' || event.key === 'Delete') {
+      return;
+    }
+
+    // Bloquear de forma estricta cualquier otra tecla o carácter no permitido
+    if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+    }
+  },
+
+  handleAttendanceInput: function(inputEl, recIndex, sessionId) {
+    if (!inputEl) return;
+    let val = (inputEl.value || '').trim().toUpperCase();
+    val = val.replace(/[^PFRJ]/g, '');
+    if (val.length > 1) {
+      val = val.charAt(val.length - 1);
+    }
+    if (val === 'P' || val === 'F' || val === 'R' || val === 'J') {
+      inputEl.value = val;
+      this.setAttendanceStatusDirect(recIndex, sessionId, val);
+    }
+  },
+
+  handleAttendanceInputBlur: function(inputEl, recIndex, sessionId) {
+    if (!inputEl) return;
+    const val = (inputEl.value || '').trim().toUpperCase();
+    if (val !== 'P' && val !== 'F' && val !== 'R' && val !== 'J') {
+      inputEl.value = 'P';
+      this.setAttendanceStatusDirect(recIndex, sessionId, 'P');
+    }
+  },
+
+  handleAttendanceKeydown: function(event, recIndex, sessionId) {
+    this.handleAttendanceInputKeydown(event, recIndex, sessionId);
   },
 
   setStudentSessionStatus: function(recIndex, sessionId, status) {
@@ -2950,16 +3016,20 @@ const App = {
             const statusClass = `att-status-${st.toLowerCase()}`;
             sessionCellsHtml += `
               <td class="col-att-cell" data-rec-idx="${recIdx}" data-session-id="${s.id}">
-                <button type="button" 
-                  class="att-grid-badge ${statusClass}" 
-                  id="att-btn-${recIdx}-${s.id}"
-                  tabindex="0"
-                  ${isAuditReadOnly ? 'disabled style="cursor: default;"' : ''}
-                  title="${this.escapeHtml(student.nombre)} | ${s.fecha}: ${st} (Clic para rotar P→F→R→J o presiona teclas P, F, R, J)"
-                  onclick="App.cycleAttendanceStatus(${recIdx}, '${s.id}')"
-                  onkeydown="App.handleAttendanceKeydown(event, ${recIdx}, '${s.id}')">
-                  ${st}
-                </button>
+                <input type="text" 
+                  class="att-grid-input ${statusClass}" 
+                  id="att-input-${recIdx}-${s.id}"
+                  value="${st}"
+                  maxlength="1"
+                  autocomplete="off"
+                  spellcheck="false"
+                  ${isAuditReadOnly ? 'readonly style="cursor: default;"' : ''}
+                  title="${this.escapeHtml(student.nombre)} | ${s.fecha}: ${st} (Escribe P, F, R o J)"
+                  onfocus="this.select()"
+                  onkeydown="App.handleAttendanceInputKeydown(event, ${recIdx}, '${s.id}')"
+                  oninput="App.handleAttendanceInput(this, ${recIdx}, '${s.id}')"
+                  onblur="App.handleAttendanceInputBlur(this, ${recIdx}, '${s.id}')"
+                />
               </td>
             `;
           });
@@ -3454,10 +3524,17 @@ const App = {
           `;
         })()}
 
-        <!-- Fila 3: Selector de Unidad y Modos -->
+        <!-- Fila 3: Selector de Unidad, Leyenda y Modos -->
         <div class="attendance-controls-row">
           <div class="attendance-units-nav">
             ${unitChipsHtml}
+          </div>
+          <div class="attendance-legend-quick" title="Simbología permitida en las casillas de asistencia">
+            <span class="legend-quick-label">Simbología:</span>
+            <span class="att-legend-item"><span class="badge-legend badge-legend-p">P</span> <b>Presente</b></span>
+            <span class="att-legend-item"><span class="badge-legend badge-legend-f">F</span> <b>Falta</b></span>
+            <span class="att-legend-item"><span class="badge-legend badge-legend-r">R</span> <b>Retardo (0.5)</b></span>
+            <span class="att-legend-item"><span class="badge-legend badge-legend-j">J</span> <b>Justificado</b></span>
           </div>
           <div class="attendance-mode-selector">
             <button type="button" class="attendance-mode-tab-btn ${this.attendanceMode === 'sabana' ? 'active' : ''}" 
