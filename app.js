@@ -3146,7 +3146,7 @@ const App = {
           overallMarkedSum += colMarked;
           const colPct = colMarked > 0 ? Math.round((colP / colMarked) * 100) : null;
           footerCellsHtml += `
-            <td id="foot-stat-${s.id}" class="col-attendance-date" style="padding: 6px 2px; text-align: center;">
+            <td id="foot-stat-${s.id}" class="col-attendance-date" style="text-align: center;">
               ${colMarked > 0 
                 ? `<span class="att-foot-stat">${Math.round(colP)}/${colMarked}</span><br><span class="att-foot-stat-pct">${colPct}%</span>` 
                 : `<span class="att-foot-stat" style="color: var(--text-tertiary); opacity: 0.6;">-</span>`
