@@ -4497,5 +4497,355 @@ textarea.form-control {
   }
 }
 
+/* ==========================================================================
+   TIRA INFORMATIVA DE CALENDARIO OFICIAL UAT 2026
+   ========================================================================== */
+.uat-calendar-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.05) 0%, rgba(245, 158, 11, 0.05) 100%);
+  border: 1px solid rgba(2, 132, 199, 0.2);
+  border-left: 4px solid var(--uat-blue-night, #0f2744);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 10px 0 12px 0;
+  flex-wrap: wrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
 
+[data-theme="dark"] .uat-calendar-strip {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, rgba(245, 158, 11, 0.1) 100%);
+  border-color: rgba(2, 132, 199, 0.35);
+  border-left-color: #38bdf8;
+}
 
+.uat-cal-strip-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+}
+
+.uat-cal-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.uat-cal-title {
+  font-size: 13.5px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.uat-cal-badge-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+[data-theme="dark"] .uat-cal-badge-pill {
+  background: rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.uat-cal-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.uat-cal-strip-milestones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.uat-cal-milestone {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  border: 1px solid transparent;
+  min-width: 170px;
+  transition: transform 0.15s ease;
+}
+
+.uat-cal-milestone:hover {
+  transform: translateY(-1px);
+}
+
+/* Hito 1: Pago de Ficha de Inscripción */
+.uat-cal-milestone.milestone-pago {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+[data-theme="dark"] .uat-cal-milestone.milestone-pago {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.uat-cal-milestone.milestone-pago .milestone-badge {
+  color: #b45309;
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+}
+
+[data-theme="dark"] .uat-cal-milestone.milestone-pago .milestone-badge {
+  color: #fbbf24;
+}
+
+/* Hito 2: Altas y Bajas de Materias */
+.uat-cal-milestone.milestone-altasbajas {
+  background: rgba(2, 132, 199, 0.09);
+  border-color: rgba(2, 132, 199, 0.3);
+}
+
+[data-theme="dark"] .uat-cal-milestone.milestone-altasbajas {
+  background: rgba(2, 132, 199, 0.18);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.uat-cal-milestone.milestone-altasbajas .milestone-badge {
+  color: #0284c7;
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+}
+
+[data-theme="dark"] .uat-cal-milestone.milestone-altasbajas .milestone-badge {
+  color: #38bdf8;
+}
+
+.milestone-dates {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+.milestone-deadline {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   ENCABEZADOS DE COLUMNA DE FECHA (SÁBANA)
+   ========================================================================== */
+.col-att-date.col-att-header-altasbajas {
+  background: rgba(2, 132, 199, 0.07) !important;
+  border-top: 3px solid #0284c7 !important;
+}
+
+[data-theme="dark"] .col-att-date.col-att-header-altasbajas {
+  background: rgba(2, 132, 199, 0.16) !important;
+  border-top: 3px solid #38bdf8 !important;
+}
+
+.col-att-date.col-att-header-limitebaja {
+  background: rgba(245, 158, 11, 0.08) !important;
+  border-top: 3px solid #d97706 !important;
+}
+
+[data-theme="dark"] .col-att-date.col-att-header-limitebaja {
+  background: rgba(245, 158, 11, 0.18) !important;
+  border-top: 3px solid #fbbf24 !important;
+}
+
+.att-header-badge-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.att-header-badge-tag.tag-altasbajas {
+  color: #0369a1;
+  background: rgba(2, 132, 199, 0.15);
+  border: 1px solid rgba(2, 132, 199, 0.35);
+}
+
+[data-theme="dark"] .att-header-badge-tag.tag-altasbajas {
+  color: #38bdf8;
+  background: rgba(2, 132, 199, 0.28);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.att-header-badge-tag.tag-limitebaja {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+[data-theme="dark"] .att-header-badge-tag.tag-limitebaja {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.28);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+/* ==========================================================================
+   MODAL DE CALENDARIO ESCOLAR ADMINISTRATIVO UAT 2026
+   ========================================================================== */
+.official-cal-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.official-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.official-cal-month-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.official-cal-month-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.official-cal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.official-cal-table th {
+  text-align: center;
+  padding: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.official-cal-table td {
+  text-align: center;
+  padding: 3px;
+  height: 24px;
+  vertical-align: middle;
+}
+
+.cal-day-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
+  transition: transform 0.1s ease;
+}
+
+.cal-day-cell:hover {
+  transform: scale(1.15);
+  z-index: 2;
+  position: relative;
+}
+
+/* Días de pago de ficha de inscripción */
+.cal-day-cell.day-pago {
+  background: #f59e0b;
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.4);
+}
+
+/* Días de altas y bajas */
+.cal-day-cell.day-altasbajas {
+  background: #0284c7;
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);
+}
+
+/* Fecha límite de baja */
+.cal-day-cell.day-limitebaja {
+  background: #ea580c;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+/* Días de clase normales */
+.cal-day-cell.day-clase {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--text-primary);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+/* Evaluaciones ordinarias */
+.cal-day-cell.day-ordinarias {
+  background: rgba(168, 85, 247, 0.2);
+  color: #7e22ce;
+  font-weight: 700;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+[data-theme="dark"] .cal-day-cell.day-ordinarias {
+  background: rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+}
+
+/* Días inhábiles oficiales */
+.cal-day-cell.day-inhabiles {
+  background: #ef4444;
+  color: #ffffff;
+  font-weight: 800;
+  text-decoration: line-through;
+}
+
+.cal-legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 11.5px;
+}
+
+.cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cal-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+}

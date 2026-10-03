@@ -47,7 +47,7 @@ const App = {
   inactivityTimer: null,
   inactivityTimeoutMs: 20 * 60 * 1000, // 20 minutos de inactividad
   attendanceActiveUnit: 1,
-  attendanceMode: "diario", // "diario" o "rapido"
+  attendanceMode: "sabana", // "sabana" (cuadrícula completa institucional), "diario" o "rapido"
   attendanceActiveSessionId: null,
 
   isAdmin: function() {
@@ -1806,6 +1806,410 @@ const App = {
     return { dayName, dayNum, monthNum };
   },
 
+  // Calendario Escolar Administrativo UAT 2026 (Extracción oficial del documento rector)
+  UAT_CALENDAR_2026: {
+    "2026 - 3 OTOÑO": {
+      periodo: "2026 - 3 OTOÑO",
+      nombreCorto: "Otoño 2026",
+      inicioClases: "2026-08-17",
+      finClases: "2026-11-27",
+      meses: [
+        { year: 2026, month: 7, name: "Agosto" },
+        { year: 2026, month: 8, name: "Septiembre" },
+        { year: 2026, month: 9, name: "Octubre" },
+        { year: 2026, month: 10, name: "Noviembre" },
+        { year: 2026, month: 11, name: "Diciembre" }
+      ],
+      pagoFicha: {
+        inicio: "2026-08-03",
+        fin: "2026-08-14",
+        fechaLimite: "2026-08-14",
+        inicioTxt: "3 de Agosto",
+        finTxt: "14 de Agosto",
+        limiteTxt: "14 de Agosto de 2026",
+        descripcion: "Pago de Ficha de Inscripción y Reinscripciones"
+      },
+      altasBajas: {
+        inicio: "2026-08-17",
+        fin: "2026-08-21",
+        fechaLimiteBaja: "2026-10-16",
+        inicioTxt: "17 de Agosto",
+        finTxt: "21 de Agosto",
+        limiteBajaTxt: "16 de Octubre de 2026",
+        descripcion: "Periodo de Altas y Bajas de Materias"
+      },
+      evaluaciones: {
+        ordinarias: { inicio: "2026-11-23", fin: "2026-11-27", label: "Evaluaciones Finales Ordinarias" },
+        extraordinarias: { inicio: "2026-11-30", fin: "2026-12-04", label: "Evaluaciones Finales Extraordinarias" }
+      },
+      diasInhabiles: [
+        { fecha: "2026-09-16", motivo: "Día de la Independencia de México (Suspensión Oficial)" },
+        { fecha: "2026-10-13", motivo: "Día UAT / Festivo Sindical CCT SUTUAT (Suspensión)" },
+        { fecha: "2026-11-02", motivo: "Día de Muertos (Suspensión Oficial)" },
+        { fecha: "2026-11-16", motivo: "Conmemoración de la Revolución Mexicana (Suspensión Oficial)" }
+      ]
+    },
+    "2026 - 1 PRIMAVERA": {
+      periodo: "2026 - 1 PRIMAVERA",
+      nombreCorto: "Primavera 2026",
+      inicioClases: "2026-01-19",
+      finClases: "2026-05-22",
+      meses: [
+        { year: 2026, month: 0, name: "Enero" },
+        { year: 2026, month: 1, name: "Febrero" },
+        { year: 2026, month: 2, name: "Marzo" },
+        { year: 2026, month: 3, name: "Abril" },
+        { year: 2026, month: 4, name: "Mayo" }
+      ],
+      pagoFicha: {
+        inicio: "2026-01-06",
+        fin: "2026-01-16",
+        fechaLimite: "2026-01-16",
+        inicioTxt: "6 de Enero",
+        finTxt: "16 de Enero",
+        limiteTxt: "16 de Enero de 2026",
+        descripcion: "Pago de Ficha de Inscripción y Reinscripciones"
+      },
+      altasBajas: {
+        inicio: "2026-01-19",
+        fin: "2026-01-23",
+        fechaLimiteBaja: "2026-03-20",
+        inicioTxt: "19 de Enero",
+        finTxt: "23 de Enero",
+        limiteBajaTxt: "20 de Marzo de 2026",
+        descripcion: "Periodo de Altas y Bajas de Materias"
+      },
+      evaluaciones: {
+        ordinarias: { inicio: "2026-05-11", fin: "2026-05-15", label: "Evaluaciones Finales Ordinarias" },
+        extraordinarias: { inicio: "2026-05-18", fin: "2026-05-22", label: "Evaluaciones Finales Extraordinarias" }
+      },
+      diasInhabiles: [
+        { fecha: "2026-01-01", motivo: "Año Nuevo" },
+        { fecha: "2026-01-26", motivo: "Inhábil CCT SUTUAT" },
+        { fecha: "2026-02-02", motivo: "Día de la Constitución Mexicana" },
+        { fecha: "2026-03-16", motivo: "Natalicio de Benito Juárez" },
+        { fecha: "2026-03-30", motivo: "Semana Santa (Vacaciones de Primavera)" },
+        { fecha: "2026-03-31", motivo: "Semana Santa (Vacaciones de Primavera)" },
+        { fecha: "2026-04-01", motivo: "Semana Santa (Vacaciones de Primavera)" },
+        { fecha: "2026-04-02", motivo: "Semana Santa (Vacaciones de Primavera)" },
+        { fecha: "2026-04-03", motivo: "Semana Santa (Vacaciones de Primavera)" },
+        { fecha: "2026-04-06", motivo: "Días otorgados CCT SUTUAT" },
+        { fecha: "2026-04-07", motivo: "Días otorgados CCT SUTUAT" },
+        { fecha: "2026-04-08", motivo: "Días otorgados CCT SUTUAT" },
+        { fecha: "2026-04-09", motivo: "Días otorgados CCT SUTUAT" },
+        { fecha: "2026-04-10", motivo: "Días otorgados CCT SUTUAT" },
+        { fecha: "2026-05-01", motivo: "Día del Trabajo" },
+        { fecha: "2026-05-05", motivo: "Batalla de Puebla" },
+        { fecha: "2026-05-15", motivo: "Día del Maestro" }
+      ]
+    }
+  },
+
+  // Generador automático de fechas oficiales de clase para el semestre
+  populateOfficialSemesterSessions: function(course, force = false) {
+    if (!course) return false;
+    if (!force && course.attendanceSessions && course.attendanceSessions.length > 0) {
+      return false;
+    }
+
+    const normPeriodo = this.normalizePeriodo(course.periodo || this.getSelectedSemester());
+    const calCfg = this.UAT_CALENDAR_2026[normPeriodo] || this.UAT_CALENDAR_2026["2026 - 3 OTOÑO"];
+
+    const start = new Date(calCfg.inicioClases + 'T12:00:00');
+    const end = new Date(calCfg.finClases + 'T12:00:00');
+    const holidayMap = {};
+    (calCfg.diasInhabiles || []).forEach(h => {
+      holidayMap[h.fecha] = h.motivo;
+    });
+
+    const validClassDays = [];
+    let curr = new Date(start);
+    while (curr <= end) {
+      const dow = curr.getDay();
+      if (dow !== 0 && dow !== 6) { // Lunes a Viernes
+        const yyyy = curr.getFullYear();
+        const mm = String(curr.getMonth() + 1).padStart(2, '0');
+        const dd = String(curr.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+        if (!holidayMap[dateStr]) {
+          validClassDays.push(dateStr);
+        }
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    if (validClassDays.length === 0) return false;
+
+    const numUnits = Math.max(1, Number(course.unidadesCount) || 3);
+    course.attendanceSessions = [];
+
+    // Distribuir días uniformemente entre las unidades
+    const baseCount = Math.floor(validClassDays.length / numUnits);
+    const remainder = validClassDays.length % numUnits;
+
+    let dayIdx = 0;
+    for (let u = 1; u <= numUnits; u++) {
+      const countForUnit = baseCount + (u <= remainder ? 1 : 0);
+      for (let i = 0; i < countForUnit; i++) {
+        if (dayIdx >= validClassDays.length) break;
+        const dateStr = validClassDays[dayIdx];
+        const isAltasBajas = (dateStr >= calCfg.altasBajas.inicio && dateStr <= calCfg.altasBajas.fin);
+        const isLimiteBaja = (dateStr === calCfg.altasBajas.fechaLimiteBaja);
+
+        let tema = `Clase ${i + 1}`;
+        if (isAltasBajas) tema += ' (Altas y Bajas)';
+        else if (isLimiteBaja) tema += ' (Límite Baja)';
+
+        const sess = {
+          id: 'sess_' + dateStr.replace(/-/g, '') + '_' + Math.random().toString(36).substring(2, 6),
+          unidad: u,
+          fecha: dateStr,
+          tema: tema,
+          isAltasBajas: isAltasBajas,
+          isLimiteBaja: isLimiteBaja
+        };
+        course.attendanceSessions.push(sess);
+        dayIdx++;
+      }
+    }
+
+    // Inicializar a todos los alumnos como Presente ('P') en las fechas oficiales generadas
+    (course.records || []).forEach(rec => {
+      if (!rec.attendanceDays) rec.attendanceDays = {};
+      course.attendanceSessions.forEach(sess => {
+        if (!rec.attendanceDays[sess.id]) {
+          rec.attendanceDays[sess.id] = 'P';
+        }
+      });
+    });
+
+    // Recalcular métricas de asistencia de todas las unidades
+    for (let u = 1; u <= numUnits; u++) {
+      this.recalculateAttendanceForUnit(course, u);
+    }
+
+    this.debouncedSave();
+    return true;
+  },
+
+  syncOfficialCalendar: function(confirmOverwrite = false) {
+    const course = this.getActiveCourse();
+    if (!course) {
+      this.showToast("⚠️ No hay materia activa seleccionada");
+      return;
+    }
+
+    const normPeriodo = this.normalizePeriodo(course.periodo || this.getSelectedSemester());
+    const calCfg = this.UAT_CALENDAR_2026[normPeriodo] || this.UAT_CALENDAR_2026["2026 - 3 OTOÑO"];
+
+    if (confirmOverwrite && course.attendanceSessions && course.attendanceSessions.length > 0) {
+      const msg = `¿Deseas sincronizar y cargar las fechas oficiales del calendario UAT (${normPeriodo})?\n\n` +
+                  `• Se generarán las fechas hábiles de clase oficiales (Lunes a Viernes).\n` +
+                  `• Se excluirán los días inhábiles y feriados oficiales.\n` +
+                  `• Se remarcarán los días de Altas y Bajas y Pago de Ficha de Inscripción.\n\n` +
+                  `Nota: Se reemplazarán las columnas de fechas actuales por las oficiales.`;
+      if (!confirm(msg)) {
+        return;
+      }
+    }
+
+    const ok = this.populateOfficialSemesterSessions(course, true);
+    if (ok) {
+      this.closeOfficialCalendarModal();
+      this.render();
+      this.showToast(`🎉 ¡Calendario Oficial UAT sincronizado! (${course.attendanceSessions.length} fechas de clase cargadas)`);
+    } else {
+      this.showToast("⚠️ No se pudieron generar las fechas oficiales.");
+    }
+  },
+
+  openOfficialCalendarModal: function() {
+    const modal = document.getElementById("officialCalendarModal");
+    if (!modal) return;
+
+    const course = this.getActiveCourse();
+    const normPeriodo = this.normalizePeriodo(course ? course.periodo : this.getSelectedSemester());
+    const calCfg = this.UAT_CALENDAR_2026[normPeriodo] || this.UAT_CALENDAR_2026["2026 - 3 OTOÑO"];
+
+    const subEl = document.getElementById("officialCalModalSub");
+    if (subEl) {
+      subEl.innerHTML = `Periodo Escolar: <b>${this.escapeHtml(calCfg.periodo)}</b> • Días hábiles de clase, periodo de pago de ficha de inscripción y altas/bajas`;
+    }
+
+    const bodyEl = document.getElementById("officialCalModalBody");
+    if (bodyEl) {
+      bodyEl.innerHTML = this.renderOfficialCalendarView(calCfg);
+    }
+
+    modal.classList.add("open");
+  },
+
+  closeOfficialCalendarModal: function() {
+    const modal = document.getElementById("officialCalendarModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  renderOfficialCalendarView: function(calCfg) {
+    const holidayMap = {};
+    (calCfg.diasInhabiles || []).forEach(h => {
+      holidayMap[h.fecha] = h.motivo;
+    });
+
+    let monthsHtml = "";
+    (calCfg.meses || []).forEach(mInfo => {
+      const year = mInfo.year;
+      const month = mInfo.month; // 0-based
+      const firstDay = new Date(year, month, 1).getDay(); // 0: Dom ... 6: Sáb
+      const totalDays = new Date(year, month + 1, 0).getDate();
+
+      let daysGridHtml = "";
+      // Celdas vacías antes del 1er día
+      for (let empty = 0; empty < firstDay; empty++) {
+        daysGridHtml += `<td></td>`;
+      }
+
+      let currentDayCol = firstDay;
+      for (let day = 1; day <= totalDays; day++) {
+        const mm = String(month + 1).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        const dateStr = `${year}-${mm}-${dd}`;
+
+        const isWeekend = (currentDayCol === 0 || currentDayCol === 6);
+        let cellClass = "cal-day-cell";
+        let tooltip = `${day} de ${mInfo.name}`;
+
+        if (holidayMap[dateStr]) {
+          cellClass += " day-inhabiles";
+          tooltip += ` • INHÁBIL: ${holidayMap[dateStr]}`;
+        } else if (dateStr >= calCfg.pagoFicha.inicio && dateStr <= calCfg.pagoFicha.fin) {
+          cellClass += " day-pago";
+          tooltip += ` • PAGO DE FICHA DE INSCRIPCIÓN (Límite: ${calCfg.pagoFicha.limiteTxt})`;
+        } else if (dateStr >= calCfg.altasBajas.inicio && dateStr <= calCfg.altasBajas.fin) {
+          cellClass += " day-altasbajas";
+          tooltip += ` • ALTAS Y BAJAS DE MATERIAS (${calCfg.altasBajas.inicioTxt} al ${calCfg.altasBajas.finTxt})`;
+        } else if (dateStr === calCfg.altasBajas.fechaLimiteBaja) {
+          cellClass += " day-limitebaja";
+          tooltip += ` • FECHA LÍMITE DE BAJA DE MATERIAS`;
+        } else if (calCfg.evaluaciones?.ordinarias && dateStr >= calCfg.evaluaciones.ordinarias.inicio && dateStr <= calCfg.evaluaciones.ordinarias.fin) {
+          cellClass += " day-ordinarias";
+          tooltip += ` • Evaluaciones Ordinarias`;
+        } else if (!isWeekend && dateStr >= calCfg.inicioClases && dateStr <= calCfg.finClases) {
+          cellClass += " day-clase";
+          tooltip += ` • Día de Clase Oficial`;
+        }
+
+        daysGridHtml += `
+          <td>
+            <span class="${cellClass}" title="${this.escapeHtml(tooltip)}">${day}</span>
+          </td>
+        `;
+
+        currentDayCol++;
+        if (currentDayCol === 7 && day < totalDays) {
+          daysGridHtml += `</tr><tr>`;
+          currentDayCol = 0;
+        }
+      }
+
+      // Rellenar celdas al final si no termina en sábado
+      if (currentDayCol > 0 && currentDayCol < 7) {
+        for (let empty = currentDayCol; empty < 7; empty++) {
+          daysGridHtml += `<td></td>`;
+        }
+      }
+
+      monthsHtml += `
+        <div class="official-cal-month-card">
+          <div class="official-cal-month-title">${mInfo.name} ${year}</div>
+          <table class="official-cal-table">
+            <thead>
+              <tr>
+                <th>D</th><th>L</th><th>M</th><th>MI</th><th>J</th><th>V</th><th>S</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>${daysGridHtml}</tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+    });
+
+    return `
+      <div class="official-cal-container">
+        <!-- Tarjetas de Hitos Clave -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px;">
+          <div class="uat-cal-milestone milestone-pago" style="padding: 12px; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span style="font-size: 20px;">💳</span>
+              <span class="milestone-badge" style="font-size: 11px;">PAGO DE FICHA DE INSCRIPCIÓN</span>
+            </div>
+            <div class="milestone-dates" style="font-size: 13.5px;">${calCfg.pagoFicha.inicioTxt} al ${calCfg.pagoFicha.finTxt}</div>
+            <div class="milestone-deadline" style="margin-top: 3px; font-size: 11.5px;">
+              Fecha límite improrrogable: <b>${calCfg.pagoFicha.limiteTxt}</b>
+            </div>
+          </div>
+
+          <div class="uat-cal-milestone milestone-altasbajas" style="padding: 12px; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span style="font-size: 20px;">🔄</span>
+              <span class="milestone-badge" style="font-size: 11px;">ALTAS Y BAJAS DE MATERIAS</span>
+            </div>
+            <div class="milestone-dates" style="font-size: 13.5px;">${calCfg.altasBajas.inicioTxt} al ${calCfg.altasBajas.finTxt}</div>
+            <div class="milestone-deadline" style="margin-top: 3px; font-size: 11.5px;">
+              Límite de baja: <b>${calCfg.altasBajas.limiteBajaTxt}</b>
+            </div>
+          </div>
+
+          <div class="uat-cal-milestone" style="padding: 12px; border-radius: 8px; background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.3);">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span style="font-size: 20px;">📅</span>
+              <span style="color: #15803d; font-weight: 800; font-size: 11px;">DÍAS DE CLASE HÁBILES</span>
+            </div>
+            <div class="milestone-dates" style="font-size: 13.5px;">${calCfg.inicioClases} al ${calCfg.finClases}</div>
+            <div class="milestone-deadline" style="margin-top: 3px; font-size: 11.5px;">
+              Lunes a Viernes • Feriados e inhábiles oficiales excluidos
+            </div>
+          </div>
+        </div>
+
+        <!-- Cuadrícula de Meses del Semestre -->
+        <div class="official-cal-grid">
+          ${monthsHtml}
+        </div>
+
+        <!-- Barra de Leyenda -->
+        <div class="cal-legend-bar">
+          <span style="font-weight: 700; color: var(--text-primary); margin-right: 4px;">Simbología Oficial:</span>
+          <div class="cal-legend-item">
+            <span class="cal-legend-swatch" style="background: #f59e0b;"></span>
+            <span>Pago de Ficha de Inscripción (${calCfg.pagoFicha.inicioTxt} al ${calCfg.pagoFicha.finTxt})</span>
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-legend-swatch" style="background: #0284c7;"></span>
+            <span>Altas y Bajas de Materias (${calCfg.altasBajas.inicioTxt} al ${calCfg.altasBajas.finTxt})</span>
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-legend-swatch" style="background: #ea580c;"></span>
+            <span>Límite Baja Materias (${calCfg.altasBajas.limiteBajaTxt})</span>
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-legend-swatch" style="background: rgba(34, 197, 94, 0.4); border: 1px solid rgba(34, 197, 94, 0.8);"></span>
+            <span>Días de Clase</span>
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-legend-swatch" style="background: #ef4444;"></span>
+            <span>Días Inhábiles Oficiales (Sin Clases)</span>
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-legend-swatch" style="background: rgba(168, 85, 247, 0.4); border: 1px solid rgba(168, 85, 247, 0.8);"></span>
+            <span>Evaluaciones Ordinarias</span>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
   addAttendanceSession: function(customDate, customTopic) {
     const course = this.getActiveCourse();
     if (!course) return;
@@ -2379,6 +2783,11 @@ const App = {
       course.attendanceSessions = [];
     }
 
+    // Carga automática de los días oficiales del semestre (Calendario UAT 2026) si la lista está vacía
+    if (course.attendanceSessions.length === 0) {
+      this.populateOfficialSemesterSessions(course, false);
+    }
+
     const numUnits = Number(course.unidadesCount) || 5;
     if (this.attendanceActiveUnit > numUnits || this.attendanceActiveUnit < 1) {
       this.attendanceActiveUnit = 1;
@@ -2465,33 +2874,52 @@ const App = {
               Sábana sin fechas registradas en la Unidad ${currentUnit}
             </h3>
             <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 520px; margin: 0 auto 20px; line-height: 1.5;">
-              Agrega tu primera clase de hoy o genera el calendario completo de asistencias para ver la cuadrícula con todas las fechas en columnas.
+              Genera automáticamente el calendario oficial de clases para esta unidad o todo el semestre.
             </p>
             <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="App.addAttendanceSession()" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
+              <button class="btn btn-primary" onclick="App.syncOfficialCalendar(false)" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                ⚡ Cargar Días Oficiales de Clase (Calendario UAT 2026)
+              </button>
+              <button class="btn btn-default" onclick="App.addAttendanceSession()" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 + Registrar Clase de Hoy
               </button>
-              <button class="btn btn-default" onclick="App.openAttendanceCalendarModal()" style="display: inline-flex; align-items: center; gap: 8px;">
+              <button class="btn btn-default" onclick="App.openOfficialCalendarModal()" style="display: inline-flex; align-items: center; gap: 8px;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                📅 Generar Calendario de Clases
-              </button>
-              <button class="btn btn-default" onclick="App.setAttendanceMode('rapido')">
-                Modo Vaciado Rápido (Papel)
+                🏛️ Ver Calendario UAT
               </button>
             </div>
           </div>
         `;
       } else {
+        // Configuración de hitos para remarcado
+        const normPeriodoForHeaders = this.normalizePeriodo(course.periodo || this.getSelectedSemester());
+        const calHdrCfg = this.UAT_CALENDAR_2026[normPeriodoForHeaders] || this.UAT_CALENDAR_2026["2026 - 3 OTOÑO"];
+
         // Encabezados de Columna de Fecha
         let dateColumnsHeaderHtml = "";
         unitSessions.forEach(s => {
           const dateInfo = this.formatSessionDate(s.fecha);
+          const isAltasBajas = s.isAltasBajas || (s.fecha >= calHdrCfg.altasBajas.inicio && s.fecha <= calHdrCfg.altasBajas.fin);
+          const isLimiteBaja = s.isLimiteBaja || (s.fecha === calHdrCfg.altasBajas.fechaLimiteBaja);
+
+          let colClasses = "col-attendance-date";
+          let badgeTagHtml = "";
+          if (isAltasBajas) {
+            colClasses += " col-att-header-altasbajas";
+            badgeTagHtml = `<span class="att-header-badge-tag tag-altasbajas" title="Periodo Oficial UAT: Altas y Bajas de Materias (${calHdrCfg.altasBajas.inicioTxt} al ${calHdrCfg.altasBajas.finTxt})">🔄 Altas/Bajas</span>`;
+          } else if (isLimiteBaja) {
+            colClasses += " col-att-header-limitebaja";
+            badgeTagHtml = `<span class="att-header-badge-tag tag-limitebaja" title="Fecha límite institucional de Baja de Materias (${calHdrCfg.altasBajas.limiteBajaTxt})">⚠️ Límite Baja</span>`;
+          }
+
           dateColumnsHeaderHtml += `
-            <th class="col-attendance-date" data-session-id="${s.id}" title="${this.escapeHtml(s.tema || 'Clase')} (${s.fecha})">
+            <th class="${colClasses}" data-session-id="${s.id}" title="${this.escapeHtml(s.tema || 'Clase')} (${s.fecha})">
               <div class="att-header-cell">
                 <span class="att-header-dayname">${this.escapeHtml(dateInfo.dayName)}</span>
                 <span class="att-header-daynum">${this.escapeHtml(dateInfo.dayNum)}/${this.escapeHtml(dateInfo.monthNum)}</span>
+                ${badgeTagHtml}
                 ${!isAuditReadOnly ? `
                   <div class="att-header-actions">
                     <button type="button" class="btn-att-hdr-action" title="Marcar a todos Presentes en esta fecha" onclick="App.markAllPresent('${s.id}')">⚡</button>
@@ -2962,9 +3390,16 @@ const App = {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 + Nueva Fecha
               </button>
-              <button class="btn btn-default" onclick="App.openAttendanceCalendarModal()" title="Generar automáticamente fechas de clase de la unidad">
+              <button class="btn btn-default" onclick="App.openOfficialCalendarModal()" title="Ver Calendario Escolar Oficial UAT 2026 y fechas clave">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Generar Fechas
+                🏛️ Calendario UAT
+              </button>
+              <button class="btn btn-default" onclick="App.syncOfficialCalendar(true)" title="Recargar las fechas hábiles de clase del Calendario Oficial UAT 2026">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                ⚡ Días Oficiales
+              </button>
+              <button class="btn btn-default" onclick="App.openAttendanceCalendarModal()" title="Generador manual de fechas">
+                Generador Manual
               </button>
             ` : ''}
             <button class="btn btn-default" onclick="App.exportAttendanceToExcel()" title="Descargar la Sábana Completa de Asistencias en Excel (.xlsx)">
@@ -2980,6 +3415,44 @@ const App = {
             </button>
           </div>
         </div>
+
+        <!-- Tira Oficial UAT 2026: Días de Clase, Pago de Ficha de Inscripción y Altas y Bajas -->
+        ${(() => {
+          const normSem = this.normalizePeriodo(course.periodo || this.getSelectedSemester());
+          const calInfo = this.UAT_CALENDAR_2026[normSem] || this.UAT_CALENDAR_2026["2026 - 3 OTOÑO"];
+          const totalSessionsInCourse = (course.attendanceSessions || []).length;
+          return `
+            <div class="uat-calendar-strip">
+              <div class="uat-cal-strip-info">
+                <span class="uat-cal-icon">🏛️</span>
+                <div class="uat-cal-text">
+                  <div class="uat-cal-title">
+                    <b>Calendario Oficial UAT 2026</b> • Periodo <b>${this.escapeHtml(course.periodo)}</b>
+                    <span class="uat-cal-badge-pill">${totalSessionsInCourse || 71} días de clase hábiles</span>
+                  </div>
+                  <div class="uat-cal-sub">
+                    Solo días de clase hábiles (Lunes a Viernes). Días feriados e inhábiles oficiales excluidos automáticamente.
+                  </div>
+                </div>
+              </div>
+              <div class="uat-cal-strip-milestones">
+                <div class="uat-cal-milestone milestone-pago" title="Días oficiales para pagar la ficha de inscripción y reinscripción">
+                  <span class="milestone-badge">💳 PAGO DE FICHA DE INSCRIPCIÓN</span>
+                  <span class="milestone-dates">${this.escapeHtml(calInfo.pagoFicha.inicioTxt)} al ${this.escapeHtml(calInfo.pagoFicha.finTxt)}</span>
+                  <span class="milestone-deadline">Fecha límite de pago: <b>${this.escapeHtml(calInfo.pagoFicha.limiteTxt)}</b></span>
+                </div>
+                <div class="uat-cal-milestone milestone-altasbajas" title="Periodo para realizar altas y bajas de materias">
+                  <span class="milestone-badge">🔄 ALTAS Y BAJAS DE MATERIAS</span>
+                  <span class="milestone-dates">${this.escapeHtml(calInfo.altasBajas.inicioTxt)} al ${this.escapeHtml(calInfo.altasBajas.finTxt)}</span>
+                  <span class="milestone-deadline">Remarcado en Unidad 1 • Límite baja: <b>${this.escapeHtml(calInfo.altasBajas.limiteBajaTxt)}</b></span>
+                </div>
+                <button type="button" class="btn btn-sm btn-default" onclick="App.openOfficialCalendarModal()" title="Ver calendario visual del semestre y simbología oficial">
+                  📅 Ver Calendario
+                </button>
+              </div>
+            </div>
+          `;
+        })()}
 
         <!-- Fila 3: Selector de Unidad y Modos -->
         <div class="attendance-controls-row">

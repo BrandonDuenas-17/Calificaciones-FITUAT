@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.10.02.v39";
+      const CURRENT_APP_VERSION = "2026.10.02.v40";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=39">
+  <link rel="stylesheet" href="styles.css?v=40">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -566,6 +566,31 @@
     </div>
   </div>
 
+  <!-- Modal Calendario Escolar Administrativo Oficial UAT 2026 -->
+  <div class="modal-backdrop" id="officialCalendarModal">
+    <div class="modal-content modal-content-lg" style="max-width: 960px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 24px;">🏛️</span>
+          <div>
+            <h3 style="margin: 0; font-size: 18px;">Calendario Escolar Administrativo UAT 2026</h3>
+            <p id="officialCalModalSub" style="margin: 2px 0 0; font-size: 12.5px; color: var(--text-secondary);"></p>
+          </div>
+        </div>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeOfficialCalendarModal()">✕</button>
+      </div>
+      <div class="modal-body" id="officialCalModalBody">
+        <!-- Renderizado dinámicamente con los meses oficiales y días remarcados -->
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button class="btn btn-primary" onclick="App.syncOfficialCalendar(true)">
+          ⚡ Cargar / Sincronizar estos Días en Lista de Asistencias
+        </button>
+        <button class="btn btn-default" onclick="App.closeOfficialCalendarModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Editar Fecha / Sesión de Asistencia -->
   <div class="modal-backdrop" id="editAttendanceSessionModal">
     <div class="modal-content" style="max-width: 440px;">
@@ -834,9 +859,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=39"></script>
-  <script src="sample_data.js?v=39"></script>
-  <script src="exporter.js?v=39"></script>
-  <script src="app.js?v=39"></script>
+  <script src="supabase_service.js?v=40"></script>
+  <script src="sample_data.js?v=40"></script>
+  <script src="exporter.js?v=40"></script>
+  <script src="app.js?v=40"></script>
 </body>
 </html>
