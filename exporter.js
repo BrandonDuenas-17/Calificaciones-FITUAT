@@ -241,5 +241,108 @@ const Exporter = {
   // Imprimir reporte formal o guardar como PDF
   printReport: function(course, studentsMap) {
     window.print();
+  },
+
+  // Exportar Sábana Completa de Asistencias a Excel (.xlsx)
+  exportAttendanceToExcel: function(course, studentsMap, unit) {
+    if (!course) return;
+    const currentUnit = Number(unit) || 1;
+    const sessions = (course.attendanceSessions || [])
+      .filter(s => s.unidad === currentUnit)
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+    const records = course.records || [];
+
+    const dateHeaders = sessions.map(s => {
+      const parts = (s.fecha || '').split('-');
+      const d = parts.length === 3 ? `${parts[2]}/${parts[1]}` : s.fecha;
+      return `${d} (${s.tema || 'Clase'})`;
+    });
+
+    const headers = [
+      "No.",
+      "Matrícula",
+      "Nombre Completo (Rollup)",
+      ...dateHeaders,
+      "Tot. Presentes (P)",
+      "Tot. Faltas (F)",
+      "Tot. Retardos (R)",
+      "Tot. Justificados (J)",
+      "% Asistencia",
+      "Estatus Derecho"
+    ];
+
+    const asistCfg = course.asistenciaConfig || {};
+    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
+
+    const rows = records.map((rec, idx) => {
+      const student = studentsMap[rec.matricula] || { nombre: "NO REGISTRADO" };
+      let p = 0, f = 0, r = 0, j = 0;
+      const sessionVals = sessions.map(s => {
+        const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+        if (st === 'P') p++;
+        else if (st === 'F') f++;
+        else if (st === 'R') r++;
+        else if (st === 'J') j++;
+        return st;
+      });
+
+      const effectiveP = p + (r * 0.5) + j;
+      const pct = sessions.length > 0 ? Math.round((effectiveP / sessions.length) * 100) : 100;
+      const effectiveF = f + Math.floor(r / 2);
+      const isSd = limiteFaltasActivo && (effectiveF > maxFaltas);
+      const estatus = isSd ? "SIN DERECHO" : "APROBADO";
+
+      return [
+        idx + 1,
+        rec.matricula,
+        student.nombre,
+        ...sessionVals,
+        p,
+        f,
+        r,
+        j,
+        `${pct}%`,
+        estatus
+      ];
+    });
+
+    const grupoSuffix = course.grupo ? `_${course.grupo.replace(/\s+/g, '_')}` : '';
+    const filename = `FIUAT_ASISTENCIAS_${(course.nombre || 'Materia').replace(/\s+/g, '_')}${grupoSuffix}_${course.periodo}_U${currentUnit}.xlsx`;
+
+    // Sanitización SEC-07
+    const sanitizedRows = rows.map(r => r.map(cell => Exporter.sanitizeForSpreadsheet(cell)));
+
+    if (window.XLSX) {
+      const wb = XLSX.utils.book_new();
+      const wsData = [headers, ...sanitizedRows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      ws['!cols'] = [
+        { wch: 6 },
+        { wch: 15 },
+        { wch: 35 },
+        ...sessions.map(() => ({ wch: 14 })),
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 16 }
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, `Asistencia U${currentUnit}`);
+      const u8 = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+      Exporter.saveFileSafe(
+        u8, 
+        filename, 
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Libro de Excel (*.xlsx)',
+        '.xlsx'
+      );
+    } else {
+      Exporter.exportToCSV(headers, sanitizedRows, filename.replace('.xlsx', '.csv'));
+    }
   }
 };

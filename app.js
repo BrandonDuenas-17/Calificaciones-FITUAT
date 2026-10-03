@@ -1774,7 +1774,7 @@ const App = {
     }, 0);
   },
 
-  // 1.5 CONTROL DE ASISTENCIAS Y PARTICIPACIÓN (MODO HÍBRIDO: DIARIO Y PAPEL)
+  // 1.5 CONTROL DE ASISTENCIAS Y PARTICIPACIÓN (SÁBANA COMPLETA ESTILO EXCEL / NOTION)
   setAttendanceUnit: function(unitNum) {
     this.attendanceActiveUnit = Number(unitNum) || 1;
     this.attendanceActiveSessionId = null;
@@ -1791,7 +1791,22 @@ const App = {
     this.render();
   },
 
-  addAttendanceSession: function() {
+  formatSessionDate: function(dateStr) {
+    if (!dateStr) return { dayName: "Clase", dayNum: "--", monthNum: "--" };
+    const parts = dateStr.split("-");
+    if (parts.length < 3) return { dayName: "Clase", dayNum: dateStr, monthNum: "" };
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const dt = new Date(y, m, d);
+    const days = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+    const dayName = days[dt.getDay()] || "Clase";
+    const dayNum = String(d).padStart(2, "0");
+    const monthNum = String(m + 1).padStart(2, "0");
+    return { dayName, dayNum, monthNum };
+  },
+
+  addAttendanceSession: function(customDate, customTopic) {
     const course = this.getActiveCourse();
     if (!course) return;
     if (!course.attendanceSessions) course.attendanceSessions = [];
@@ -1808,8 +1823,8 @@ const App = {
     const newSession = {
       id: 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       unidad: currentUnit,
-      fecha: today,
-      tema: `Clase ${sessionNum}`
+      fecha: customDate || today,
+      tema: customTopic || `Clase ${sessionNum}`
     };
 
     course.attendanceSessions.push(newSession);
@@ -1825,7 +1840,175 @@ const App = {
     this.recalculateAttendanceForUnit(course, currentUnit);
     this.debouncedSave();
     this.render();
-    this.showToast(`✅ Sesión "${newSession.tema}" creada para la Unidad ${currentUnit}`);
+    this.showToast(`✅ Fecha ${newSession.fecha} (${newSession.tema}) agregada a la Sábana`);
+  },
+
+  promptAddAttendanceDate: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    const currentUnit = this.attendanceActiveUnit;
+    const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === currentUnit);
+
+    let defaultDate = "";
+    if (unitSessions.length > 0) {
+      const lastDate = unitSessions[unitSessions.length - 1].fecha;
+      if (lastDate) {
+        const d = new Date(lastDate + 'T12:00:00');
+        d.setDate(d.getDate() + 2);
+        defaultDate = d.toISOString().split('T')[0];
+      }
+    }
+    if (!defaultDate) {
+      defaultDate = new Date().toISOString().split('T')[0];
+    }
+
+    const inputDate = prompt(`📅 Agregar Fecha de Clase para Unidad ${currentUnit}\n\nIngresa la fecha en formato AAAA-MM-DD:`, defaultDate);
+    if (!inputDate || !inputDate.trim()) return;
+
+    const cleanDate = inputDate.trim();
+    const sessionNum = unitSessions.length + 1;
+    const inputTopic = prompt(`Tema o Título de la Clase (Opcional):`, `Clase ${sessionNum}`) || `Clase ${sessionNum}`;
+
+    this.addAttendanceSession(cleanDate, inputTopic.trim());
+  },
+
+  promptEditAttendanceDate: function(sessionId) {
+    const course = this.getActiveCourse();
+    if (!course || !course.attendanceSessions) return;
+    const session = course.attendanceSessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    const modal = document.getElementById("editAttendanceSessionModal");
+    if (!modal) return;
+    const idInp = document.getElementById("editSessionId");
+    const dateInp = document.getElementById("editSessionDate");
+    const topicInp = document.getElementById("editSessionTopic");
+
+    if (idInp) idInp.value = sessionId;
+    if (dateInp) dateInp.value = session.fecha || '';
+    if (topicInp) topicInp.value = session.tema || '';
+    modal.classList.add("open");
+  },
+
+  closeEditAttendanceModal: function() {
+    const modal = document.getElementById("editAttendanceSessionModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  submitEditAttendanceSession: function() {
+    const course = this.getActiveCourse();
+    if (!course || !course.attendanceSessions) return;
+    const sessionId = document.getElementById("editSessionId")?.value;
+    const newDate = document.getElementById("editSessionDate")?.value;
+    const newTopic = document.getElementById("editSessionTopic")?.value?.trim();
+
+    const session = course.attendanceSessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    if (newDate) session.fecha = newDate;
+    session.tema = newTopic || session.tema || 'Clase';
+
+    this.debouncedSave();
+    this.closeEditAttendanceModal();
+    this.render();
+    this.showToast("✅ Fecha de clase actualizada");
+  },
+
+  deleteAttendanceSessionFromModal: function() {
+    const sessionId = document.getElementById("editSessionId")?.value;
+    if (sessionId) {
+      this.closeEditAttendanceModal();
+      this.deleteAttendanceSession(sessionId);
+    }
+  },
+
+  openAttendanceCalendarModal: function() {
+    const modal = document.getElementById("attendanceCalendarModal");
+    if (!modal) return;
+    const startInp = document.getElementById("calendarStartDate");
+    if (startInp) {
+      startInp.value = new Date().toISOString().split('T')[0];
+    }
+    modal.classList.add("open");
+  },
+
+  closeAttendanceCalendarModal: function() {
+    const modal = document.getElementById("attendanceCalendarModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  submitGenerateAttendanceCalendar: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    const currentUnit = this.attendanceActiveUnit;
+
+    const startInp = document.getElementById("calendarStartDate");
+    const countInp = document.getElementById("calendarTotalClasses");
+    const markPInp = document.getElementById("calMarkAllPresent");
+
+    const startDateStr = startInp?.value;
+    const totalNeeded = Math.min(40, Math.max(1, Number(countInp?.value) || 8));
+    const markP = markPInp ? markPInp.checked : true;
+
+    if (!startDateStr) {
+      alert("Por favor selecciona una fecha de inicio.");
+      return;
+    }
+
+    const selectedDays = [];
+    if (document.getElementById("calDay1")?.checked) selectedDays.push(1); // Lun
+    if (document.getElementById("calDay2")?.checked) selectedDays.push(2); // Mar
+    if (document.getElementById("calDay3")?.checked) selectedDays.push(3); // Mié
+    if (document.getElementById("calDay4")?.checked) selectedDays.push(4); // Jue
+    if (document.getElementById("calDay5")?.checked) selectedDays.push(5); // Vie
+    if (document.getElementById("calDay6")?.checked) selectedDays.push(6); // Sáb
+
+    if (selectedDays.length === 0) {
+      alert("Selecciona al menos un día de la semana.");
+      return;
+    }
+
+    if (!course.attendanceSessions) course.attendanceSessions = [];
+    const existingCount = course.attendanceSessions.filter(s => s.unidad === currentUnit).length;
+
+    let currDate = new Date(startDateStr + 'T12:00:00');
+    let addedCount = 0;
+    let safetyCounter = 0;
+
+    while (addedCount < totalNeeded && safetyCounter < 150) {
+      safetyCounter++;
+      const dayOfWeek = currDate.getDay();
+      if (selectedDays.includes(dayOfWeek)) {
+        const yyyy = currDate.getFullYear();
+        const mm = String(currDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(currDate.getDate()).padStart(2, '0');
+        const dateFormatted = `${yyyy}-${mm}-${dd}`;
+
+        const newSession = {
+          id: 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7) + '_' + addedCount,
+          unidad: currentUnit,
+          fecha: dateFormatted,
+          tema: `Clase ${existingCount + addedCount + 1}`
+        };
+
+        course.attendanceSessions.push(newSession);
+
+        if (markP) {
+          (course.records || []).forEach(rec => {
+            if (!rec.attendanceDays) rec.attendanceDays = {};
+            rec.attendanceDays[newSession.id] = 'P';
+          });
+        }
+        addedCount++;
+      }
+      currDate.setDate(currDate.getDate() + 1);
+    }
+
+    this.recalculateAttendanceForUnit(course, currentUnit);
+    this.debouncedSave();
+    this.closeAttendanceCalendarModal();
+    this.render();
+    this.showToast(`🎉 ¡Listo! Se generaron ${addedCount} fechas de clase para la Unidad ${currentUnit}`);
   },
 
   deleteAttendanceSession: function(sessionId) {
@@ -1878,16 +2061,174 @@ const App = {
     this.showToast("⚡ Todos los alumnos marcados como Presentes (P)");
   },
 
-  setStudentSessionStatus: function(recIndex, sessionId, status) {
+  markAllPresentLatest: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    const currentUnit = this.attendanceActiveUnit;
+    const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === currentUnit);
+    if (unitSessions.length === 0) {
+      this.showToast("No hay fechas registradas en esta unidad.", "warning");
+      return;
+    }
+    const latest = unitSessions[unitSessions.length - 1];
+    this.markAllPresent(latest.id);
+  },
+
+  exportAttendanceToExcel: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    if (typeof Exporter !== "undefined" && Exporter.exportAttendanceToExcel) {
+      Exporter.exportAttendanceToExcel(course, this.getStudentsMap(), this.attendanceActiveUnit);
+    }
+  },
+
+  // Interacción Reactiva en Celda de la Sábana
+  cycleAttendanceStatus: function(recIndex, sessionId) {
+    const course = this.getActiveCourse();
+    if (!course || !course.records || !course.records[recIndex]) return;
+    const rec = course.records[recIndex];
+    const curr = (rec.attendanceDays && rec.attendanceDays[sessionId]) || 'P';
+    let next = 'P';
+    if (curr === 'P') next = 'F';
+    else if (curr === 'F') next = 'R';
+    else if (curr === 'R') next = 'J';
+    else if (curr === 'J') next = 'P';
+
+    this.setAttendanceStatusDirect(recIndex, sessionId, next);
+  },
+
+  setAttendanceStatusDirect: function(recIndex, sessionId, newStatus) {
     const course = this.getActiveCourse();
     if (!course || !course.records || !course.records[recIndex]) return;
     const rec = course.records[recIndex];
     if (!rec.attendanceDays) rec.attendanceDays = {};
-    rec.attendanceDays[sessionId] = status;
+    rec.attendanceDays[sessionId] = newStatus;
 
-    this.recalculateAttendanceForUnit(course, this.attendanceActiveUnit);
+    const currentUnit = this.attendanceActiveUnit;
+    const uKey = `u${currentUnit}`;
+    const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === currentUnit);
+
+    // 1. Actualizar el botón en el DOM
+    const btn = document.getElementById(`att-btn-${recIndex}-${sessionId}`);
+    if (btn) {
+      btn.textContent = newStatus;
+      btn.className = `att-grid-badge att-status-${newStatus.toLowerCase()}`;
+      btn.setAttribute("title", `Estatus: ${newStatus} (Clic o tecla P/F/R/J para cambiar)`);
+    }
+
+    // 2. Recalcular métricas de la fila del alumno en memoria
+    let p = 0, f = 0, r = 0, j = 0;
+    unitSessions.forEach(s => {
+      const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+      if (st === 'P') p++;
+      else if (st === 'F') f++;
+      else if (st === 'R') r++;
+      else if (st === 'J') j++;
+    });
+
+    const totalSessions = unitSessions.length;
+    const effectivePresent = p + (r * 0.5) + j;
+    const pct = totalSessions > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalSessions) * 100))) : 100;
+    const effectiveFaltas = f + Math.floor(r / 2);
+
+    rec.asistencia = rec.asistencia || {};
+    rec.faltas = rec.faltas || {};
+    rec.asistenciaAuto = rec.asistenciaAuto || {};
+    rec.asistencia[uKey] = pct;
+    rec.faltas[uKey] = effectiveFaltas;
+    rec.asistenciaAuto[uKey] = true;
+
+    // 3. Actualizar resumen de la fila en el DOM
+    const elP = document.getElementById(`row-p-${recIndex}`);
+    const elF = document.getElementById(`row-f-${recIndex}`);
+    const elR = document.getElementById(`row-r-${recIndex}`);
+    const elJ = document.getElementById(`row-j-${recIndex}`);
+    const elPct = document.getElementById(`row-pct-${recIndex}`);
+    const elStatus = document.getElementById(`row-status-${recIndex}`);
+
+    if (elP) elP.textContent = p;
+    if (elF) {
+      elF.textContent = f;
+      if (f > 0) elF.classList.add("has-faltas");
+      else elF.classList.remove("has-faltas");
+    }
+    if (elR) elR.textContent = r;
+    if (elJ) elJ.textContent = j;
+    if (elPct) {
+      elPct.textContent = `${pct}%`;
+      elPct.style.color = pct >= 80 ? 'var(--color-green)' : (pct >= 60 ? 'var(--color-orange)' : 'var(--color-red)');
+    }
+
+    const asistCfg = course.asistenciaConfig || {};
+    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const isSd = limiteFaltasActivo && (effectiveFaltas > maxFaltas);
+
+    if (elStatus) {
+      elStatus.innerHTML = isSd 
+        ? '<span class="status-badge status-reprobado" style="font-size: 11px;">⛔ Sin Derecho</span>' 
+        : '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>';
+    }
+
+    // 4. Actualizar footer de la columna en el DOM
+    let colPCount = 0;
+    course.records.forEach(rc => {
+      const st = (rc.attendanceDays && rc.attendanceDays[sessionId]) || 'P';
+      if (st === 'P' || st === 'J') colPCount++;
+      else if (st === 'R') colPCount += 0.5;
+    });
+    const colPct = course.records.length > 0 ? Math.round((colPCount / course.records.length) * 100) : 0;
+    const footCell = document.getElementById(`foot-stat-${sessionId}`);
+    if (footCell) {
+      footCell.innerHTML = `<span class="att-foot-stat">${Math.round(colPCount)}/${course.records.length}</span><br><span class="att-foot-stat-pct">${colPct}%</span>`;
+    }
+
+    // 5. Guardar en Supabase con debounce
     this.debouncedSave();
-    this.render();
+  },
+
+  handleAttendanceKeydown: function(event, recIndex, sessionId) {
+    const key = event.key.toUpperCase();
+    if (key === 'P' || key === 'F' || key === 'R' || key === 'J') {
+      event.preventDefault();
+      this.setAttendanceStatusDirect(recIndex, sessionId, key);
+      return;
+    }
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      this.cycleAttendanceStatus(recIndex, sessionId);
+      return;
+    }
+
+    const course = this.getActiveCourse();
+    if (!course) return;
+    const records = course.records || [];
+    const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === this.attendanceActiveUnit);
+    const sessionIdx = unitSessions.findIndex(s => s.id === sessionId);
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const nextBtn = document.getElementById(`att-btn-${recIndex + 1}-${sessionId}`);
+      if (nextBtn) nextBtn.focus();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      const prevBtn = document.getElementById(`att-btn-${recIndex - 1}-${sessionId}`);
+      if (prevBtn) prevBtn.focus();
+    } else if (event.key === 'ArrowRight' && sessionIdx !== -1 && sessionIdx < unitSessions.length - 1) {
+      event.preventDefault();
+      const nextSess = unitSessions[sessionIdx + 1];
+      const nextBtn = document.getElementById(`att-btn-${recIndex}-${nextSess.id}`);
+      if (nextBtn) nextBtn.focus();
+    } else if (event.key === 'ArrowLeft' && sessionIdx > 0) {
+      event.preventDefault();
+      const prevSess = unitSessions[sessionIdx - 1];
+      const prevBtn = document.getElementById(`att-btn-${recIndex}-${prevSess.id}`);
+      if (prevBtn) prevBtn.focus();
+    }
+  },
+
+  setStudentSessionStatus: function(recIndex, sessionId, status) {
+    this.setAttendanceStatusDirect(recIndex, sessionId, status);
   },
 
   adjustStudentSessionPart: function(recIndex, sessionId, delta) {
@@ -2057,6 +2398,11 @@ const App = {
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
     const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
 
+    // Modo activo (por defecto: 'sabana' para cuadrícula completa estilo Notion/Excel)
+    if (!this.attendanceMode) {
+      this.attendanceMode = 'sabana';
+    }
+
     // Agrupar cursos por nombre de materia para el semestre seleccionado
     const selectedSem = this.getSelectedSemester();
     const semesterCourses = this.getCoursesForSelectedSemester();
@@ -2088,24 +2434,227 @@ const App = {
       semesterSelectHtml += `<option value="${this.escapeHtml(sem)}" ${isSel ? 'selected' : ''}>${this.escapeHtml(sem)}</option>`;
     });
 
-    // Chips de Unidad (U1 a Un)
+    // Chips de Unidad (U1 a Un) con conteo de sesiones
     let unitChipsHtml = "";
     for (let u = 1; u <= numUnits; u++) {
       const isAct = (u === currentUnit);
+      const countU = course.attendanceSessions.filter(s => s.unidad === u).length;
       unitChipsHtml += `
         <button type="button" class="attendance-unit-chip ${isAct ? 'active' : ''}" onclick="App.setAttendanceUnit(${u})">
           <span>Unidad ${u}</span>
+          ${countU > 0 ? `<span style="font-size: 11px; opacity: 0.85; margin-left: 2px;">(${countU})</span>` : ''}
           ${isAct ? '<span class="attendance-unit-dot"></span>' : ''}
         </button>
       `;
     }
 
-    // Contenido del Modo Activo: 'diario' vs 'rapido'
+    // Sesiones de la unidad actual ordenadas cronológicamente
+    const unitSessions = course.attendanceSessions
+      .filter(s => s.unidad === currentUnit)
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+
     let contentHtml = "";
 
-    if (this.attendanceMode === "diario") {
-      const unitSessions = course.attendanceSessions.filter(s => s.unidad === currentUnit);
+    // MODO 1: SÁBANA COMPLETA (CUADRÍCULA ESTILO NOTION / EXCEL)
+    if (this.attendanceMode === "sabana") {
+      if (unitSessions.length === 0) {
+        contentHtml = `
+          <div class="attendance-empty-card" style="padding: 50px 24px; text-align: center; background: var(--bg-card); border: 2px dashed var(--border-color); border-radius: 12px; margin-top: 14px;">
+            <div style="font-size: 46px; margin-bottom: 12px;">📊</div>
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--uat-blue-night); margin-bottom: 6px;">
+              Sábana sin fechas registradas en la Unidad ${currentUnit}
+            </h3>
+            <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 520px; margin: 0 auto 20px; line-height: 1.5;">
+              Agrega tu primera clase de hoy o genera el calendario completo de asistencias para ver la cuadrícula con todas las fechas en columnas.
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+              <button class="btn btn-primary" onclick="App.addAttendanceSession()" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                + Registrar Clase de Hoy
+              </button>
+              <button class="btn btn-default" onclick="App.openAttendanceCalendarModal()" style="display: inline-flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                📅 Generar Calendario de Clases
+              </button>
+              <button class="btn btn-default" onclick="App.setAttendanceMode('rapido')">
+                Modo Vaciado Rápido (Papel)
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        // Encabezados de Columna de Fecha
+        let dateColumnsHeaderHtml = "";
+        unitSessions.forEach(s => {
+          const dateInfo = this.formatSessionDate(s.fecha);
+          dateColumnsHeaderHtml += `
+            <th class="col-attendance-date" data-session-id="${s.id}" title="${this.escapeHtml(s.tema || 'Clase')} (${s.fecha})">
+              <div class="att-header-cell">
+                <span class="att-header-dayname">${this.escapeHtml(dateInfo.dayName)}</span>
+                <span class="att-header-daynum">${this.escapeHtml(dateInfo.dayNum)}/${this.escapeHtml(dateInfo.monthNum)}</span>
+                ${!isAuditReadOnly ? `
+                  <div class="att-header-actions">
+                    <button type="button" class="btn-att-hdr-action" title="Marcar a todos Presentes en esta fecha" onclick="App.markAllPresent('${s.id}')">⚡</button>
+                    <button type="button" class="btn-att-hdr-action" title="Editar fecha o tema" onclick="App.promptEditAttendanceDate('${s.id}')">✏️</button>
+                    <button type="button" class="btn-att-hdr-action btn-att-hdr-del" title="Eliminar esta fecha de clase" onclick="App.deleteAttendanceSession('${s.id}')">✕</button>
+                  </div>
+                ` : ''}
+              </div>
+            </th>
+          `;
+        });
 
+        // Filas de Alumnos en la Sábana
+        let studentRowsHtml = "";
+        records.forEach((rec, recIdx) => {
+          const student = studentsMap[rec.matricula] || { nombre: "Alumno no registrado en Base Maestra" };
+          let p = 0, f = 0, r = 0, j = 0;
+
+          // Celdas por Fecha
+          let sessionCellsHtml = "";
+          unitSessions.forEach(s => {
+            const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+            if (st === 'P') p++;
+            else if (st === 'F') f++;
+            else if (st === 'R') r++;
+            else if (st === 'J') j++;
+
+            const statusClass = `att-status-${st.toLowerCase()}`;
+            sessionCellsHtml += `
+              <td class="col-att-cell" data-rec-idx="${recIdx}" data-session-id="${s.id}">
+                <button type="button" 
+                  class="att-grid-badge ${statusClass}" 
+                  id="att-btn-${recIdx}-${s.id}"
+                  tabindex="0"
+                  ${isAuditReadOnly ? 'disabled style="cursor: default;"' : ''}
+                  title="${this.escapeHtml(student.nombre)} | ${s.fecha}: ${st} (Clic para rotar P→F→R→J o presiona teclas P, F, R, J)"
+                  onclick="App.cycleAttendanceStatus(${recIdx}, '${s.id}')"
+                  onkeydown="App.handleAttendanceKeydown(event, ${recIdx}, '${s.id}')">
+                  ${st}
+                </button>
+              </td>
+            `;
+          });
+
+          // Métricas acumuladas del alumno
+          const totalSessions = unitSessions.length;
+          const effectivePresent = p + (r * 0.5) + j;
+          const pct = totalSessions > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalSessions) * 100))) : 100;
+          const effectiveFaltas = f + Math.floor(r / 2);
+          const isSd = limiteFaltasActivo && (effectiveFaltas > maxFaltas);
+
+          let pctColor = "var(--color-green)";
+          if (pct < 60) pctColor = "var(--color-red)";
+          else if (pct < 80) pctColor = "var(--color-orange)";
+
+          studentRowsHtml += `
+            <tr class="${isSd ? 'row-sin-derecho' : ''}">
+              <td class="col-sticky-1 col-sticky-index" style="text-align: center; font-size: 12px; color: var(--text-tertiary);">${recIdx + 1}</td>
+              <td class="col-sticky-1 col-sticky-mat" style="font-weight: 600; font-family: monospace; font-size: 12.5px;">${this.escapeHtml(rec.matricula)}</td>
+              <td class="col-sticky-2 col-sticky-name" style="font-weight: 500; font-size: 13px;" title="${this.escapeHtml(student.nombre)}">${this.escapeHtml(student.nombre)}</td>
+              ${sessionCellsHtml}
+              <td class="col-summary-num"><span id="row-p-${recIdx}">${p}</span></td>
+              <td class="col-summary-num col-summary-f ${f > 0 ? 'has-faltas' : ''}"><span id="row-f-${recIdx}">${f}</span></td>
+              <td class="col-summary-num"><span id="row-r-${recIdx}">${r}</span></td>
+              <td class="col-summary-num"><span id="row-j-${recIdx}">${j}</span></td>
+              <td class="col-summary-pct">
+                <span id="row-pct-${recIdx}" class="summary-chip" style="font-weight: 700; color: ${pctColor};">
+                  ${pct}%
+                </span>
+              </td>
+              <td style="text-align: center;">
+                <span id="row-status-${recIdx}">
+                  ${isSd 
+                    ? '<span class="status-badge status-reprobado" style="font-size: 11px;">⛔ Sin Derecho</span>' 
+                    : '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>'}
+                </span>
+              </td>
+            </tr>
+          `;
+        });
+
+        // Fila de Totales en Pie de Tabla (Asistencias por Fecha)
+        let footerCellsHtml = "";
+        let overallPresSum = 0;
+        unitSessions.forEach(s => {
+          let colP = 0;
+          records.forEach(rc => {
+            const st = (rc.attendanceDays && rc.attendanceDays[s.id]) || 'P';
+            if (st === 'P' || st === 'J') colP++;
+            else if (st === 'R') colP += 0.5;
+          });
+          overallPresSum += colP;
+          const colPct = records.length > 0 ? Math.round((colP / records.length) * 100) : 0;
+          footerCellsHtml += `
+            <td id="foot-stat-${s.id}" class="col-attendance-date" style="padding: 6px 2px; text-align: center;">
+              <span class="att-foot-stat">${Math.round(colP)}/${records.length}</span><br>
+              <span class="att-foot-stat-pct">${colPct}%</span>
+            </td>
+          `;
+        });
+
+        const overallMax = records.length * unitSessions.length;
+        const overallPct = overallMax > 0 ? Math.round((overallPresSum / overallMax) * 100) : 0;
+
+        contentHtml = `
+          <div class="notion-table-wrapper" style="margin-top: 6px;">
+            <table class="notion-table notion-table-gradebook attendance-sabana-table">
+              <thead>
+                <!-- Fila 1 de Encabezado: Agrupadores -->
+                <tr class="th-group-row">
+                  <th class="col-sticky-1 col-sticky-index" style="width: 42px;">#</th>
+                  <th class="col-sticky-1 col-sticky-mat" style="width: 110px;">Matrícula</th>
+                  <th class="col-sticky-2 col-sticky-name" style="width: 240px;">Alumno (Rollup)</th>
+                  <th colspan="${unitSessions.length}" class="th-group-dates" style="text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <span>📅 Fechas de Clase • Unidad ${currentUnit} (${unitSessions.length} sesiones)</span>
+                      ${!isAuditReadOnly ? `
+                        <button type="button" class="btn-th-add-date" onclick="App.promptAddAttendanceDate()" title="Añadir otra fecha de clase">+ Fecha</button>
+                      ` : ''}
+                    </div>
+                  </th>
+                  <th colspan="6" class="th-group-totals" style="text-align: center;">
+                    <span>📊 Resumen U${currentUnit}</span>
+                  </th>
+                </tr>
+
+                <!-- Fila 2 de Encabezado: Columnas Individuales -->
+                <tr>
+                  <th class="col-sticky-1 col-sticky-index" style="width: 42px; text-align: center;">#</th>
+                  <th class="col-sticky-1 col-sticky-mat" style="width: 110px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
+                  <th class="col-sticky-2 col-sticky-name" style="width: 240px;"><div class="th-content"><span class="th-icon">Aa</span> Nombre del Alumno</div></th>
+                  ${dateColumnsHeaderHtml}
+                  <th style="width: 48px; text-align: center;" title="Total de Presentes (P)"><div class="th-content" style="justify-content: center;">P</div></th>
+                  <th style="width: 48px; text-align: center;" title="Total de Faltas (F)"><div class="th-content" style="justify-content: center;">F</div></th>
+                  <th style="width: 48px; text-align: center;" title="Total de Retardos (R)"><div class="th-content" style="justify-content: center;">R</div></th>
+                  <th style="width: 48px; text-align: center;" title="Total de Justificados (J)"><div class="th-content" style="justify-content: center;">J</div></th>
+                  <th style="width: 72px; text-align: center;" title="Porcentaje de Asistencia calculado"><div class="th-content" style="justify-content: center;">% Asist</div></th>
+                  <th style="width: 110px; text-align: center;" title="Estatus Derecho a Examen"><div class="th-content" style="justify-content: center;">Derecho</div></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${studentRowsHtml || `<tr><td colspan="${unitSessions.length + 9}" style="text-align:center; padding: 24px;">No hay alumnos inscritos en este grupo.</td></tr>`}
+              </tbody>
+              <tfoot>
+                <tr class="notion-table-footer">
+                  <td class="col-sticky-1 col-sticky-index"></td>
+                  <td class="col-sticky-1 col-sticky-mat" style="font-weight: 700;">Promedios:</td>
+                  <td class="col-sticky-2 col-sticky-name" style="font-weight: 600; font-size: 12px; color: var(--text-secondary);">
+                    Asistencia del Día (P / Total)
+                  </td>
+                  ${footerCellsHtml}
+                  <td colspan="4" style="text-align: center; font-size: 12px; font-weight: 600; color: var(--text-secondary);">Promedio U${currentUnit}:</td>
+                  <td style="text-align: center; font-weight: 800; color: var(--color-green); font-size: 13px;">${overallPct}%</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        `;
+      }
+
+    } else if (this.attendanceMode === "diario") {
+      // MODO 2: PASE DIARIO EN CLASE (FICHA INDIVIDUAL)
       if (unitSessions.length > 0) {
         if (!this.attendanceActiveSessionId || !unitSessions.some(s => s.id === this.attendanceActiveSessionId)) {
           this.attendanceActiveSessionId = unitSessions[unitSessions.length - 1].id;
@@ -2116,7 +2665,6 @@ const App = {
 
       const activeSession = unitSessions.find(s => s.id === this.attendanceActiveSessionId);
 
-      // Barra de Sesiones (Pills horizontales)
       let sessionPillsHtml = "";
       if (unitSessions.length > 0) {
         unitSessions.forEach((s, sIdx) => {
@@ -2135,23 +2683,16 @@ const App = {
 
       if (!activeSession) {
         contentHtml = `
-          <div class="attendance-empty-card">
-            <div class="attendance-empty-icon">📅</div>
-            <h3 style="font-size: 16px; font-weight: 700; color: var(--uat-blue-night); margin-bottom: 6px;">Sin clases registradas en la Unidad ${currentUnit}</h3>
-            <p style="font-size: 13px; color: var(--text-secondary); max-width: 480px; margin: 0 auto;">Comienza a pasar lista registrando la primera clase de esta unidad o cambia al modo vaciado rápido si tienes listas impresas.</p>
-            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 16px;">
-              <button class="btn btn-primary" onclick="App.addAttendanceSession()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Registrar Clase de Hoy
-              </button>
-              <button class="btn btn-default" onclick="App.setAttendanceMode('rapido')">
-                Ir a Vaciado Rápido (Papel)
-              </button>
-            </div>
+          <div class="attendance-empty-card" style="padding: 48px 24px; text-align: center; background: var(--bg-card); border: 2px dashed var(--border-color); border-radius: 12px; margin-top: 14px;">
+            <div style="font-size: 46px; margin-bottom: 12px;">📅</div>
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--uat-blue-night); margin-bottom: 6px;">Sin clases registradas en la Unidad ${currentUnit}</h3>
+            <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 480px; margin: 0 auto 16px;">Comienza a pasar lista registrando la primera clase de esta unidad.</p>
+            <button class="btn btn-primary" onclick="App.addAttendanceSession()">
+              + Registrar Clase de Hoy
+            </button>
           </div>
         `;
       } else {
-        // Calcular estadísticas de la sesión activa
         let countP = 0, countF = 0, countR = 0, countJ = 0;
         records.forEach(r => {
           const st = (r.attendanceDays && r.attendanceDays[activeSession.id]) || 'P';
@@ -2165,14 +2706,12 @@ const App = {
         const effectivePres = countP + (countR * 0.5) + countJ;
         const classPct = totalMarked > 0 ? Math.round((effectivePres / totalMarked) * 100) : 0;
 
-        // Filas de alumnos para la sesión activa
         let studentsRowsHtml = "";
         records.forEach((rec, recIdx) => {
           const student = studentsMap[rec.matricula] || { nombre: "Alumno no registrado en Base Maestra" };
           const status = (rec.attendanceDays && rec.attendanceDays[activeSession.id]) || 'P';
           const partCount = (rec.participationDays && Number(rec.participationDays[activeSession.id])) || 0;
 
-          // Acumulados de la unidad completa
           const unitFaltas = (rec.faltas && rec.faltas[uKey] !== undefined) ? Number(rec.faltas[uKey]) : 0;
           const unitPct = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? Number(rec.asistencia[uKey]) : 100;
           const isSd = limiteFaltasActivo && (unitFaltas > maxFaltas);
@@ -2218,7 +2757,6 @@ const App = {
         });
 
         contentHtml = `
-          <!-- Barra de Sesiones / Clases Registradas -->
           <div class="sessions-top-bar">
             <div class="session-pills-scroll">
               ${sessionPillsHtml}
@@ -2229,7 +2767,6 @@ const App = {
             </div>
           </div>
 
-          <!-- Barra de Detalle y Acciones Rápidas de la Sesión Activa -->
           <div class="session-active-card">
             <div class="session-meta-inputs">
               <div class="meta-field">
@@ -2260,7 +2797,6 @@ const App = {
             </div>
           </div>
 
-          <!-- Tabla de Pase de Lista Diario -->
           <div class="notion-table-wrapper" style="margin-top: 12px;">
             <table class="notion-table" style="table-layout: fixed;">
               <thead>
@@ -2282,7 +2818,7 @@ const App = {
       }
 
     } else {
-      // MODO B: VACIADO RÁPIDO (PAPEL)
+      // MODO 3: VACIADO RÁPIDO (PAPEL)
       const totalClasesMap = course.asistenciaTotalClasses || {};
       const totalClases = totalClasesMap[uKey] || 10;
 
@@ -2381,7 +2917,7 @@ const App = {
 
     container.innerHTML = `
       <div class="page-title-area gradebook-header-container">
-        <!-- Fila 1: Título de la Materia y Selector de Grupo -->
+        <!-- Fila 1: Título de la Materia y Selector de Semestre / Grupo -->
         <div class="gradebook-header-top">
           <div class="gradebook-title-col">
             <h1 class="page-title" title="${this.escapeHtml(course.nombre)}">
@@ -2407,35 +2943,57 @@ const App = {
           </div>
         </div>
 
-        <!-- Fila 2: Subtítulo Descriptivo y Pestañas de Modo -->
+        <!-- Fila 2: Subtítulo Descriptivo y Acciones Principales -->
         <div class="gradebook-header-bottom">
           <div class="gradebook-desc-col">
             <p class="page-desc">
               Control de Asistencias & Participación • Periodo <b>${this.escapeHtml(course.periodo)}</b>
-              ${wAsist > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación Asistencia: ${wAsist}%</span>` : ` • <span style="color: var(--text-tertiary);">(Criterio Asistencia 0% en Ajustes)</span>`}
-              ${wPart > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación Participación: ${wPart}%</span>` : ''}
+              • <span class="badge-legend badge-legend-p">P</span> Presente
+              • <span class="badge-legend badge-legend-f">F</span> Falta
+              • <span class="badge-legend badge-legend-r">R</span> Retardo (0.5)
+              • <span class="badge-legend badge-legend-j">J</span> Justif.
+              ${wAsist > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación: ${wAsist}%</span>` : ''}
               ${limiteFaltasActivo ? ` • <span style="color: var(--color-red); font-weight: 700;">Límite SD: Máx ${maxFaltas} faltas</span>` : ''}
             </p>
           </div>
           <div class="gradebook-actions-col">
-            <button class="btn btn-default" onclick="App.switchTab('gradebook')" title="Volver a la sábana principal de calificaciones">
-              ← Volver al Calificador
+            ${!isAuditReadOnly ? `
+              <button class="btn btn-primary" onclick="App.promptAddAttendanceDate()" title="Agregar nueva fecha de clase">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                + Nueva Fecha
+              </button>
+              <button class="btn btn-default" onclick="App.openAttendanceCalendarModal()" title="Generar automáticamente fechas de clase de la unidad">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Generar Fechas
+              </button>
+            ` : ''}
+            <button class="btn btn-default" onclick="App.exportAttendanceToExcel()" title="Descargar la Sábana Completa de Asistencias en Excel (.xlsx)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              Descargar Excel
             </button>
-            <button class="btn btn-default" onclick="App.openManageCourseModal()" title="Ajustes de criterios y ponderaciones">
-              Ajustes de Criterios
+            <button class="btn btn-default" onclick="window.print()" title="Imprimir lista de asistencia">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Imprimir
+            </button>
+            <button class="btn btn-default" onclick="App.switchTab('gradebook')" title="Volver al Calificador">
+              ← Calificador
             </button>
           </div>
         </div>
 
-        <!-- Fila 3: Selector de Unidad y Selector de Modo (Híbrido) -->
+        <!-- Fila 3: Selector de Unidad y Modos -->
         <div class="attendance-controls-row">
           <div class="attendance-units-nav">
             ${unitChipsHtml}
           </div>
           <div class="attendance-mode-selector">
+            <button type="button" class="attendance-mode-tab-btn ${this.attendanceMode === 'sabana' ? 'active' : ''}" 
+              onclick="App.setAttendanceMode('sabana')">
+              📊 Sábana Completa (Cuadrícula)
+            </button>
             <button type="button" class="attendance-mode-tab-btn ${this.attendanceMode === 'diario' ? 'active' : ''}" 
               onclick="App.setAttendanceMode('diario')">
-              📋 Pase Diario en Clase
+              📋 Pase Diario
             </button>
             <button type="button" class="attendance-mode-tab-btn ${this.attendanceMode === 'rapido' ? 'active' : ''}" 
               onclick="App.setAttendanceMode('rapido')">
@@ -2445,7 +3003,7 @@ const App = {
         </div>
       </div>
 
-      <div class="attendance-main-area">
+      <div class="attendance-main-area" style="padding: 10px 0 20px 0;">
         ${contentHtml}
       </div>
     `;

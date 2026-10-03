@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.10.01.v38";
+      const CURRENT_APP_VERSION = "2026.10.02.v39";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=38">
+  <link rel="stylesheet" href="styles.css?v=39">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -510,6 +510,92 @@
     </div>
   </div>
 
+  <!-- Modal Generar Calendario de Asistencias -->
+  <div class="modal-backdrop" id="attendanceCalendarModal">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>📅 Generar Calendario de Clases</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeAttendanceCalendarModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+          Genera automáticamente las fechas de clase para la unidad actual eligiendo los días de la semana en que impartes la materia.
+        </p>
+        <div class="form-group">
+          <label>Fecha de Inicio:</label>
+          <input type="date" id="calendarStartDate" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Cantidad de Clases a Generar:</label>
+          <input type="number" id="calendarTotalClasses" class="form-control" min="1" max="50" value="8" />
+        </div>
+        <div class="form-group">
+          <label>Días de Clase a la Semana:</label>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px;">
+            <label class="checkbox-label" style="font-size: 12.5px;">
+              <input type="checkbox" id="calDay1" checked /> <span>Lunes</span>
+            </label>
+            <label class="checkbox-label" style="font-size: 12.5px;">
+              <input type="checkbox" id="calDay2" /> <span>Martes</span>
+            </label>
+            <label class="checkbox-label" style="font-size: 12.5px;">
+              <input type="checkbox" id="calDay3" checked /> <span>Miércoles</span>
+            </label>
+            <label class="checkbox-label" style="font-size: 12.5px;">
+              <input type="checkbox" id="calDay4" /> <span>Jueves</span>
+            </label>
+            <label class="checkbox-label" style="font-size: 12.5px;">
+              <input type="checkbox" id="calDay5" checked /> <span>Viernes</span>
+            </label>
+            <label class="checkbox-label" style="font-size: 12.5px;">
+              <input type="checkbox" id="calDay6" /> <span>Sábado</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label" style="font-size: 12px; color: var(--text-secondary);">
+            <input type="checkbox" id="calMarkAllPresent" checked />
+            <span>Inicializar a todos los alumnos como <b>Presente (P)</b></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="App.closeAttendanceCalendarModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.submitGenerateAttendanceCalendar()">Generar Fechas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Editar Fecha / Sesión de Asistencia -->
+  <div class="modal-backdrop" id="editAttendanceSessionModal">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3>✏️ Editar Fecha de Clase</h3>
+        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeEditAttendanceModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editSessionId" />
+        <div class="form-group">
+          <label>Fecha de Clase:</label>
+          <input type="date" id="editSessionDate" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Tema o Título de la Sesión (Opcional):</label>
+          <input type="text" id="editSessionTopic" class="form-control" placeholder="Ej. Unidad 1: Repaso o Clase 4" />
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button class="btn btn-default" style="color: var(--color-red);" onclick="App.deleteAttendanceSessionFromModal()">
+          🗑️ Eliminar Fecha
+        </button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-default" onclick="App.closeEditAttendanceModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="App.submitEditAttendanceSession()">Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal para Cambiar de Profesor -->
   <div class="modal-backdrop" id="switchTeacherModal">
     <div class="modal-content" style="max-width: 500px;">
@@ -748,9 +834,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=38"></script>
-  <script src="sample_data.js?v=38"></script>
-  <script src="exporter.js?v=38"></script>
-  <script src="app.js?v=38"></script>
+  <script src="supabase_service.js?v=39"></script>
+  <script src="sample_data.js?v=39"></script>
+  <script src="exporter.js?v=39"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>

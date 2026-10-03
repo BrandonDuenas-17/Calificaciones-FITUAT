@@ -4150,4 +4150,352 @@ textarea.form-control {
   flex-wrap: wrap;
 }
 
+/* ==========================================================================
+   SÁBANA COMPLETA DE ASISTENCIAS (CUADRÍCULA ESTILO EXCEL / NOTION)
+   ========================================================================== */
+
+.attendance-sabana-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.attendance-sabana-table th,
+.attendance-sabana-table td {
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+/* Fila de Encabezado Superior (Agrupadores) */
+.th-group-row th {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 10px;
+}
+
+.th-group-dates {
+  background: rgba(224, 126, 51, 0.08) !important;
+  color: var(--uat-orange) !important;
+  border-left: 2px solid var(--uat-orange) !important;
+  border-right: 2px solid var(--uat-orange) !important;
+}
+
+[data-theme="dark"] .th-group-dates {
+  background: rgba(224, 126, 51, 0.16) !important;
+}
+
+.th-group-totals {
+  background: rgba(33, 32, 82, 0.06) !important;
+  color: var(--uat-blue-night) !important;
+}
+
+[data-theme="dark"] .th-group-totals {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text-primary) !important;
+}
+
+.btn-th-add-date {
+  background: var(--uat-orange);
+  color: #ffffff;
+  border: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+}
+
+.btn-th-add-date:hover {
+  background: var(--uat-orange-dark);
+  transform: scale(1.04);
+}
+
+/* Encabezados de Columna de Fecha */
+.col-attendance-date {
+  width: 68px;
+  min-width: 68px;
+  max-width: 76px;
+  text-align: center;
+  padding: 6px 2px !important;
+  position: relative;
+}
+
+.att-header-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.att-header-dayname {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  letter-spacing: 0.3px;
+  line-height: 1;
+}
+
+.att-header-daynum {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.att-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 3px;
+  opacity: 0.25;
+  transition: opacity 0.15s ease;
+}
+
+.col-attendance-date:hover .att-header-actions,
+.col-attendance-date:focus-within .att-header-actions {
+  opacity: 1;
+}
+
+.btn-att-hdr-action {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  transition: all 0.12s ease;
+}
+
+.btn-att-hdr-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.btn-att-hdr-del:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+[data-theme="dark"] .btn-att-hdr-del:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+/* Badges / Botones de Asistencia en Celda */
+.col-att-cell {
+  text-align: center;
+  padding: 4px 2px !important;
+}
+
+.att-grid-badge {
+  width: 32px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid transparent;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  user-select: none;
+}
+
+.att-grid-badge:hover,
+.att-grid-badge:focus {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  outline: none;
+  z-index: 2;
+  position: relative;
+}
+
+/* P: Presente */
+.att-grid-badge.att-status-p {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+[data-theme="dark"] .att-grid-badge.att-status-p {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+/* F: Falta */
+.att-grid-badge.att-status-f {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+[data-theme="dark"] .att-grid-badge.att-status-f {
+  background: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+/* R: Retardo */
+.att-grid-badge.att-status-r {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fcd34d;
+}
+
+[data-theme="dark"] .att-grid-badge.att-status-r {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+/* J: Justificado */
+.att-grid-badge.att-status-j {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+[data-theme="dark"] .att-grid-badge.att-status-j {
+  background: rgba(59, 130, 246, 0.22);
+  color: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+/* Leyendas en Subtítulo */
+.badge-legend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.badge-legend-p {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.badge-legend-f {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.badge-legend-r {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
+.badge-legend-j {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+/* Resumen en Barra de Controles */
+.attendance-stats-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.attendance-counter-badge {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 4px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+}
+
+/* Columnas de Resumen de Fila */
+.col-summary-num {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.col-summary-f.has-faltas {
+  color: #dc2626 !important;
+  font-weight: 800;
+}
+
+.col-summary-pct {
+  text-align: center;
+}
+
+/* Fila de Totales por Columna en el Footer */
+.att-foot-stat {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.att-foot-stat-pct {
+  color: var(--color-green);
+  font-weight: 800;
+}
+
+/* Print Styles para Asistencias */
+@media print {
+  .attendance-controls-row,
+  .btn-th-add-date,
+  .att-header-actions,
+  .gradebook-switcher-col,
+  .gradebook-actions-col,
+  .notion-header,
+  .nav-tabs-wrapper {
+    display: none !important;
+  }
+
+  .attendance-sabana-table {
+    width: 100% !important;
+    font-size: 10px !important;
+  }
+
+  .att-grid-badge {
+    border: 1px solid #666 !important;
+    background: transparent !important;
+    color: #000 !important;
+    width: 22px !important;
+    height: 20px !important;
+    font-size: 10px !important;
+  }
+}
+
+
 
