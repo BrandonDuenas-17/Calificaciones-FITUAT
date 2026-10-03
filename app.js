@@ -3073,7 +3073,7 @@ const App = {
 
             const statusClass = st ? `att-status-${st.toLowerCase()}` : '';
             sessionCellsHtml += `
-              <td class="col-att-cell" data-rec-idx="${recIdx}" data-session-id="${s.id}">
+              <td class="col-att-cell" data-rec-idx="${recIdx}" data-session-id="${s.id}" onclick="const inp = document.getElementById('att-input-${recIdx}-${s.id}'); if (inp && document.activeElement !== inp) inp.focus();">
                 <input type="text" 
                   class="att-grid-input ${statusClass}" 
                   id="att-input-${recIdx}-${s.id}"
