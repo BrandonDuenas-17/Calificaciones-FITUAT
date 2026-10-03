@@ -3846,7 +3846,155 @@ textarea.form-control {
 
 /* Área Principal */
 .attendance-main-area {
-  padding: 16px 24px;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.attendance-sabana-wrapper {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  max-height: none !important;
+  overflow: auto !important;
+  position: relative;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Scrollbars accesibles y atractivos */
+.attendance-sabana-wrapper::-webkit-scrollbar,
+.notion-table-wrapper::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.attendance-sabana-wrapper::-webkit-scrollbar-thumb,
+.notion-table-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 6px;
+}
+
+.attendance-sabana-wrapper::-webkit-scrollbar-thumb:hover,
+.notion-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--uat-orange);
+}
+
+.attendance-sabana-wrapper::-webkit-scrollbar-track,
+.notion-table-wrapper::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+/* Columnas Congeladas en Sábana (Freeze Panes sin solapamientos) */
+.attendance-sabana-table .col-sabana-col-1 {
+  position: sticky !important;
+  left: 0 !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  z-index: 25 !important;
+  background-color: var(--bg-primary) !important;
+}
+
+.attendance-sabana-table .col-sabana-col-2 {
+  position: sticky !important;
+  left: 44px !important;
+  width: 110px !important;
+  min-width: 110px !important;
+  max-width: 110px !important;
+  z-index: 25 !important;
+  background-color: var(--bg-primary) !important;
+}
+
+.attendance-sabana-table .col-sabana-col-3 {
+  position: sticky !important;
+  left: 154px !important;
+  width: 240px !important;
+  min-width: 240px !important;
+  max-width: 240px !important;
+  z-index: 25 !important;
+  background-color: var(--bg-primary) !important;
+  border-right: 2px solid var(--border-color) !important;
+  box-shadow: 3px 0 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+.attendance-sabana-table thead th.col-sabana-col-1 {
+  position: sticky !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: 50 !important;
+  background-color: var(--bg-secondary) !important;
+}
+
+.attendance-sabana-table thead th.col-sabana-col-2 {
+  position: sticky !important;
+  left: 44px !important;
+  top: 0 !important;
+  z-index: 50 !important;
+  background-color: var(--bg-secondary) !important;
+}
+
+.attendance-sabana-table thead th.col-sabana-col-3 {
+  position: sticky !important;
+  left: 154px !important;
+  top: 0 !important;
+  z-index: 50 !important;
+  background-color: var(--bg-secondary) !important;
+  border-right: 2px solid var(--border-color) !important;
+  box-shadow: 3px 0 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+.attendance-sabana-table tfoot td.col-sabana-col-1 {
+  position: sticky !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  z-index: 45 !important;
+  background-color: var(--bg-secondary) !important;
+}
+
+.attendance-sabana-table tfoot td.col-sabana-col-2 {
+  position: sticky !important;
+  left: 44px !important;
+  bottom: 0 !important;
+  z-index: 45 !important;
+  background-color: var(--bg-secondary) !important;
+}
+
+.attendance-sabana-table tfoot td.col-sabana-col-3 {
+  position: sticky !important;
+  left: 154px !important;
+  bottom: 0 !important;
+  z-index: 45 !important;
+  background-color: var(--bg-secondary) !important;
+  border-right: 2px solid var(--border-color) !important;
+  box-shadow: 3px 0 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+.attendance-sabana-table tr:hover td.col-sabana-col-1,
+.attendance-sabana-table tr:hover td.col-sabana-col-2,
+.attendance-sabana-table tr:hover td.col-sabana-col-3 {
+  background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .attendance-sabana-table .col-sabana-col-1,
+[data-theme="dark"] .attendance-sabana-table .col-sabana-col-2,
+[data-theme="dark"] .attendance-sabana-table .col-sabana-col-3 {
+  background-color: var(--bg-primary) !important;
+}
+
+[data-theme="dark"] .attendance-sabana-table thead th.col-sabana-col-1,
+[data-theme="dark"] .attendance-sabana-table thead th.col-sabana-col-2,
+[data-theme="dark"] .attendance-sabana-table thead th.col-sabana-col-3,
+[data-theme="dark"] .attendance-sabana-table tfoot td.col-sabana-col-1,
+[data-theme="dark"] .attendance-sabana-table tfoot td.col-sabana-col-2,
+[data-theme="dark"] .attendance-sabana-table tfoot td.col-sabana-col-3 {
+  background-color: #252528 !important;
 }
 
 /* Empty State de Asistencias */

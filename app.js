@@ -2977,9 +2977,9 @@ const App = {
 
           studentRowsHtml += `
             <tr class="${isSd ? 'row-sin-derecho' : ''}">
-              <td class="col-sticky-1 col-sticky-index" style="text-align: center; font-size: 12px; color: var(--text-tertiary);">${recIdx + 1}</td>
-              <td class="col-sticky-1 col-sticky-mat" style="font-weight: 600; font-family: monospace; font-size: 12.5px;">${this.escapeHtml(rec.matricula)}</td>
-              <td class="col-sticky-2 col-sticky-name" style="font-weight: 500; font-size: 13px;" title="${this.escapeHtml(student.nombre)}">${this.escapeHtml(student.nombre)}</td>
+              <td class="col-sabana-col-1 col-sticky-index" style="text-align: center; font-size: 12px; color: var(--text-tertiary);">${recIdx + 1}</td>
+              <td class="col-sabana-col-2 col-sticky-mat" style="font-weight: 600; font-family: monospace; font-size: 12.5px;">${this.escapeHtml(rec.matricula)}</td>
+              <td class="col-sabana-col-3 col-sticky-name" style="font-weight: 500; font-size: 13px;" title="${this.escapeHtml(student.nombre)}">${this.escapeHtml(student.nombre)}</td>
               ${sessionCellsHtml}
               <td class="col-summary-num"><span id="row-p-${recIdx}">${p}</span></td>
               <td class="col-summary-num col-summary-f ${f > 0 ? 'has-faltas' : ''}"><span id="row-f-${recIdx}">${f}</span></td>
@@ -3025,14 +3025,14 @@ const App = {
         const overallPct = overallMax > 0 ? Math.round((overallPresSum / overallMax) * 100) : 0;
 
         contentHtml = `
-          <div class="notion-table-wrapper" style="margin-top: 6px;">
+          <div class="notion-table-wrapper attendance-sabana-wrapper" id="attendanceSabanaWrapper" style="margin-top: 4px;">
             <table class="notion-table notion-table-gradebook attendance-sabana-table">
               <thead>
                 <!-- Fila 1 de Encabezado: Agrupadores -->
                 <tr class="th-group-row">
-                  <th class="col-sticky-1 col-sticky-index" style="width: 42px;">#</th>
-                  <th class="col-sticky-1 col-sticky-mat" style="width: 110px;">Matrícula</th>
-                  <th class="col-sticky-2 col-sticky-name" style="width: 240px;">Alumno (Rollup)</th>
+                  <th class="col-sabana-col-1 col-sticky-index" style="width: 44px;">#</th>
+                  <th class="col-sabana-col-2 col-sticky-mat" style="width: 110px;">Matrícula</th>
+                  <th class="col-sabana-col-3 col-sticky-name" style="width: 240px;">Alumno (Rollup)</th>
                   <th colspan="${unitSessions.length}" class="th-group-dates" style="text-align: center;">
                     <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
                       <span>📅 Fechas de Clase • Unidad ${currentUnit} (${unitSessions.length} sesiones)</span>
@@ -3048,9 +3048,9 @@ const App = {
 
                 <!-- Fila 2 de Encabezado: Columnas Individuales -->
                 <tr>
-                  <th class="col-sticky-1 col-sticky-index" style="width: 42px; text-align: center;">#</th>
-                  <th class="col-sticky-1 col-sticky-mat" style="width: 110px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
-                  <th class="col-sticky-2 col-sticky-name" style="width: 240px;"><div class="th-content"><span class="th-icon">Aa</span> Nombre del Alumno</div></th>
+                  <th class="col-sabana-col-1 col-sticky-index" style="width: 44px; text-align: center;">#</th>
+                  <th class="col-sabana-col-2 col-sticky-mat" style="width: 110px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
+                  <th class="col-sabana-col-3 col-sticky-name" style="width: 240px;"><div class="th-content"><span class="th-icon">Aa</span> Nombre del Alumno</div></th>
                   ${dateColumnsHeaderHtml}
                   <th style="width: 48px; text-align: center;" title="Total de Presentes (P)"><div class="th-content" style="justify-content: center;">P</div></th>
                   <th style="width: 48px; text-align: center;" title="Total de Faltas (F)"><div class="th-content" style="justify-content: center;">F</div></th>
@@ -3065,9 +3065,9 @@ const App = {
               </tbody>
               <tfoot>
                 <tr class="notion-table-footer">
-                  <td class="col-sticky-1 col-sticky-index"></td>
-                  <td class="col-sticky-1 col-sticky-mat" style="font-weight: 700;">Promedios:</td>
-                  <td class="col-sticky-2 col-sticky-name" style="font-weight: 600; font-size: 12px; color: var(--text-secondary);">
+                  <td class="col-sabana-col-1 col-sticky-index"></td>
+                  <td class="col-sabana-col-2 col-sticky-mat" style="font-weight: 700;">Promedios:</td>
+                  <td class="col-sabana-col-3 col-sticky-name" style="font-weight: 600; font-size: 12px; color: var(--text-secondary);">
                     Asistencia del Día (P / Total)
                   </td>
                   ${footerCellsHtml}
@@ -3476,13 +3476,12 @@ const App = {
         </div>
       </div>
 
-      <div class="attendance-main-area" style="padding: 10px 0 20px 0;">
-        ${contentHtml}
-      </div>
+      ${(this.attendanceMode === 'sabana' && unitSessions.length > 0) ? contentHtml : `<div class="attendance-main-area">${contentHtml}</div>`}
     `;
 
     setTimeout(() => {
       this.fitGradebookTableHeight();
+      this.setupAttendanceScrollHelper();
     }, 0);
   },
 
@@ -5994,11 +5993,29 @@ const App = {
     document.documentElement.scrollTop = 0;
     const container = document.getElementById("tabContentContainer");
     if (container) container.scrollTop = 0;
-    const wrapper = document.querySelector(".notion-table-wrapper");
+    const wrappers = document.querySelectorAll(".notion-table-wrapper, .attendance-sabana-wrapper");
+    wrappers.forEach(wrapper => {
+      wrapper.style.height = "";
+      wrapper.style.maxHeight = "";
+      wrapper.style.overflow = "auto";
+    });
+  },
+
+  setupAttendanceScrollHelper: function() {
+    const wrapper = document.getElementById("attendanceSabanaWrapper") || document.querySelector(".attendance-sabana-wrapper");
     if (!wrapper) return;
-    wrapper.style.height = "";
-    wrapper.style.maxHeight = "";
-    wrapper.style.overflow = "auto";
+
+    // Helper: Si el usuario usa la rueda del ratón sobre la cabecera superior, propagar el scroll al contenedor de la tabla
+    const headerEl = document.querySelector(".gradebook-header-container");
+    if (headerEl && !headerEl._scrollForwarderAttached) {
+      headerEl._scrollForwarderAttached = true;
+      headerEl.addEventListener("wheel", (e) => {
+        if (!e.target.closest("select, input, button")) {
+          wrapper.scrollTop += e.deltaY;
+          if (e.deltaX) wrapper.scrollLeft += e.deltaX;
+        }
+      }, { passive: true });
+    }
   },
 
   exitSupervision: function() {

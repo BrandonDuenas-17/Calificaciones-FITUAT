@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.10.02.v40";
+      const CURRENT_APP_VERSION = "2026.10.02.v41";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=41">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -104,9 +104,10 @@
       gap: 8px !important;
     }
 
-    .notion-table-wrapper {
+    .notion-table-wrapper,
+    .attendance-sabana-wrapper {
       flex: 1 1 0 !important;
-      min-height: 0 !important;
+      min-height: 200px !important;
       height: auto !important;
       max-height: none !important;
       overflow: auto !important;
@@ -115,6 +116,59 @@
       border-radius: var(--radius-sm) !important;
       background: var(--bg-primary) !important;
       -webkit-overflow-scrolling: touch !important;
+    }
+
+    .attendance-main-area {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: auto !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+    }
+
+    .attendance-main-area > .notion-table-wrapper {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      height: 100% !important;
+      max-height: 100% !important;
+      overflow: auto !important;
+      margin: 0 !important;
+    }
+
+    /* Scrollbars visibles y amigables */
+    .notion-table-wrapper::-webkit-scrollbar,
+    .attendance-sabana-wrapper::-webkit-scrollbar {
+      width: 9px !important;
+      height: 9px !important;
+    }
+
+    .notion-table-wrapper::-webkit-scrollbar-thumb,
+    .attendance-sabana-wrapper::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.28) !important;
+      border-radius: 6px !important;
+    }
+
+    .notion-table-wrapper::-webkit-scrollbar-thumb:hover,
+    .attendance-sabana-wrapper::-webkit-scrollbar-thumb:hover {
+      background: var(--uat-orange) !important;
+    }
+
+    .notion-table-wrapper::-webkit-scrollbar-track,
+    .attendance-sabana-wrapper::-webkit-scrollbar-track {
+      background: var(--bg-secondary) !important;
+    }
+
+    @media (max-height: 720px) {
+      .main-content.has-table-view {
+        overflow-y: auto !important;
+      }
+      .notion-table-wrapper,
+      .attendance-sabana-wrapper {
+        min-height: 320px !important;
+      }
     }
 
     /* 1. Encabezados de tabla congelados verticalmente (Freeze Top Row) */
@@ -859,9 +913,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=40"></script>
-  <script src="sample_data.js?v=40"></script>
-  <script src="exporter.js?v=40"></script>
-  <script src="app.js?v=40"></script>
+  <script src="supabase_service.js?v=41"></script>
+  <script src="sample_data.js?v=41"></script>
+  <script src="exporter.js?v=41"></script>
+  <script src="app.js?v=41"></script>
 </body>
 </html>
