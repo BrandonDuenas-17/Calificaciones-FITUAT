@@ -1973,14 +1973,9 @@ const App = {
       }
     }
 
-    // Inicializar a todos los alumnos como Presente ('P') en las fechas oficiales generadas
+    // Las fechas oficiales inician limpias con casillas en blanco para captura docente
     (course.records || []).forEach(rec => {
       if (!rec.attendanceDays) rec.attendanceDays = {};
-      course.attendanceSessions.forEach(sess => {
-        if (!rec.attendanceDays[sess.id]) {
-          rec.attendanceDays[sess.id] = 'P';
-        }
-      });
     });
 
     // Recalcular métricas de asistencia de todas las unidades
@@ -2234,11 +2229,10 @@ const App = {
     course.attendanceSessions.push(newSession);
     this.attendanceActiveSessionId = newSession.id;
 
-    // Inicializar a todos los alumnos como Presente (P) de forma predeterminada
+    // Iniciar con casillas en blanco para captura
     const records = course.records || [];
     records.forEach(rec => {
       if (!rec.attendanceDays) rec.attendanceDays = {};
-      rec.attendanceDays[newSession.id] = 'P';
     });
 
     this.recalculateAttendanceForUnit(course, currentUnit);
@@ -2396,13 +2390,6 @@ const App = {
         };
 
         course.attendanceSessions.push(newSession);
-
-        if (markP) {
-          (course.records || []).forEach(rec => {
-            if (!rec.attendanceDays) rec.attendanceDays = {};
-            rec.attendanceDays[newSession.id] = 'P';
-          });
-        }
         addedCount++;
       }
       currDate.setDate(currDate.getDate() + 1);
@@ -2491,12 +2478,13 @@ const App = {
     const course = this.getActiveCourse();
     if (!course || !course.records || !course.records[recIndex]) return;
     const rec = course.records[recIndex];
-    const curr = (rec.attendanceDays && rec.attendanceDays[sessionId]) || 'P';
+    const curr = (rec.attendanceDays && rec.attendanceDays[sessionId]) || '';
     let next = 'P';
-    if (curr === 'P') next = 'F';
+    if (!curr || curr === '') next = 'P';
+    else if (curr === 'P') next = 'F';
     else if (curr === 'F') next = 'R';
     else if (curr === 'R') next = 'J';
-    else if (curr === 'J') next = 'P';
+    else if (curr === 'J') next = '';
 
     this.setAttendanceStatusDirect(recIndex, sessionId, next);
   },
@@ -2506,7 +2494,11 @@ const App = {
     if (!course || !course.records || !course.records[recIndex]) return;
     const rec = course.records[recIndex];
     if (!rec.attendanceDays) rec.attendanceDays = {};
-    rec.attendanceDays[sessionId] = newStatus;
+    if (newStatus) {
+      rec.attendanceDays[sessionId] = newStatus;
+    } else {
+      delete rec.attendanceDays[sessionId];
+    }
 
     const currentUnit = this.attendanceActiveUnit;
     const uKey = `u${currentUnit}`;
@@ -2515,30 +2507,30 @@ const App = {
     // 1. Actualizar celda en el DOM (input o botón)
     const inp = document.getElementById(`att-input-${recIndex}-${sessionId}`);
     if (inp) {
-      if (inp.value !== newStatus) inp.value = newStatus;
-      inp.className = `att-grid-input att-status-${newStatus.toLowerCase()}`;
-      inp.setAttribute("title", `Estatus: ${newStatus} (P: Presente, F: Falta, R: Retardo, J: Justificado)`);
+      inp.value = newStatus || '';
+      inp.className = newStatus ? `att-grid-input att-status-${newStatus.toLowerCase()}` : `att-grid-input`;
+      inp.setAttribute("title", newStatus ? `Estatus: ${newStatus} (P: Presente, F: Falta, R: Retardo, J: Justificado)` : `Sin registrar (Escribe P, F, R o J)`);
     }
     const btn = document.getElementById(`att-btn-${recIndex}-${sessionId}`);
     if (btn) {
-      btn.textContent = newStatus;
-      btn.className = `att-grid-badge att-status-${newStatus.toLowerCase()}`;
-      btn.setAttribute("title", `Estatus: ${newStatus}`);
+      btn.textContent = newStatus || '-';
+      btn.className = newStatus ? `att-grid-badge att-status-${newStatus.toLowerCase()}` : `att-grid-badge`;
+      btn.setAttribute("title", newStatus ? `Estatus: ${newStatus}` : `Sin registrar`);
     }
 
     // 2. Recalcular métricas de la fila del alumno en memoria
     let p = 0, f = 0, r = 0, j = 0;
     unitSessions.forEach(s => {
-      const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+      const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || '';
       if (st === 'P') p++;
       else if (st === 'F') f++;
       else if (st === 'R') r++;
       else if (st === 'J') j++;
     });
 
-    const totalSessions = unitSessions.length;
+    const totalMarked = p + f + r + j;
     const effectivePresent = p + (r * 0.5) + j;
-    const pct = totalSessions > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalSessions) * 100))) : 100;
+    const pct = totalMarked > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalMarked) * 100))) : 100;
     const effectiveFaltas = f + Math.floor(r / 2);
 
     rec.asistencia = rec.asistencia || {};
@@ -2582,15 +2574,21 @@ const App = {
 
     // 4. Actualizar footer de la columna en el DOM
     let colPCount = 0;
+    let colMarkedCount = 0;
     course.records.forEach(rc => {
-      const st = (rc.attendanceDays && rc.attendanceDays[sessionId]) || 'P';
-      if (st === 'P' || st === 'J') colPCount++;
-      else if (st === 'R') colPCount += 0.5;
+      const st = (rc.attendanceDays && rc.attendanceDays[sessionId]) || '';
+      if (st === 'P' || st === 'J') { colPCount++; colMarkedCount++; }
+      else if (st === 'R') { colPCount += 0.5; colMarkedCount++; }
+      else if (st === 'F') { colMarkedCount++; }
     });
-    const colPct = course.records.length > 0 ? Math.round((colPCount / course.records.length) * 100) : 0;
+    const colPct = colMarkedCount > 0 ? Math.round((colPCount / colMarkedCount) * 100) : null;
     const footCell = document.getElementById(`foot-stat-${sessionId}`);
     if (footCell) {
-      footCell.innerHTML = `<span class="att-foot-stat">${Math.round(colPCount)}/${course.records.length}</span><br><span class="att-foot-stat-pct">${colPct}%</span>`;
+      if (colMarkedCount > 0) {
+        footCell.innerHTML = `<span class="att-foot-stat">${Math.round(colPCount)}/${colMarkedCount}</span><br><span class="att-foot-stat-pct">${colPct}%</span>`;
+      } else {
+        footCell.innerHTML = `<span class="att-foot-stat" style="color: var(--text-tertiary); opacity: 0.6;">-</span>`;
+      }
     }
 
     // 5. Guardar en Supabase con debounce
@@ -2660,8 +2658,12 @@ const App = {
       return;
     }
 
-    // Permitir teclas funcionales del sistema (Tabulador, Escape, Borrado)
-    if (event.key === 'Tab' || event.key === 'Escape' || event.key === 'Backspace' || event.key === 'Delete') {
+    // Permitir borrar con Backspace o Delete y dejar la celda en blanco
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      event.preventDefault();
+      const inp = event.target;
+      inp.value = '';
+      this.setAttendanceStatusDirect(recIndex, sessionId, '');
       return;
     }
 
@@ -2678,18 +2680,16 @@ const App = {
     if (val.length > 1) {
       val = val.charAt(val.length - 1);
     }
-    if (val === 'P' || val === 'F' || val === 'R' || val === 'J') {
-      inputEl.value = val;
-      this.setAttendanceStatusDirect(recIndex, sessionId, val);
-    }
+    inputEl.value = val;
+    this.setAttendanceStatusDirect(recIndex, sessionId, val);
   },
 
   handleAttendanceInputBlur: function(inputEl, recIndex, sessionId) {
     if (!inputEl) return;
     const val = (inputEl.value || '').trim().toUpperCase();
-    if (val !== 'P' && val !== 'F' && val !== 'R' && val !== 'J') {
-      inputEl.value = 'P';
-      this.setAttendanceStatusDirect(recIndex, sessionId, 'P');
+    if (val !== '' && val !== 'P' && val !== 'F' && val !== 'R' && val !== 'J') {
+      inputEl.value = '';
+      this.setAttendanceStatusDirect(recIndex, sessionId, '');
     }
   },
 
@@ -2737,7 +2737,7 @@ const App = {
       let partSum = 0;
 
       sessions.forEach(s => {
-        const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+        const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || '';
         if (st === 'P') pCount++;
         else if (st === 'F') fCount++;
         else if (st === 'R') rCount++;
@@ -2749,7 +2749,8 @@ const App = {
       });
 
       const effectivePresent = pCount + (rCount * 0.5) + jCount;
-      const pct = Math.min(100, Math.max(0, Math.round((effectivePresent / totalSessions) * 100)));
+      const totalMarked = pCount + fCount + rCount + jCount;
+      const pct = totalMarked > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalMarked) * 100))) : 100;
       const effectiveFaltas = fCount + Math.floor(rCount / 2);
 
       rec.asistencia[uKey] = pct;
@@ -2757,6 +2758,39 @@ const App = {
       rec.participacion[uKey] = partSum;
       rec.asistenciaAuto[uKey] = true;
     });
+  },
+
+  clearAttendanceInCurrentUnit: function() {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    const currentUnit = this.attendanceActiveUnit;
+    const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === currentUnit);
+    if (unitSessions.length === 0) return;
+    (course.records || []).forEach(rec => {
+      if (rec.attendanceDays) {
+        unitSessions.forEach(s => {
+          delete rec.attendanceDays[s.id];
+        });
+      }
+    });
+    this.recalculateAttendanceForUnit(course, currentUnit);
+    this.debouncedSave();
+    this.render();
+    this.showToast(`🧹 Casillas de asistencia de la Unidad ${currentUnit} dejadas en blanco.`);
+  },
+
+  clearAttendanceSession: function(sessionId) {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    (course.records || []).forEach(rec => {
+      if (rec.attendanceDays) {
+        delete rec.attendanceDays[sessionId];
+      }
+    });
+    this.recalculateAttendanceForUnit(course, this.attendanceActiveUnit);
+    this.debouncedSave();
+    this.render();
+    this.showToast("🧹 Casillas de esta fecha dejadas en blanco.");
   },
 
   saveQuickAttendance: function() {
@@ -2845,6 +2879,30 @@ const App = {
       return;
     }
 
+    const numUnits = Number(course.unidadesCount) || 3;
+
+    // Limpieza inicial: Quitar todas las 'P' pre-llenadas por defecto para dejar los recuadros en blanco
+    if (!course._attendanceBlankCleared) {
+      course._attendanceBlankCleared = true;
+      let hadPreFilledP = false;
+      (course.records || []).forEach(rec => {
+        if (rec.attendanceDays) {
+          Object.keys(rec.attendanceDays).forEach(k => {
+            if (rec.attendanceDays[k] === 'P') {
+              delete rec.attendanceDays[k];
+              hadPreFilledP = true;
+            }
+          });
+        }
+      });
+      if (hadPreFilledP) {
+        for (let u = 1; u <= numUnits; u++) {
+          this.recalculateAttendanceForUnit(course, u);
+        }
+        this.debouncedSave();
+      }
+    }
+
     if (!course.attendanceSessions) {
       course.attendanceSessions = [];
     }
@@ -2854,7 +2912,6 @@ const App = {
       this.populateOfficialSemesterSessions(course, false);
     }
 
-    const numUnits = Number(course.unidadesCount) || 5;
     if (this.attendanceActiveUnit > numUnits || this.attendanceActiveUnit < 1) {
       this.attendanceActiveUnit = 1;
     }
@@ -2988,7 +3045,8 @@ const App = {
                 ${badgeTagHtml}
                 ${!isAuditReadOnly ? `
                   <div class="att-header-actions">
-                    <button type="button" class="btn-att-hdr-action" title="Marcar a todos Presentes en esta fecha" onclick="App.markAllPresent('${s.id}')">⚡</button>
+                    <button type="button" class="btn-att-hdr-action" title="Marcar a todos Presentes (P) en esta fecha" onclick="App.markAllPresent('${s.id}')">⚡</button>
+                    <button type="button" class="btn-att-hdr-action" title="Dejar en blanco todas las casillas de esta fecha" onclick="App.clearAttendanceSession('${s.id}')">🧹</button>
                     <button type="button" class="btn-att-hdr-action" title="Editar fecha o tema" onclick="App.promptEditAttendanceDate('${s.id}')">✏️</button>
                     <button type="button" class="btn-att-hdr-action btn-att-hdr-del" title="Eliminar esta fecha de clase" onclick="App.deleteAttendanceSession('${s.id}')">✕</button>
                   </div>
@@ -3007,13 +3065,13 @@ const App = {
           // Celdas por Fecha
           let sessionCellsHtml = "";
           unitSessions.forEach(s => {
-            const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+            const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || '';
             if (st === 'P') p++;
             else if (st === 'F') f++;
             else if (st === 'R') r++;
             else if (st === 'J') j++;
 
-            const statusClass = `att-status-${st.toLowerCase()}`;
+            const statusClass = st ? `att-status-${st.toLowerCase()}` : '';
             sessionCellsHtml += `
               <td class="col-att-cell" data-rec-idx="${recIdx}" data-session-id="${s.id}">
                 <input type="text" 
@@ -3024,7 +3082,7 @@ const App = {
                   autocomplete="off"
                   spellcheck="false"
                   ${isAuditReadOnly ? 'readonly style="cursor: default;"' : ''}
-                  title="${this.escapeHtml(student.nombre)} | ${s.fecha}: ${st} (Escribe P, F, R o J)"
+                  title="${this.escapeHtml(student.nombre)} | ${s.fecha}: ${st || 'Sin registrar'} (Escribe P, F, R o J)"
                   onfocus="this.select()"
                   onkeydown="App.handleAttendanceInputKeydown(event, ${recIdx}, '${s.id}')"
                   oninput="App.handleAttendanceInput(this, ${recIdx}, '${s.id}')"
@@ -3035,9 +3093,9 @@ const App = {
           });
 
           // Métricas acumuladas del alumno
-          const totalSessions = unitSessions.length;
+          const totalMarked = p + f + r + j;
           const effectivePresent = p + (r * 0.5) + j;
-          const pct = totalSessions > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalSessions) * 100))) : 100;
+          const pct = totalMarked > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalMarked) * 100))) : 100;
           const effectiveFaltas = f + Math.floor(r / 2);
           const isSd = limiteFaltasActivo && (effectiveFaltas > maxFaltas);
 
@@ -3074,25 +3132,30 @@ const App = {
         // Fila de Totales en Pie de Tabla (Asistencias por Fecha)
         let footerCellsHtml = "";
         let overallPresSum = 0;
+        let overallMarkedSum = 0;
         unitSessions.forEach(s => {
           let colP = 0;
+          let colMarked = 0;
           records.forEach(rc => {
-            const st = (rc.attendanceDays && rc.attendanceDays[s.id]) || 'P';
-            if (st === 'P' || st === 'J') colP++;
-            else if (st === 'R') colP += 0.5;
+            const st = (rc.attendanceDays && rc.attendanceDays[s.id]) || '';
+            if (st === 'P' || st === 'J') { colP++; colMarked++; }
+            else if (st === 'R') { colP += 0.5; colMarked++; }
+            else if (st === 'F') { colMarked++; }
           });
           overallPresSum += colP;
-          const colPct = records.length > 0 ? Math.round((colP / records.length) * 100) : 0;
+          overallMarkedSum += colMarked;
+          const colPct = colMarked > 0 ? Math.round((colP / colMarked) * 100) : null;
           footerCellsHtml += `
             <td id="foot-stat-${s.id}" class="col-attendance-date" style="padding: 6px 2px; text-align: center;">
-              <span class="att-foot-stat">${Math.round(colP)}/${records.length}</span><br>
-              <span class="att-foot-stat-pct">${colPct}%</span>
+              ${colMarked > 0 
+                ? `<span class="att-foot-stat">${Math.round(colP)}/${colMarked}</span><br><span class="att-foot-stat-pct">${colPct}%</span>` 
+                : `<span class="att-foot-stat" style="color: var(--text-tertiary); opacity: 0.6;">-</span>`
+              }
             </td>
           `;
         });
 
-        const overallMax = records.length * unitSessions.length;
-        const overallPct = overallMax > 0 ? Math.round((overallPresSum / overallMax) * 100) : 0;
+        const overallPct = overallMarkedSum > 0 ? Math.round((overallPresSum / overallMarkedSum) * 100) : 100;
 
         contentHtml = `
           <div class="notion-table-wrapper attendance-sabana-wrapper" id="attendanceSabanaWrapper" style="margin-top: 4px;">
@@ -3468,8 +3531,8 @@ const App = {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 ⚡ Días Oficiales
               </button>
-              <button class="btn btn-default" onclick="App.openAttendanceCalendarModal()" title="Generador manual de fechas">
-                Generador Manual
+              <button class="btn btn-default" onclick="App.clearAttendanceInCurrentUnit()" title="Dejar todas las casillas de la unidad en blanco">
+                🧹 Vaciar Casillas
               </button>
             ` : ''}
             <button class="btn btn-default" onclick="App.exportAttendanceToExcel()" title="Descargar la Sábana Completa de Asistencias en Excel (.xlsx)">
