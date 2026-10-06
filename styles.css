@@ -5124,3 +5124,60 @@ textarea.form-control {
   border-radius: 3px;
   display: inline-block;
 }
+
+/* ==========================================================================
+   MÓDULO DE IMPORTACIÓN DE ASISTENCIAS DESDE EXCEL PROPIO
+   ========================================================================== */
+.excel-dropzone {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 24px 18px;
+  text-align: center;
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.excel-dropzone:hover {
+  border-color: var(--uat-orange);
+  background: rgba(224, 90, 43, 0.04);
+}
+
+.excel-dropzone.dragover {
+  border-color: var(--uat-orange);
+  background: rgba(224, 90, 43, 0.09);
+  transform: scale(1.01);
+}
+
+.badge-match-mat {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--color-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.badge-match-nom {
+  background: rgba(43, 122, 120, 0.14);
+  color: #2b7a78;
+  border: 1px solid rgba(43, 122, 120, 0.3);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.badge-match-none {
+  background: rgba(156, 163, 175, 0.14);
+  color: var(--text-tertiary);
+  border: 1px solid rgba(156, 163, 175, 0.25);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+  display: inline-block;
+}

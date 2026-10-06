@@ -2487,6 +2487,672 @@ const App = {
     this.showToast(`🎉 ¡Listo! Se generaron ${addedCount} fechas de clase para la Unidad ${currentUnit}`);
   },
 
+  // =========================================================================
+  // MÓDULO INTELIGENTE DE IMPORTACIÓN DE ASISTENCIAS DESDE EXCEL (.XLSX / .CSV)
+  // =========================================================================
+
+  openExcelAttendanceImportModal: function() {
+    const modal = document.getElementById("excelAttendanceImportModal");
+    if (!modal) return;
+
+    const course = this.getActiveCourse();
+    if (!course) {
+      alert("Selecciona primero una materia para importar asistencias.");
+      return;
+    }
+
+    const currentUnit = this.attendanceActiveUnit || 1;
+    this._excelAttendanceState = {
+      file: null,
+      workbook: null,
+      sheets: [],
+      selectedSheet: null,
+      targetUnit: currentUnit,
+      rawRows: [],
+      headerRowIndex: -1,
+      detectedColumns: null,
+      matches: []
+    };
+
+    const unitSelect = document.getElementById("excelImportTargetUnit");
+    if (unitSelect) {
+      const numU = Number(course.unidadesCount) || 5;
+      let opts = "";
+      for (let u = 1; u <= numU; u++) {
+        opts += `<option value="${u}" ${u === currentUnit ? 'selected' : ''}>Unidad ${u}</option>`;
+      }
+      unitSelect.innerHTML = opts;
+    }
+
+    const fileInp = document.getElementById("excelAttendanceFileInput");
+    if (fileInp) fileInp.value = "";
+
+    const dropzoneContent = document.getElementById("excelImportDropzoneContent");
+    if (dropzoneContent) {
+      dropzoneContent.innerHTML = `
+        <div style="font-size: 38px; margin-bottom: 8px;">📂</div>
+        <p style="font-weight: 700; color: var(--uat-blue-night); margin-bottom: 4px; font-size: 14px;">
+          Arrastra tu archivo Excel aquí o haz clic para seleccionarlo
+        </p>
+        <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+          Soporta <b>.xlsx, .xls y .csv</b> • Detección automática de totales o fechas con marcas (P/F/R/J)
+        </p>
+      `;
+    }
+
+    const optContainer = document.getElementById("excelImportOptionsContainer");
+    if (optContainer) optContainer.style.display = "none";
+    const banner = document.getElementById("excelImportStatusBanner");
+    if (banner) banner.style.display = "none";
+    const previewContainer = document.getElementById("excelImportPreviewContainer");
+    if (previewContainer) previewContainer.style.display = "none";
+    const btnApply = document.getElementById("btnApplyExcelAttendance");
+    if (btnApply) {
+      btnApply.disabled = true;
+      btnApply.innerHTML = `⚡ Aplicar a Unidad ${currentUnit}`;
+    }
+    const summaryEl = document.getElementById("excelImportFooterSummary");
+    if (summaryEl) summaryEl.textContent = "";
+
+    modal.classList.add("open");
+  },
+
+  closeExcelAttendanceImportModal: function() {
+    const modal = document.getElementById("excelAttendanceImportModal");
+    if (modal) modal.classList.remove("open");
+  },
+
+  handleExcelDragOver: function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById("excelImportDropzone");
+    if (dropzone) dropzone.classList.add("dragover");
+  },
+
+  handleExcelDragLeave: function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById("excelImportDropzone");
+    if (dropzone) dropzone.classList.remove("dragover");
+  },
+
+  handleExcelDrop: function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById("excelImportDropzone");
+    if (dropzone) dropzone.classList.remove("dragover");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length > 0) {
+      this.processAttendanceExcelFile(files[0]);
+    }
+  },
+
+  handleAttendanceExcelFileSelected: function(e) {
+    const files = e.target && e.target.files;
+    if (files && files.length > 0) {
+      this.processAttendanceExcelFile(files[0]);
+    }
+  },
+
+  onExcelImportUnitChanged: function(val) {
+    if (!this._excelAttendanceState) return;
+    this._excelAttendanceState.targetUnit = Number(val) || 1;
+    const btnApply = document.getElementById("btnApplyExcelAttendance");
+    if (btnApply) {
+      const matchCount = (this._excelAttendanceState.matches || []).filter(m => m.status === 'ok').length;
+      btnApply.innerHTML = `⚡ Aplicar Asistencias a Unidad ${this._excelAttendanceState.targetUnit} (${matchCount} alumnos)`;
+    }
+    const summaryFooter = document.getElementById("excelImportFooterSummary");
+    if (summaryFooter && this._excelAttendanceState.matches) {
+      const matchCount = this._excelAttendanceState.matches.filter(m => m.status === 'ok').length;
+      summaryFooter.textContent = `${matchCount} registros listos para sincronizar a la Unidad ${this._excelAttendanceState.targetUnit}.`;
+    }
+  },
+
+  onExcelImportSheetChanged: function(val) {
+    if (!this._excelAttendanceState || !this._excelAttendanceState.workbook) return;
+    this._excelAttendanceState.selectedSheet = val;
+    this.analyzeCurrentExcelSheet();
+  },
+
+  processAttendanceExcelFile: function(file) {
+    if (!file) return;
+    if (typeof XLSX === "undefined") {
+      alert("Error: La librería de lectura de Excel (SheetJS) no está disponible en este momento.");
+      return;
+    }
+
+    const state = this._excelAttendanceState;
+    if (!state) return;
+    state.file = file;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+          alert("El archivo no contiene hojas legibles.");
+          return;
+        }
+
+        state.workbook = workbook;
+        state.sheets = workbook.SheetNames;
+        state.selectedSheet = workbook.SheetNames[0];
+
+        const dropzoneContent = document.getElementById("excelImportDropzoneContent");
+        if (dropzoneContent) {
+          dropzoneContent.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;">
+              <span style="font-size: 30px;">📗</span>
+              <div style="text-align: left;">
+                <b style="font-size: 14px; color: var(--uat-blue-night);">${this.escapeHtml(file.name)}</b>
+                <div style="font-size: 11.5px; color: var(--text-tertiary);">${(file.size / 1024).toFixed(1)} KB • ${workbook.SheetNames.length} hoja(s) encontrada(s)</div>
+              </div>
+              <button type="button" class="btn btn-xs btn-default" onclick="event.stopPropagation(); document.getElementById('excelAttendanceFileInput').click();" style="font-size: 11px; margin-left: 6px;">Cambiar archivo</button>
+            </div>
+          `;
+        }
+
+        const optContainer = document.getElementById("excelImportOptionsContainer");
+        if (optContainer) optContainer.style.display = "block";
+
+        const sheetContainer = document.getElementById("excelImportSheetSelectorContainer");
+        const sheetSelect = document.getElementById("excelImportSheetSelect");
+        if (sheetContainer && sheetSelect) {
+          if (workbook.SheetNames.length > 1) {
+            sheetContainer.style.display = "block";
+            sheetSelect.innerHTML = workbook.SheetNames.map(s => `<option value="${this.escapeHtml(s)}" ${s === state.selectedSheet ? 'selected' : ''}>${this.escapeHtml(s)}</option>`).join('');
+          } else {
+            sheetContainer.style.display = "none";
+          }
+        }
+
+        this.analyzeCurrentExcelSheet();
+      } catch (err) {
+        console.error("Error al procesar el archivo Excel:", err);
+        alert("No se pudo procesar el archivo Excel. Asegúrate de que sea un archivo .xlsx, .xls o .csv válido.\nError: " + (err.message || err));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  },
+
+  _cleanMatchText: function(str) {
+    if (!str) return "";
+    return String(str)
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  },
+
+  _getNameTokens: function(str) {
+    const clean = this._cleanMatchText(str);
+    if (!clean) return [];
+    const stopWords = new Set(["de", "del", "la", "las", "los", "y", "san"]);
+    return clean.split(" ").filter(w => w.length > 1 && !stopWords.has(w));
+  },
+
+  analyzeCurrentExcelSheet: function() {
+    const state = this._excelAttendanceState;
+    if (!state || !state.workbook || !state.selectedSheet) return;
+
+    const sheet = state.workbook.Sheets[state.selectedSheet];
+    if (!sheet) return;
+
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    state.rawRows = rawRows;
+
+    if (!rawRows || rawRows.length === 0) {
+      const banner = document.getElementById("excelImportStatusBanner");
+      if (banner) {
+        banner.style.display = "block";
+        banner.style.background = "rgba(239, 68, 68, 0.1)";
+        banner.style.color = "var(--color-red)";
+        banner.innerHTML = "⚠️ La hoja seleccionada está vacía.";
+      }
+      return;
+    }
+
+    let headerRowIdx = -1;
+    let maxHeaderScore = 0;
+
+    for (let r = 0; r < Math.min(25, rawRows.length); r++) {
+      const row = rawRows[r] || [];
+      let score = 0;
+      row.forEach(cell => {
+        const txt = this._cleanMatchText(cell);
+        if (!txt) return;
+        if (/matr|clave|id|cuenta|control/.test(txt)) score += 5;
+        if (/nom|alum|estud|persona/.test(txt)) score += 5;
+        if (/falta|inasist|ausenc/.test(txt)) score += 4;
+        if (/asist|presente/.test(txt)) score += 3;
+        if (/retard/.test(txt)) score += 2;
+        if (/justif/.test(txt)) score += 2;
+        if (/^u\d|unidad/.test(txt)) score += 2;
+        if (/\d{1,2}[/-]\d{1,2}|clase|sesion/.test(txt)) score += 2;
+      });
+      if (score > maxHeaderScore) {
+        maxHeaderScore = score;
+        headerRowIdx = r;
+      }
+    }
+
+    if (headerRowIdx === -1) headerRowIdx = 0;
+    state.headerRowIndex = headerRowIdx;
+
+    const headers = rawRows[headerRowIdx] || [];
+
+    let colMatricula = -1;
+    let colNombre = -1;
+    let colFaltas = -1;
+    let colAsist = -1;
+    let colPct = -1;
+    let colRetardos = -1;
+    let colJustif = -1;
+    const dateColumns = [];
+
+    headers.forEach((cell, cIdx) => {
+      const hText = this._cleanMatchText(cell);
+      if (!hText) return;
+
+      if (colMatricula === -1 && /matr|clave|control|cuenta|id|no\s*cuenta/.test(hText) && !/grupo|materia|prof/.test(hText)) {
+        colMatricula = cIdx;
+      } else if (colNombre === -1 && /nom|alum|estud/.test(hText) && !/docente|profesor|materia/.test(hText)) {
+        colNombre = cIdx;
+      } else if (/^pct|%\s*asist|porcentaje/.test(hText)) {
+        colPct = cIdx;
+      } else if (colFaltas === -1 && /total\s*f|faltas?|inasist|ausenc/.test(hText) && !/fecha|dia/.test(hText)) {
+        colFaltas = cIdx;
+      } else if (colAsist === -1 && /total\s*a|total\s*p|asistencias?|presentes?/.test(hText) && !/fecha|dia/.test(hText)) {
+        colAsist = cIdx;
+      } else if (colRetardos === -1 && /retard/.test(hText)) {
+        colRetardos = cIdx;
+      } else if (colJustif === -1 && /justif/.test(hText)) {
+        colJustif = cIdx;
+      } else if (/\d{1,2}[/-]\d{1,2}|\d{1,2}-[a-z]{3}|clase\s*\d+|sesi[oó]n\s*\d+|dia\s*\d+/.test(hText) || (typeof cell === 'number' && cell > 44000)) {
+        let label = String(cell).trim();
+        if (typeof cell === 'number' && cell > 44000) {
+          try {
+            const d = new Date(Math.round((cell - 25569) * 86400 * 1000));
+            label = d.toISOString().slice(0, 10);
+          } catch(e) {}
+        }
+        dateColumns.push({ colIdx: cIdx, label: label });
+      }
+    });
+
+    const sampleRows = rawRows.slice(headerRowIdx + 1, headerRowIdx + 40);
+    if (colMatricula === -1) {
+      for (let c = 0; c < headers.length; c++) {
+        let numericIds = 0;
+        sampleRows.forEach(r => {
+          const v = String(r[c] || "").trim();
+          if (/^\d{7,9}$/.test(v)) numericIds++;
+        });
+        if (numericIds >= Math.min(3, sampleRows.length)) {
+          colMatricula = c;
+          break;
+        }
+      }
+    }
+
+    if (colNombre === -1) {
+      for (let c = 0; c < headers.length; c++) {
+        if (c === colMatricula) continue;
+        let nameLike = 0;
+        sampleRows.forEach(r => {
+          const v = String(r[c] || "").trim();
+          if (v.length > 5 && v.includes(" ") && !/\d{5}/.test(v)) nameLike++;
+        });
+        if (nameLike >= Math.min(3, sampleRows.length)) {
+          colNombre = c;
+          break;
+        }
+      }
+    }
+
+    if (dateColumns.length === 0) {
+      for (let c = 0; c < headers.length; c++) {
+        if (c === colMatricula || c === colNombre || c === colFaltas || c === colAsist || c === colPct) continue;
+        let attendanceMarks = 0;
+        sampleRows.forEach(r => {
+          const val = String(r[c] || "").trim().toUpperCase();
+          if (/^[PFRJ10✓✗]$/.test(val)) attendanceMarks++;
+        });
+        if (attendanceMarks >= Math.max(2, Math.floor(sampleRows.length * 0.4))) {
+          const hName = String(headers[c] || `Clase ${dateColumns.length + 1}`).trim();
+          dateColumns.push({ colIdx: c, label: hName });
+        }
+      }
+    }
+
+    state.detectedColumns = {
+      colMatricula,
+      colNombre,
+      colFaltas,
+      colAsist,
+      colPct,
+      colRetardos,
+      colJustif,
+      dateColumns
+    };
+
+    const course = this.getActiveCourse();
+    const records = (course && course.records) ? course.records : [];
+    const studentsMap = this.getStudentsMap();
+
+    const excelRowsData = [];
+    for (let r = headerRowIdx + 1; r < rawRows.length; r++) {
+      const row = rawRows[r];
+      if (!row || row.length === 0) continue;
+
+      const rawMat = colMatricula !== -1 ? String(row[colMatricula] || "").trim() : "";
+      const cleanMat = rawMat.replace(/[^0-9a-zA-Z]/g, "").toLowerCase();
+      const rawName = colNombre !== -1 ? String(row[colNombre] || "").trim() : "";
+      const nameTokens = this._getNameTokens(rawName);
+
+      if (!cleanMat && nameTokens.length === 0) continue;
+
+      excelRowsData.push({
+        rowIdx: r,
+        row: row,
+        rawMat: rawMat,
+        cleanMat: cleanMat,
+        rawName: rawName,
+        nameTokens: nameTokens,
+        used: false
+      });
+    }
+
+    const matches = [];
+    let matchCount = 0;
+
+    records.forEach((rec, recIdx) => {
+      const student = studentsMap[rec.matricula] || { nombre: "Alumno sin nombre" };
+      const sysCleanMat = String(rec.matricula || "").replace(/[^0-9a-zA-Z]/g, "").toLowerCase();
+      const sysNameTokens = this._getNameTokens(student.nombre);
+
+      let bestMatch = null;
+      let matchType = "none";
+      let matchLabel = "";
+
+      if (sysCleanMat) {
+        const foundByMat = excelRowsData.find(item => item.cleanMat === sysCleanMat);
+        if (foundByMat) {
+          bestMatch = foundByMat;
+          matchType = "matricula";
+          matchLabel = `Matrícula (${foundByMat.rawMat})`;
+        }
+      }
+
+      if (!bestMatch && sysNameTokens.length > 0) {
+        let bestTokenScore = 0;
+        let bestCandidate = null;
+
+        excelRowsData.forEach(item => {
+          if (item.nameTokens.length === 0) return;
+          let common = 0;
+          sysNameTokens.forEach(t1 => {
+            if (item.nameTokens.some(t2 => t1 === t2 || (t1.length > 3 && t2.startsWith(t1)) || (t2.length > 3 && t1.startsWith(t2)))) {
+              common++;
+            }
+          });
+
+          const totalUnique = new Set([...sysNameTokens, ...item.nameTokens]).size;
+          const similarity = common / Math.max(1, totalUnique);
+
+          if ((common >= 2 && similarity >= 0.5) || similarity >= 0.7) {
+            if (common > bestTokenScore) {
+              bestTokenScore = common;
+              bestCandidate = item;
+            }
+          }
+        });
+
+        if (bestCandidate) {
+          bestMatch = bestCandidate;
+          matchType = "nombre";
+          matchLabel = `Nombre (${bestCandidate.rawName})`;
+        }
+      }
+
+      if (bestMatch) {
+        matchCount++;
+        const row = bestMatch.row;
+        let detectedF = 0;
+        let detectedPct = 100;
+        const sessionsData = {};
+
+        if (dateColumns.length > 0) {
+          let pCnt = 0, fCnt = 0, rCnt = 0, jCnt = 0;
+          dateColumns.forEach((col, dIdx) => {
+            const rawVal = String(row[col.colIdx] || "").trim().toUpperCase();
+            let mark = "P";
+            if (/^F|A|0|✗|-$/.test(rawVal)) { mark = "F"; fCnt++; }
+            else if (/^R$/.test(rawVal)) { mark = "R"; rCnt++; }
+            else if (/^J$/.test(rawVal)) { mark = "J"; jCnt++; }
+            else { mark = "P"; pCnt++; }
+            sessionsData[`date_${dIdx}`] = { mark: mark, label: col.label };
+          });
+
+          const totalClases = pCnt + fCnt + rCnt + jCnt;
+          detectedF = fCnt + Math.floor(rCnt / 2);
+          detectedPct = totalClases > 0 ? Math.round(((pCnt + (rCnt * 0.5) + jCnt) / totalClases) * 100) : 100;
+        } else {
+          if (colFaltas !== -1) {
+            const parsedF = Number(String(row[colFaltas]).replace(/[^0-9]/g, ''));
+            detectedF = !isNaN(parsedF) ? parsedF : 0;
+          }
+          if (colPct !== -1) {
+            let parsedPct = Number(String(row[colPct]).replace(/[^0-9.]/g, ''));
+            if (parsedPct <= 1 && parsedPct > 0) parsedPct = Math.round(parsedPct * 100);
+            detectedPct = !isNaN(parsedPct) ? Math.min(100, Math.max(0, parsedPct)) : 100;
+          } else if (colAsist !== -1) {
+            const parsedA = Number(String(row[colAsist]).replace(/[^0-9]/g, ''));
+            if (!isNaN(parsedA)) {
+              const totalEst = parsedA + detectedF;
+              detectedPct = totalEst > 0 ? Math.round((parsedA / totalEst) * 100) : 100;
+            }
+          } else {
+            detectedPct = Math.max(0, 100 - (detectedF * 10));
+          }
+        }
+
+        matches.push({
+          recIndex: recIdx,
+          matricula: rec.matricula,
+          nombre: student.nombre,
+          matchType: matchType,
+          matchLabel: matchLabel,
+          faltas: detectedF,
+          asistenciaPct: detectedPct,
+          sessionsData: sessionsData,
+          status: "ok"
+        });
+      } else {
+        const uKey = `u${state.targetUnit || 1}`;
+        const currF = (rec.faltas && rec.faltas[uKey] !== undefined) ? rec.faltas[uKey] : "-";
+        const currA = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? rec.asistencia[uKey] : "-";
+        matches.push({
+          recIndex: recIdx,
+          matricula: rec.matricula,
+          nombre: student.nombre,
+          matchType: "none",
+          matchLabel: "No localizado en Excel",
+          faltas: currF,
+          asistenciaPct: currA,
+          sessionsData: {},
+          status: "missing"
+        });
+      }
+    });
+
+    state.matches = matches;
+
+    const banner = document.getElementById("excelImportStatusBanner");
+    if (banner) {
+      banner.style.display = "block";
+      const totalAlumnos = records.length;
+      const pctMatch = totalAlumnos > 0 ? Math.round((matchCount / totalAlumnos) * 100) : 0;
+
+      let colDiag = [];
+      if (colMatricula !== -1) colDiag.push(`Matrícula (Col ${headers[colMatricula] || colMatricula + 1})`);
+      if (colNombre !== -1) colDiag.push(`Nombre (Col ${headers[colNombre] || colNombre + 1})`);
+      if (dateColumns.length > 0) colDiag.push(`${dateColumns.length} Fechas de Clase`);
+      if (colFaltas !== -1) colDiag.push(`Totales de Faltas`);
+      if (colPct !== -1 || colAsist !== -1) colDiag.push(`% de Asistencia`);
+
+      banner.style.background = matchCount > 0 ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)";
+      banner.style.border = matchCount > 0 ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)";
+      banner.style.color = matchCount > 0 ? "var(--color-green)" : "var(--color-red)";
+      banner.innerHTML = `
+        <div style="font-weight: 700; margin-bottom: 2px;">
+          ${matchCount > 0 ? `✅ Se detectaron ${matchCount} de ${totalAlumnos} alumnos (${pctMatch}% de coincidencia)` : `⚠️ No se detectaron coincidencias con los alumnos de este grupo`}
+        </div>
+        <div style="font-size: 11px; color: var(--text-secondary); opacity: 0.9;">
+          <b>Estructura reconocida en el archivo:</b> ${colDiag.length > 0 ? colDiag.join(" • ") : "Formato libre"}.
+        </div>
+      `;
+    }
+
+    const dateOptRow = document.getElementById("excelImportDatesOptionRow");
+    if (dateOptRow) {
+      dateOptRow.style.display = dateColumns.length > 0 ? "block" : "none";
+    }
+
+    const previewContainer = document.getElementById("excelImportPreviewContainer");
+    const previewTbody = document.getElementById("excelImportPreviewTbody");
+    const matchBadge = document.getElementById("excelImportMatchCountBadge");
+
+    if (previewContainer && previewTbody) {
+      previewContainer.style.display = "block";
+      if (matchBadge) {
+        matchBadge.textContent = `${matchCount} / ${records.length} Vinculados`;
+        matchBadge.className = matchCount > 0 ? "status-badge status-aprobado" : "status-badge status-reprobado";
+      }
+
+      let rowsHtml = "";
+      matches.forEach((item, idx) => {
+        let badgeHtml = "";
+        if (item.matchType === "matricula") {
+          badgeHtml = `<span class="badge-match-mat" title="Coincidencia exacta por Matrícula">✓ Matrícula</span>`;
+        } else if (item.matchType === "nombre") {
+          badgeHtml = `<span class="badge-match-nom" title="Coincidencia inteligente por Nombre">✓ Nombre</span>`;
+        } else {
+          badgeHtml = `<span class="badge-match-none" title="No encontrado en el Excel, se preservarán sus datos actuales">Sin cambios</span>`;
+        }
+
+        const isOk = item.status === "ok";
+        rowsHtml += `
+          <tr style="${!isOk ? 'opacity: 0.6; background: rgba(0,0,0,0.015);' : ''}">
+            <td style="text-align: center; color: var(--text-tertiary);">${idx + 1}</td>
+            <td>
+              <div style="font-weight: 600; color: var(--uat-blue-night);">${this.escapeHtml(item.nombre)}</div>
+              <div style="font-size: 10.5px; font-family: monospace; color: var(--text-secondary);">${this.escapeHtml(item.matricula)}</div>
+            </td>
+            <td style="font-size: 11px; color: var(--text-secondary);">
+              ${this.escapeHtml(item.matchLabel)}
+            </td>
+            <td style="text-align: center; font-weight: 700; ${isOk && item.faltas > 0 ? 'color: var(--color-red);' : ''}">
+              ${item.faltas !== undefined ? item.faltas : '-'}
+            </td>
+            <td style="text-align: center; font-weight: 700; ${isOk ? 'color: var(--uat-orange);' : ''}">
+              ${item.asistenciaPct !== undefined ? item.asistenciaPct + '%' : '-'}
+            </td>
+            <td style="text-align: center;">
+              ${badgeHtml}
+            </td>
+          </tr>
+        `;
+      });
+      previewTbody.innerHTML = rowsHtml;
+    }
+
+    const btnApply = document.getElementById("btnApplyExcelAttendance");
+    if (btnApply) {
+      btnApply.disabled = matchCount === 0;
+      btnApply.innerHTML = `⚡ Aplicar Asistencias a Unidad ${state.targetUnit || 1} (${matchCount} alumnos)`;
+    }
+
+    const summaryFooter = document.getElementById("excelImportFooterSummary");
+    if (summaryFooter) {
+      summaryFooter.textContent = matchCount > 0
+        ? `${matchCount} alumnos listos para sincronizar a la Unidad ${state.targetUnit || 1}.`
+        : "Revisa que el archivo contenga nombres o matrículas de este grupo.";
+    }
+  },
+
+  applyExcelAttendanceImport: function() {
+    const state = this._excelAttendanceState;
+    if (!state || !state.matches || state.matches.length === 0) return;
+
+    const course = this.getActiveCourse();
+    if (!course) return;
+
+    const targetUnit = state.targetUnit || 1;
+    const uKey = `u${targetUnit}`;
+    const syncSessions = document.getElementById("excelImportSyncSessionsCheckbox")?.checked;
+    const dateColumns = state.detectedColumns ? state.detectedColumns.dateColumns : [];
+
+    let appliedCount = 0;
+
+    if (syncSessions && dateColumns.length > 0) {
+      if (!course.attendanceSessions) course.attendanceSessions = [];
+
+      const createdSessionIds = [];
+      dateColumns.forEach((dCol, dIdx) => {
+        let existingSess = course.attendanceSessions.find(s => s.unidad === targetUnit && s.tema === dCol.label);
+        if (!existingSess) {
+          const sessId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + dIdx;
+          let fechaStr = new Date().toISOString().slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
+
+          existingSess = {
+            id: sessId,
+            unidad: targetUnit,
+            fecha: fechaStr,
+            tema: dCol.label
+          };
+          course.attendanceSessions.push(existingSess);
+        }
+        createdSessionIds.push({ dIdx: dIdx, id: existingSess.id });
+      });
+
+      state.matches.forEach(item => {
+        if (item.status !== "ok") return;
+        const rec = course.records[item.recIndex];
+        if (!rec) return;
+
+        if (!rec.attendanceDays) rec.attendanceDays = {};
+        createdSessionIds.forEach(sessInfo => {
+          const sessKey = `date_${sessInfo.dIdx}`;
+          const markVal = (item.sessionsData && item.sessionsData[sessKey]) ? item.sessionsData[sessKey].mark : "P";
+          rec.attendanceDays[sessInfo.id] = markVal;
+        });
+      });
+    }
+
+    state.matches.forEach(item => {
+      if (item.status !== "ok") return;
+      const rec = course.records[item.recIndex];
+      if (!rec) return;
+
+      if (!rec.faltas) rec.faltas = {};
+      if (!rec.asistencia) rec.asistencia = {};
+
+      rec.faltas[uKey] = item.faltas;
+      rec.asistencia[uKey] = item.asistenciaPct;
+      appliedCount++;
+    });
+
+    this.saveData();
+    this.closeExcelAttendanceImportModal();
+    this.render();
+    this.showToast(`📥 ¡Éxito! Se actualizaron las faltas y asistencias de ${appliedCount} alumnos en la Unidad ${targetUnit}.`);
+  },
+
   deleteAttendanceSession: function(sessionId) {
     const course = this.getActiveCourse();
     if (!course || !course.attendanceSessions) return;
@@ -3128,6 +3794,10 @@ const App = {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 Ver Calendario UAT
               </button>
+              <button class="btn btn-default" onclick="App.openExcelAttendanceImportModal()" style="display: inline-flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Importar mi Excel
+              </button>
             </div>
           </div>
         `;
@@ -3676,6 +4346,10 @@ const App = {
               </button>
               <button class="btn btn-default" onclick="App.clearAttendanceInCurrentUnit()" title="Dejar todas las casillas de la unidad en blanco">
                 🧹 Vaciar Casillas
+              </button>
+              <button class="btn btn-default" onclick="App.openExcelAttendanceImportModal()" title="Importar faltas y asistencias subiendo un archivo Excel (.xlsx, .xls o .csv)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Importar Excel
               </button>
             ` : ''}
             <button class="btn btn-default" onclick="App.exportAttendanceToExcel()" title="Descargar la Sábana Completa de Asistencias en Excel (.xlsx)">
