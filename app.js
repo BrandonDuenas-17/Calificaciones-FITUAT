@@ -739,7 +739,7 @@ const App = {
         <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
           <button class="btn btn-primary" onclick="App.openNewCourseModal()" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600; padding: 10px 20px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            + Cargar / Crear Lista para ${this.escapeHtml(selectedSem)}
+            Cargar / Crear Lista para ${this.escapeHtml(selectedSem)}
           </button>
           <button class="btn btn-default" onclick="App.switchSemester('2026 - 3 OTOÑO')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -1184,7 +1184,7 @@ const App = {
         </button>
         <button class="nav-tab-btn" style="margin-left: auto; color: var(--uat-orange); font-weight: 700;" onclick="App.openRegisterTeacherModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>+ Nuevo Docente</span>
+          <span>Nuevo Docente</span>
         </button>
       `;
       return;
@@ -1221,7 +1221,7 @@ const App = {
 
       <button class="nav-tab-btn ${this.activeTab === 'attendance' ? 'active' : ''}" onclick="App.switchTab('attendance')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        Asistencias 📅
+        Asistencias
       </button>
 
       <button class="nav-tab-btn ${this.activeTab === 'directory' ? 'active' : ''}" onclick="App.switchTab('directory')">
@@ -3118,15 +3118,15 @@ const App = {
             <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
               <button class="btn btn-primary" onclick="App.syncOfficialCalendar(false)" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                ⚡ Cargar Días Oficiales de Clase (Calendario UAT 2026)
+                Cargar Días Oficiales de Clase (Calendario UAT 2026)
               </button>
               <button class="btn btn-default" onclick="App.addAttendanceSession()" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Registrar Clase de Hoy
+                Registrar Clase de Hoy
               </button>
               <button class="btn btn-default" onclick="App.openOfficialCalendarModal()" style="display: inline-flex; align-items: center; gap: 8px;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                🏛️ Ver Calendario UAT
+                Ver Calendario UAT
               </button>
             </div>
           </div>
@@ -3296,7 +3296,7 @@ const App = {
             ${!isAuditReadOnly ? `
               <button type="button" class="btn btn-sm btn-outline-primary" onclick="App.promptAddAttendanceDate()" title="Añadir otra fecha de clase a esta unidad" style="border-radius: 6px; font-size: 12px; font-weight: 700; padding: 4px 12px; display: inline-flex; align-items: center; gap: 5px;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Añadir Fecha
+                Añadir Fecha
               </button>
             ` : ''}
           </div>
@@ -3455,7 +3455,7 @@ const App = {
               ${sessionPillsHtml}
               <button type="button" class="btn-add-session-pill" onclick="App.addAttendanceSession()" title="Agregar nueva sesión de clase">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Nueva Clase
+                Nueva Clase
               </button>
             </div>
           </div>
@@ -3664,15 +3664,15 @@ const App = {
             ${!isAuditReadOnly ? `
               <button class="btn btn-primary" onclick="App.promptAddAttendanceDate()" title="Agregar nueva fecha de clase">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Nueva Fecha
+                Nueva Fecha
               </button>
               <button class="btn btn-default" onclick="App.openOfficialCalendarModal()" title="Ver Calendario Escolar Oficial UAT 2026 y fechas clave">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                🏛️ Calendario UAT
+                Calendario UAT
               </button>
               <button class="btn btn-default" onclick="App.syncOfficialCalendar(true)" title="Recargar las fechas hábiles de clase del Calendario Oficial UAT 2026">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                ⚡ Días Oficiales
+                Días Oficiales
               </button>
               <button class="btn btn-default" onclick="App.clearAttendanceInCurrentUnit()" title="Dejar todas las casillas de la unidad en blanco">
                 🧹 Vaciar Casillas
