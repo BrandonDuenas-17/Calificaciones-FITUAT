@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=46">
+  <link rel="stylesheet" href="styles.css?v=47">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -515,32 +515,46 @@
           </div>
         </div>
 
-        <!-- Sección de Control de Derecho a Examen por Faltas (Completamente Opcional) -->
+        <!-- Sección de Control de Límites de Faltas y Asistencia (Completamente Opcional) -->
         <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div>
-              <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Regla de Derecho a Examen por Faltas:</span>
-              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Sanciona a alumnos que superen el límite de inasistencias en la unidad.</p>
+              <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Reglas y Límites de Inasistencias:</span>
+              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Aplica sanciones automáticas (perder puntos de asistencia o derecho a examen).</p>
             </div>
             <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
               <input type="checkbox" id="manageToggleLimiteFaltas" onchange="App.toggleManageLimiteFaltas(this.checked)" style="accent-color: var(--uat-orange);" />
-              Activar Límite (SD)
+              Activar Límite de Faltas
             </label>
           </div>
 
           <div id="manageLimiteFaltasContainer" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 12px; margin-top: 10px;">
-            <div style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: center;">
+            <div style="display: grid; grid-template-columns: 1fr 140px; gap: 12px; margin-bottom: 10px; align-items: start;">
               <div>
-                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Máx. Faltas por Unidad:</label>
-                <input type="number" min="1" max="20" id="manageMaxFaltasInput" class="form-control" style="text-align: center; font-weight: 700;" value="3" />
-              </div>
-              <div>
-                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Acción al Exceder:</label>
-                <select id="manageModoExcederSelect" class="form-control" style="font-size: 12px;">
-                  <option value="alerta_sd">Alerta Visual Preventiva (Badge ⛔ SD - Recomendado)</option>
-                  <option value="reprobar_cero">Estricto (Asignar 0 / Cancelar Unidad)</option>
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Ámbito de Evaluación:</label>
+                <select id="manageAmbitoLimiteSelect" class="form-control" style="font-size: 12px;" onchange="App.onAmbitoLimiteChange(this.value)">
+                  <option value="unidad">📍 Por Unidad (Límite evaluado individualmente en cada unidad)</option>
+                  <option value="semestre">🎓 Por Semestre (Límite evaluado sobre el total del semestre)</option>
                 </select>
               </div>
+              <div>
+                <label id="manageMaxFaltasLabel" style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px; text-align: center;">Máx. Faltas por Unidad:</label>
+                <input type="number" min="1" max="50" id="manageMaxFaltasInput" class="form-control" style="text-align: center; font-weight: 700;" value="3" />
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Consecuencia al Superar el Límite de Faltas:</label>
+              <select id="manageModoExcederSelect" class="form-control" style="font-size: 12px;" onchange="App.onModoExcederChange(this.value)">
+                <option value="perder_asistencia">📉 Perder Puntos de Asistencia (Asistencia = 0 pts; conserva derecho a examen)</option>
+                <option value="alerta_sd">⛔ Sin Derecho a Examen (Alerta Preventiva Badge SD)</option>
+                <option value="reprobar_cero">🚫 Sin Derecho a Examen Estricto (Calificación 0 / Unidad cancelada)</option>
+                <option value="ambas_alerta">⛔📉 Combinado: Alerta SD + Perder Puntos de Asistencia</option>
+                <option value="ambas_cero">🚫📉 Combinado: Calificación 0 + Perder Puntos de Asistencia</option>
+              </select>
+              <p id="manageModoExcederExplicacion" style="font-size: 11px; color: var(--text-tertiary); margin: 6px 0 0 2px; line-height: 1.4;">
+                💡 <b>Perder Asistencia:</b> Si el alumno supera el límite de faltas, los puntos de asistencia se anulan (0 pts), pero sus firmas y examen se califican con normalidad.
+              </p>
             </div>
           </div>
         </div>
@@ -913,9 +927,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=46"></script>
-  <script src="sample_data.js?v=46"></script>
-  <script src="exporter.js?v=46"></script>
-  <script src="app.js?v=46"></script>
+  <script src="supabase_service.js?v=47"></script>
+  <script src="sample_data.js?v=47"></script>
+  <script src="exporter.js?v=47"></script>
+  <script src="app.js?v=47"></script>
 </body>
 </html>

@@ -773,18 +773,36 @@ const App = {
     const wAsist = Number(weights.asistencia) || 0;
     const wPart = Number(weights.participacion) || 0;
 
-    // Configuración opcional de límite de faltas (Derecho a Examen - SD)
+    // Configuración opcional de límite de faltas e inasistencias
     const asistCfg = course.asistenciaConfig || {};
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = asistCfg.modoExceder || "alerta_sd"; // "alerta_sd" o "reprobar_cero"
+    const ambitoLimite = asistCfg.ambitoLimite || "unidad"; // "unidad" o "semestre"
+    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const modoExceder = asistCfg.modoExceder || "alerta_sd";
+    const pierdeAsistencia = (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esSinDerecho = (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esReprobarCero = (modoExceder === "reprobar_cero" || modoExceder === "ambas_cero");
 
     const isSinDerechoU = {};
+    const asistenciaPerdidaU = {};
     const faltasU = {};
     let hasAnySinDerecho = false;
 
+    // Calcular faltas de todas las unidades previamente para el acumulado semestral
+    let totalFaltasSemestre = 0;
+    const totalUnitsCount = course.unidadesCount || 5;
+    for (let u = 1; u <= totalUnitsCount; u++) {
+      const uKey = `u${u}`;
+      const fNum = (record.faltas && record.faltas[uKey] !== undefined && record.faltas[uKey] !== "")
+        ? Number(record.faltas[uKey])
+        : 0;
+      faltasU[u] = fNum;
+      totalFaltasSemestre += fNum;
+    }
+    const excedeSemestre = limiteFaltasActivo && (ambitoLimite === "semestre") && (totalFaltasSemestre > maxFaltas);
+
     // 1. Evaluación de cada Unidad (U1 a Un)
-    for (let u = 1; u <= (course.unidadesCount || 5); u++) {
+    for (let u = 1; u <= totalUnitsCount; u++) {
       const uKey = `u${u}`;
       const firmas = (record.firmas && record.firmas[uKey] !== undefined && record.firmas[uKey] !== "") 
         ? record.firmas[uKey] 
@@ -798,11 +816,7 @@ const App = {
       const part = (record.participacion && record.participacion[uKey] !== undefined && record.participacion[uKey] !== "") 
         ? record.participacion[uKey] 
         : null;
-      const faltas = (record.faltas && record.faltas[uKey] !== undefined && record.faltas[uKey] !== "") 
-        ? Number(record.faltas[uKey]) 
-        : 0;
-
-      faltasU[u] = faltas;
+      const faltas = faltasU[u];
 
       const maxF = maxFirmasConfig[uKey] || 10;
       const maxP = maxPartConfig[uKey] || 5;
@@ -814,6 +828,9 @@ const App = {
 
       // Si al menos hay un criterio evaluado en la unidad
       if (hasFirmas || hasExamen || hasAsist || hasPart) {
+        const excedeUnidad = limiteFaltasActivo && (ambitoLimite === "unidad") && (faltas > maxFaltas);
+        const estaSancionado = (ambitoLimite === "semestre") ? excedeSemestre : excedeUnidad;
+
         let puntajeFirmas = 0;
         if (hasFirmas && maxF > 0 && wFirmas > 0) {
           puntajeFirmas = (Number(firmas) / maxF) * wFirmas;
@@ -826,8 +843,16 @@ const App = {
 
         let puntajeAsist = 0;
         if (hasAsist && wAsist > 0) {
-          const numA = Math.min(100, Math.max(0, Number(asist)));
-          puntajeAsist = (numA / 100) * wAsist;
+          if (estaSancionado && pierdeAsistencia) {
+            puntajeAsist = 0;
+            asistenciaPerdidaU[u] = true;
+          } else {
+            const numA = Math.min(100, Math.max(0, Number(asist)));
+            puntajeAsist = (numA / 100) * wAsist;
+            asistenciaPerdidaU[u] = false;
+          }
+        } else {
+          asistenciaPerdidaU[u] = false;
         }
 
         let puntajePart = 0;
@@ -841,10 +866,10 @@ const App = {
         totalU = Math.min(100, Math.max(0, totalU));
 
         // Regla opcional de Derecho a Examen por Faltas (SD)
-        if (limiteFaltasActivo && faltas > maxFaltas) {
+        if (estaSancionado && esSinDerecho) {
           isSinDerechoU[u] = true;
           hasAnySinDerecho = true;
-          if (modoExceder === "reprobar_cero") {
+          if (esReprobarCero) {
             totalU = 0;
           }
         } else {
@@ -858,6 +883,7 @@ const App = {
         // Unidad pendiente / no evaluada aún en el semestre
         evalU[u] = null;
         isSinDerechoU[u] = false;
+        asistenciaPerdidaU[u] = false;
       }
     }
 
@@ -890,10 +916,42 @@ const App = {
       hasEvaluations,
       evaluatedUnitsCount,
       isSinDerechoU,
+      asistenciaPerdidaU,
       faltasU,
+      totalFaltasSemestre,
       hasAnySinDerecho,
-      weights
+      hasAnyAsistenciaPerdida: Object.values(asistenciaPerdidaU).some(Boolean),
+      weights,
+      asistenciaConfig: asistCfg
     };
+  },
+
+  // Helper para calcular total de faltas en todo el semestre para un alumno
+  getStudentSemesterFaltas: function(record, course, currentUnitOverride, currentUnitFaltasVal) {
+    if (!record) return 0;
+    let total = 0;
+    const numUnits = Number(course?.unidadesCount) || 5;
+    for (let u = 1; u <= numUnits; u++) {
+      const uKey = `u${u}`;
+      if (currentUnitOverride && u === currentUnitOverride && currentUnitFaltasVal !== undefined) {
+        total += Number(currentUnitFaltasVal) || 0;
+      } else if (record.faltas && record.faltas[uKey] !== undefined && record.faltas[uKey] !== "") {
+        total += Number(record.faltas[uKey]) || 0;
+      }
+    }
+    return total;
+  },
+
+  // Helper para texto legible de la acción al exceder límite
+  getModoExcederLabel: function(modo) {
+    switch (modo) {
+      case "perder_asistencia": return "Sin Pts Asistencia";
+      case "alerta_sd": return "Alerta SD";
+      case "reprobar_cero": return "Estricto (Calif 0)";
+      case "ambas_alerta": return "SD + 0 Pts Asist";
+      case "ambas_cero": return "Calif 0 + 0 Pts Asist";
+      default: return "Alerta SD";
+    }
   },
 
   // Cálculo de estadísticas de columna (MAX para firmas, AVERAGE para exámenes, asistencias, participaciones y evaluaciones)
@@ -1311,23 +1369,46 @@ const App = {
           const val = rec.asistencia ? (rec.asistencia[uKey] ?? "") : "";
           const faltas = (rec.faltas && rec.faltas[uKey] !== undefined && rec.faltas[uKey] !== "") ? Number(rec.faltas[uKey]) : 0;
           const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[u]);
+          const isAsistPerdida = !!(calcs.asistenciaPerdidaU && calcs.asistenciaPerdidaU[u]);
           const isAuto = !!(rec.asistenciaAuto && rec.asistenciaAuto[uKey]);
 
           const numVal = val !== "" && val !== null ? Number(val) : null;
           let ringColor = "var(--color-green)";
-          if (isSd || (numVal !== null && numVal < 60)) ringColor = "var(--color-red)";
+          if (isSd || isAsistPerdida || (numVal !== null && numVal < 60)) ringColor = "var(--color-red)";
           else if (numVal !== null && numVal < 80) ringColor = "var(--color-orange)";
 
           const pct = numVal !== null ? Math.min(100, Math.max(0, numVal)) : 0;
           const dashOffset = numVal !== null ? (44 - (44 * pct) / 100) : 44;
           const strokeColor = numVal !== null ? ringColor : "var(--border-color)";
 
+          let faltasBadgeHtml = "";
+          if (faltas > 0 || isAsistPerdida) {
+            let badgeClass = "badge-faltas";
+            let badgeText = `${faltas}f`;
+            let badgeTitle = `${faltas} falta(s) en Unidad ${u}`;
+
+            if (isSd && isAsistPerdida) {
+              badgeClass += " badge-faltas-sd";
+              badgeText = `⛔ SD · 0pts`;
+              badgeTitle += ` • Sin derecho a examen y 0 pts de asistencia`;
+            } else if (isSd) {
+              badgeClass += " badge-faltas-sd";
+              badgeText = `⛔ SD ${faltas}f`;
+              badgeTitle += ` • Sin derecho a examen`;
+            } else if (isAsistPerdida) {
+              badgeClass += " badge-faltas-loss";
+              badgeText = `⚠️ 0pts (${faltas}f)`;
+              badgeTitle += ` • Puntos de asistencia anulados (0 pts) por límite de faltas`;
+            }
+            faltasBadgeHtml = `<span class="${badgeClass}" title="${badgeTitle}">${badgeText}</span>`;
+          }
+
           asistenciaCells += `
-            <td class="col-number-input ${isSd ? 'cell-sin-derecho' : ''}" style="min-width: 105px;">
+            <td class="col-number-input ${isSd ? 'cell-sin-derecho' : (isAsistPerdida ? 'cell-asist-loss' : '')}" style="min-width: 105px;">
               <div class="firmas-cell-content" style="justify-content: flex-end; gap: 4px;">
                 ${isAuto ? '<span title="Sincronizado automáticamente desde el Pase de Lista" style="font-size: 10px; cursor: help; opacity: 0.85;">🔒</span>' : ''}
-                ${faltas > 0 ? `<span class="badge-faltas ${isSd ? 'badge-faltas-sd' : ''}" title="${faltas} falta(s) en Unidad ${u}">${isSd ? '⛔ SD ' : ''}${faltas}f</span>` : ''}
-                <input type="number" inputmode="numeric" min="0" max="100" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''} ${isSd ? 'cell-sd-text' : ''}" style="width: 44px; text-align: right; font-weight: 600;" 
+                ${faltasBadgeHtml}
+                <input type="number" inputmode="numeric" min="0" max="100" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''} ${isSd ? 'cell-sd-text' : (isAsistPerdida ? 'cell-sd-text' : '')}" style="width: 44px; text-align: right; font-weight: 600;"
                   value="${val}" placeholder="-" data-col="asistencia-${uKey}"
                   ${isFieldReadOnly ? `readonly title="${isAuditReadOnly ? 'Modo Auditoría (Solo Lectura)' : 'Unidad bloqueada'}"` : ''}
                   onfocus="this.select()"
@@ -2549,8 +2630,25 @@ const App = {
     const elStatus = document.getElementById(`row-status-${recIndex}`);
 
     if (elP) elP.textContent = p;
+    const asistCfg = course.asistenciaConfig || {};
+    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const ambitoLimite = asistCfg.ambitoLimite || "unidad";
+    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const modoExceder = asistCfg.modoExceder || "alerta_sd";
+    const isSemestre = (ambitoLimite === "semestre");
+
+    const semFaltas = this.getStudentSemesterFaltas(rec, course, currentUnit, effectiveFaltas);
+    const faltasEvaluadas = isSemestre ? semFaltas : effectiveFaltas;
+    const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+    const pierdeAsist = (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esSd = (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+
     if (elF) {
-      elF.textContent = f;
+      if (isSemestre) {
+        elF.innerHTML = `${f} <span style="font-size: 10px; opacity: 0.75;" title="Faltas en semestre: ${semFaltas} (Límite: ${maxFaltas})">(${semFaltas})</span>`;
+      } else {
+        elF.textContent = f;
+      }
       if (f > 0) elF.classList.add("has-faltas");
       else elF.classList.remove("has-faltas");
     }
@@ -2561,15 +2659,18 @@ const App = {
       elPct.style.color = pct >= 80 ? 'var(--color-green)' : (pct >= 60 ? 'var(--color-orange)' : 'var(--color-red)');
     }
 
-    const asistCfg = course.asistenciaConfig || {};
-    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const isSd = limiteFaltasActivo && (effectiveFaltas > maxFaltas);
-
     if (elStatus) {
-      elStatus.innerHTML = isSd 
-        ? '<span class="status-badge status-reprobado" style="font-size: 11px;">⛔ Sin Derecho</span>' 
-        : '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>';
+      if (isExceeded) {
+        if (modoExceder === "perder_asistencia") {
+          elStatus.innerHTML = `<span class="status-badge status-reprobado" style="font-size: 11px; background: rgba(239, 68, 68, 0.12); color: var(--color-red);" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Puntos de asistencia anulados (0 pts)">⚠️ Sin Pts Asist</span>`;
+        } else if (esSd && pierdeAsist) {
+          elStatus.innerHTML = `<span class="status-badge status-reprobado" style="font-size: 11px;" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Sin derecho a examen y 0 pts asistencia">⛔ SD / 0 Pts</span>`;
+        } else {
+          elStatus.innerHTML = `<span class="status-badge status-reprobado" style="font-size: 11px;" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Sin derecho a examen">⛔ Sin Derecho</span>`;
+        }
+      } else {
+        elStatus.innerHTML = '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>';
+      }
     }
 
     // 4. Actualizar footer de la columna en el DOM
@@ -2928,7 +3029,12 @@ const App = {
 
     const asistCfg = course.asistenciaConfig || {};
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const ambitoLimite = asistCfg.ambitoLimite || "unidad";
+    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const modoExceder = asistCfg.modoExceder || "alerta_sd";
+    const isSemestre = (ambitoLimite === "semestre");
+    const pierdeAsist = (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esSd = (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
 
     // Modo activo (por defecto: 'sabana' para cuadrícula completa estilo Notion/Excel)
     if (!this.attendanceMode) {
@@ -3097,20 +3203,37 @@ const App = {
           const effectivePresent = p + (r * 0.5) + j;
           const pct = totalMarked > 0 ? Math.min(100, Math.max(0, Math.round((effectivePresent / totalMarked) * 100))) : 100;
           const effectiveFaltas = f + Math.floor(r / 2);
-          const isSd = limiteFaltasActivo && (effectiveFaltas > maxFaltas);
+          const semFaltas = this.getStudentSemesterFaltas(rec, course, currentUnit, effectiveFaltas);
+          const faltasEvaluadas = isSemestre ? semFaltas : effectiveFaltas;
+          const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+
+          let statusBadgeHtml = '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>';
+          if (isExceeded) {
+            if (modoExceder === "perder_asistencia") {
+              statusBadgeHtml = `<span class="status-badge status-reprobado" style="font-size: 11px; background: rgba(239, 68, 68, 0.12); color: var(--color-red);" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Puntos de asistencia anulados (0 pts)">⚠️ Sin Pts Asist</span>`;
+            } else if (esSd && pierdeAsist) {
+              statusBadgeHtml = `<span class="status-badge status-reprobado" style="font-size: 11px;" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Sin derecho a examen y 0 pts asistencia">⛔ SD / 0 Pts</span>`;
+            } else {
+              statusBadgeHtml = `<span class="status-badge status-reprobado" style="font-size: 11px;" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Sin derecho a examen">⛔ Sin Derecho</span>`;
+            }
+          }
 
           let pctColor = "var(--color-green)";
           if (pct < 60) pctColor = "var(--color-red)";
           else if (pct < 80) pctColor = "var(--color-orange)";
 
           studentRowsHtml += `
-            <tr class="${isSd ? 'row-sin-derecho' : ''}">
+            <tr class="${isExceeded ? (esSd ? 'row-sin-derecho' : 'row-loss-asistencia') : ''}">
               <td class="col-sabana-col-1 col-sticky-index" style="text-align: center; font-size: 12px; color: var(--text-tertiary);">${recIdx + 1}</td>
               <td class="col-sabana-col-2 col-sticky-mat" style="font-weight: 600; font-family: monospace; font-size: 12.5px;">${this.escapeHtml(rec.matricula)}</td>
               <td class="col-sabana-col-3 col-sticky-name" style="font-weight: 500; font-size: 13px;" title="${this.escapeHtml(student.nombre)}">${this.escapeHtml(student.nombre)}</td>
               ${sessionCellsHtml}
               <td class="col-summary-num"><span id="row-p-${recIdx}">${p}</span></td>
-              <td class="col-summary-num col-summary-f ${f > 0 ? 'has-faltas' : ''}"><span id="row-f-${recIdx}">${f}</span></td>
+              <td class="col-summary-num col-summary-f ${f > 0 ? 'has-faltas' : ''}">
+                <span id="row-f-${recIdx}">
+                  ${f}${isSemestre ? ` <span style="font-size: 10px; opacity: 0.75;" title="Faltas acumuladas en el semestre: ${semFaltas} (Límite: ${maxFaltas})">(${semFaltas})</span>` : ''}
+                </span>
+              </td>
               <td class="col-summary-num"><span id="row-r-${recIdx}">${r}</span></td>
               <td class="col-summary-num"><span id="row-j-${recIdx}">${j}</span></td>
               <td class="col-summary-pct">
@@ -3120,9 +3243,7 @@ const App = {
               </td>
               <td style="text-align: center;">
                 <span id="row-status-${recIdx}">
-                  ${isSd 
-                    ? '<span class="status-badge status-reprobado" style="font-size: 11px;">⛔ Sin Derecho</span>' 
-                    : '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>'}
+                  ${statusBadgeHtml}
                 </span>
               </td>
             </tr>
@@ -3267,10 +3388,19 @@ const App = {
 
           const unitFaltas = (rec.faltas && rec.faltas[uKey] !== undefined) ? Number(rec.faltas[uKey]) : 0;
           const unitPct = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? Number(rec.asistencia[uKey]) : 100;
-          const isSd = limiteFaltasActivo && (unitFaltas > maxFaltas);
+          const semFaltas = this.getStudentSemesterFaltas(rec, course);
+          const faltasEvaluadas = isSemestre ? semFaltas : unitFaltas;
+          const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+
+          let badgePrefix = '';
+          if (isExceeded) {
+            if (modoExceder === 'perder_asistencia') badgePrefix = '⚠️ 0 Pts · ';
+            else if (esSd && pierdeAsist) badgePrefix = '⛔ SD/0Pts · ';
+            else badgePrefix = '⛔ SD · ';
+          }
 
           studentsRowsHtml += `
-            <tr class="${isSd ? 'row-sin-derecho' : ''}">
+            <tr class="${isExceeded ? (esSd ? 'row-sin-derecho' : 'row-loss-asistencia') : ''}">
               <td class="col-index" style="width: 40px; text-align: center;">${recIdx + 1}</td>
               <td class="col-matricula" style="width: 130px; font-weight: 600;">${this.escapeHtml(rec.matricula)}</td>
               <td class="col-nombre" style="font-weight: 500;">${this.escapeHtml(student.nombre)}</td>
@@ -3297,8 +3427,8 @@ const App = {
               </td>
               <td style="width: 180px; text-align: right;">
                 <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-                  <span class="badge-faltas ${isSd ? 'badge-faltas-sd' : ''}" title="${unitFaltas} falta(s) acumuladas en Unidad ${currentUnit}">
-                    ${isSd ? '⛔ SD · ' : ''}${unitFaltas} faltas
+                  <span class="badge-faltas ${isExceeded ? (esSd ? 'badge-faltas-sd' : 'badge-faltas-loss') : ''}" title="${faltasEvaluadas} falta(s) acumuladas (${isSemestre ? 'Semestre' : `Unidad ${currentUnit}`})">
+                    ${badgePrefix}${unitFaltas} faltas${isSemestre ? ` (Sem: ${semFaltas})` : ''}
                   </span>
                   <span class="summary-chip" style="min-width: 50px; text-align: center;">
                     <b>${unitPct}%</b>
@@ -3386,10 +3516,23 @@ const App = {
         let numA = (aVal !== "" && aVal !== null) ? Number(aVal) : (totalClases - numF);
         if (numA < 0) numA = 0;
 
-        const isSd = limiteFaltasActivo && (numF > maxFaltas);
+        const semFaltas = this.getStudentSemesterFaltas(rec, course, currentUnit, numF);
+        const faltasEvaluadas = isSemestre ? semFaltas : numF;
+        const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+
+        let statusBadgeHtml = '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>';
+        if (isExceeded) {
+          if (modoExceder === "perder_asistencia") {
+            statusBadgeHtml = `<span class="status-badge status-reprobado" style="font-size: 11px; background: rgba(239, 68, 68, 0.12); color: var(--color-red);" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Puntos de asistencia anulados (0 pts)">⚠️ Sin Pts Asist</span>`;
+          } else if (esSd && pierdeAsist) {
+            statusBadgeHtml = `<span class="status-badge status-reprobado" style="font-size: 11px;" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Sin derecho a examen y 0 pts asistencia">⛔ SD / 0 Pts</span>`;
+          } else {
+            statusBadgeHtml = `<span class="status-badge status-reprobado" style="font-size: 11px;" title="${faltasEvaluadas} faltas (${isSemestre ? 'Semestre' : 'Unidad'}). Sin derecho a examen">⛔ Sin Derecho</span>`;
+          }
+        }
 
         quickRowsHtml += `
-          <tr class="${isSd ? 'row-sin-derecho' : ''}">
+          <tr class="${isExceeded ? (esSd ? 'row-sin-derecho' : 'row-loss-asistencia') : ''}">
             <td class="col-index" style="width: 40px; text-align: center;">${recIdx + 1}</td>
             <td class="col-matricula" style="width: 130px; font-weight: 600;">${this.escapeHtml(rec.matricula)}</td>
             <td class="col-nombre" style="font-weight: 500;">${this.escapeHtml(student.nombre)}</td>
@@ -3398,7 +3541,7 @@ const App = {
                 value="${numA}" oninput="App.onQuickRowInput(${recIdx})" onfocus="this.select()" />
             </td>
             <td style="width: 90px; text-align: center;">
-              <input type="number" min="0" max="99" id="quick-faltas-${recIdx}" class="cell-input ${isSd ? 'cell-sd-text' : ''}" style="text-align: center; font-weight: 600;" 
+              <input type="number" min="0" max="99" id="quick-faltas-${recIdx}" class="cell-input ${isExceeded ? 'cell-sd-text' : ''}" style="text-align: center; font-weight: 600;"
                 value="${fVal}" placeholder="0" oninput="App.onQuickRowInput(${recIdx})" onfocus="this.select()" />
             </td>
             <td style="width: 80px; text-align: center;">
@@ -3419,9 +3562,7 @@ const App = {
                 value="${pVal}" placeholder="0" onfocus="this.select()" />
             </td>
             <td style="width: 120px; text-align: center;">
-              ${isSd 
-                ? '<span class="status-badge status-reprobado" style="font-size: 11px;">⛔ Sin Derecho</span>' 
-                : '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>'}
+              ${statusBadgeHtml}
             </td>
           </tr>
         `;
@@ -3506,7 +3647,7 @@ const App = {
               • <span class="badge-legend badge-legend-r">R</span> Retardo (0.5)
               • <span class="badge-legend badge-legend-j">J</span> Justif.
               ${wAsist > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación: ${wAsist}%</span>` : ''}
-              ${limiteFaltasActivo ? ` • <span style="color: var(--color-red); font-weight: 700;">Límite SD: Máx ${maxFaltas} faltas</span>` : ''}
+              ${limiteFaltasActivo ? ` • <span style="color: var(--color-red); font-weight: 700;">Límite ${asistCfg.ambitoLimite === 'semestre' ? 'Semestral' : 'por Unidad'}: Máx ${maxFaltas} faltas (${this.getModoExcederLabel(asistCfg.modoExceder)})</span>` : ''}
             </p>
           </div>
           <div class="gradebook-actions-col">
@@ -4504,6 +4645,7 @@ const App = {
       const aVal = rec.asistencia ? (rec.asistencia[uKey] ?? "") : "";
       const pVal = rec.participacion ? (rec.participacion[uKey] ?? "") : "";
       const isSd = !!(calcs.isSinDerechoU && calcs.isSinDerechoU[u]);
+      const isAsistPerdida = !!(calcs.asistenciaPerdidaU && calcs.asistenciaPerdidaU[u]);
       const faltas = (calcs.faltasU && calcs.faltasU[u]) || 0;
 
       const uGrade = calcs.evalU[u];
@@ -4523,9 +4665,9 @@ const App = {
       unitsHtml += `
         <div class="student-mobile-unit-card ${isSd ? 'card-sin-derecho' : ''}">
           <div class="student-mobile-unit-header">
-            <span>Unidad ${u} ${isLocked ? '🔒 (Bloqueada)' : ''} ${isSd ? '<span class="badge-faltas badge-faltas-sd">⛔ SD</span>' : ''}</span>
+            <span>Unidad ${u} ${isLocked ? '🔒 (Bloqueada)' : ''} ${isSd ? '<span class="badge-faltas badge-faltas-sd">⛔ SD</span>' : (isAsistPerdida ? '<span class="badge-faltas badge-faltas-loss">⚠️ Sin Asist</span>' : '')}</span>
             <span id="mobile-unit-badge-${uKey}" style="font-size: 13px; font-weight: 800; color: ${badgeColor}; background: ${badgeBg}; padding: 2px 10px; border-radius: 12px;">
-              Nota: ${displayUGrade}
+              Nota: ${displayUGrade}${isAsistPerdida && !isSd ? ' (Sin Asist)' : ''}
             </span>
           </div>
           <div class="student-mobile-inputs-grid">
@@ -4549,8 +4691,8 @@ const App = {
             </div>
             ${showAsist ? `
             <div class="student-mobile-input-field">
-              <label>Asistencia (%) ${faltas > 0 ? `<span class="badge-faltas ${isSd ? 'badge-faltas-sd' : ''}">${faltas}f</span>` : ''}</label>
-              <input type="number" inputmode="numeric" min="0" max="100" class="mobile-grade-input ${isLocked ? 'cell-locked' : ''} ${isSd ? 'cell-sd-text' : ''}" 
+              <label>Asistencia (%) ${faltas > 0 || isAsistPerdida ? `<span class="badge-faltas ${isSd ? 'badge-faltas-sd' : (isAsistPerdida ? 'badge-faltas-loss' : '')}">${isSd ? '⛔ SD ' : (isAsistPerdida ? '⚠️ 0pts ' : '')}${faltas}f</span>` : ''}</label>
+              <input type="number" inputmode="numeric" min="0" max="100" class="mobile-grade-input ${isLocked ? 'cell-locked' : ''} ${isSd ? 'cell-sd-text' : (isAsistPerdida ? 'cell-sd-text' : '')}"
                 value="${aVal}" placeholder="-"
                 ${isLocked || (this.isSupervising && !this.supervisionEditMode) ? 'readonly' : ''}
                 onfocus="this.select()"
@@ -4667,11 +4809,12 @@ const App = {
         badgeBg = "var(--color-orange-bg)";
       }
 
+      const isAsistPerdida = !!(calcs.asistenciaPerdidaU && calcs.asistenciaPerdidaU[u]);
       const badgeEl = document.getElementById(`mobile-unit-badge-${uKey}`);
       if (badgeEl) {
         badgeEl.style.color = badgeColor;
         badgeEl.style.background = badgeBg;
-        badgeEl.textContent = isSd ? "⛔ SD" : `Nota: ${displayUGrade}`;
+        badgeEl.textContent = isSd ? "⛔ SD" : (isAsistPerdida ? `Nota: ${displayUGrade} (Sin Asist)` : `Nota: ${displayUGrade}`);
       }
     }
 
@@ -5113,7 +5256,7 @@ const App = {
     if (inpW_P) inpW_P.value = weights.participacion !== undefined ? weights.participacion : (hasCustomWeights ? 15 : 0);
     this.onWeightsInputChange();
 
-    // Inicializar controles de Regla Opcional de Derecho a Examen por Faltas (SD)
+    // Inicializar controles de Regla de Límite de Faltas
     const asistCfg = course.asistenciaConfig || {};
     const isLimiteActivo = !!asistCfg.limiteFaltasActivo;
     const toggleLimite = document.getElementById("manageToggleLimiteFaltas");
@@ -5122,10 +5265,17 @@ const App = {
     if (toggleLimite) toggleLimite.checked = isLimiteActivo;
     if (containerLimite) containerLimite.style.display = isLimiteActivo ? "block" : "none";
 
+    const selAmbito = document.getElementById("manageAmbitoLimiteSelect");
     const inpMaxFaltas = document.getElementById("manageMaxFaltasInput");
     const selModo = document.getElementById("manageModoExcederSelect");
-    if (inpMaxFaltas) inpMaxFaltas.value = asistCfg.maxFaltasPorUnidad ?? 3;
-    if (selModo) selModo.value = asistCfg.modoExceder || "alerta_sd";
+    const ambitoVal = asistCfg.ambitoLimite || "unidad";
+
+    if (selAmbito) selAmbito.value = ambitoVal;
+    if (inpMaxFaltas) inpMaxFaltas.value = asistCfg.maxFaltas ?? asistCfg.maxFaltasPorUnidad ?? (ambitoVal === 'semestre' ? 8 : 3);
+    if (selModo) selModo.value = asistCfg.modoExceder || "perder_asistencia";
+
+    this.onAmbitoLimiteChange(ambitoVal, true);
+    this.onModoExcederChange(selModo ? selModo.value : "perder_asistencia");
 
     const btnSubmit = document.getElementById("btnSubmitEditCourse");
     if (btnSubmit) {
@@ -5190,6 +5340,46 @@ const App = {
   toggleManageLimiteFaltas: function(checked) {
     const container = document.getElementById("manageLimiteFaltasContainer");
     if (container) container.style.display = checked ? "block" : "none";
+  },
+
+  onAmbitoLimiteChange: function(val, isInitial) {
+    const lbl = document.getElementById("manageMaxFaltasLabel");
+    const inp = document.getElementById("manageMaxFaltasInput");
+    if (val === "semestre") {
+      if (lbl) lbl.textContent = "Máx. Faltas en el Semestre:";
+      if (inp && !isInitial && Number(inp.value) <= 3) {
+        inp.value = 8;
+      }
+    } else {
+      if (lbl) lbl.textContent = "Máx. Faltas por Unidad:";
+      if (inp && !isInitial && Number(inp.value) > 10) {
+        inp.value = 3;
+      }
+    }
+  },
+
+  onModoExcederChange: function(val) {
+    const p = document.getElementById("manageModoExcederExplicacion");
+    if (!p) return;
+    switch (val) {
+      case "perder_asistencia":
+        p.innerHTML = "💡 <b>Perder Asistencia:</b> Si el alumno supera el límite de faltas, los puntos de asistencia se anulan (0 pts), pero sus firmas y examen se califican con normalidad.";
+        break;
+      case "alerta_sd":
+        p.innerHTML = "💡 <b>Alerta SD:</b> Se muestra un aviso preventivo de Sin Derecho (⛔ SD) para que el maestro decida si permite o no presentar el examen.";
+        break;
+      case "reprobar_cero":
+        p.innerHTML = "💡 <b>Estricto:</b> Se asigna 0 de calificación y se cancela la unidad automáticamente por inasistencias.";
+        break;
+      case "ambas_alerta":
+        p.innerHTML = "💡 <b>Combinado:</b> Se anulan los puntos de asistencia (0 pts) y se coloca la alerta de Sin Derecho a Examen (⛔ SD).";
+        break;
+      case "ambas_cero":
+        p.innerHTML = "💡 <b>Estricto Total:</b> Se anula la asistencia (0 pts) y se asigna 0 en la unidad por exceder inasistencias.";
+        break;
+      default:
+        p.innerHTML = "";
+    }
   },
 
   onManageUnitsInputDirect: function(val) {
@@ -5355,19 +5545,24 @@ const App = {
       course.gradingWeights = { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
     }
 
-    // Recoger Regla Opcional de Derecho a Examen por Faltas (SD)
+    // Recoger Regla de Límites de Inasistencias (SD / Pérdida de Asistencia)
     const toggleLimiteFaltas = document.getElementById("manageToggleLimiteFaltas");
     if (toggleLimiteFaltas && toggleLimiteFaltas.checked) {
-      const maxFaltasVal = Math.max(1, Math.min(20, Number(document.getElementById("manageMaxFaltasInput")?.value) || 3));
-      const modoVal = document.getElementById("manageModoExcederSelect")?.value || "alerta_sd";
+      const ambitoVal = document.getElementById("manageAmbitoLimiteSelect")?.value || "unidad";
+      const maxFaltasVal = Math.max(1, Math.min(50, Number(document.getElementById("manageMaxFaltasInput")?.value) || 3));
+      const modoVal = document.getElementById("manageModoExcederSelect")?.value || "perder_asistencia";
       course.asistenciaConfig = {
         limiteFaltasActivo: true,
+        ambitoLimite: ambitoVal,
+        maxFaltas: maxFaltasVal,
         maxFaltasPorUnidad: maxFaltasVal,
         modoExceder: modoVal
       };
     } else {
       course.asistenciaConfig = {
         limiteFaltasActivo: false,
+        ambitoLimite: "unidad",
+        maxFaltas: 3,
         maxFaltasPorUnidad: 3,
         modoExceder: "alerta_sd"
       };
@@ -5550,6 +5745,8 @@ const App = {
       periodo: course.periodo,
       unidadesCount: course.unidadesCount || 5,
       firmasMaxConfig: JSON.parse(JSON.stringify(course.firmasMaxConfig || {})),
+      gradingWeights: course.gradingWeights ? JSON.parse(JSON.stringify(course.gradingWeights)) : undefined,
+      asistenciaConfig: course.asistenciaConfig ? JSON.parse(JSON.stringify(course.asistenciaConfig)) : undefined,
       records: [] // Nueva lista limpia para este grupo
     };
 

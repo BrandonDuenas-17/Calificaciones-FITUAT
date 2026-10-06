@@ -273,7 +273,10 @@ const Exporter = {
 
     const asistCfg = course.asistenciaConfig || {};
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const maxFaltas = Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const ambitoLimite = asistCfg.ambitoLimite || "unidad";
+    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
+    const modoExceder = asistCfg.modoExceder || "alerta_sd";
+    const isSemestre = (ambitoLimite === "semestre");
 
     const rows = records.map((rec, idx) => {
       const student = studentsMap[rec.matricula] || { nombre: "NO REGISTRADO" };
@@ -290,8 +293,27 @@ const Exporter = {
       const effectiveP = p + (r * 0.5) + j;
       const pct = sessions.length > 0 ? Math.round((effectiveP / sessions.length) * 100) : 100;
       const effectiveF = f + Math.floor(r / 2);
-      const isSd = limiteFaltasActivo && (effectiveF > maxFaltas);
-      const estatus = isSd ? "SIN DERECHO" : "APROBADO";
+
+      let semFaltas = 0;
+      const numU = Number(course?.unidadesCount) || 5;
+      for (let u = 1; u <= numU; u++) {
+        if (u === currentUnit) {
+          semFaltas += effectiveF;
+        } else if (rec.faltas && rec.faltas[`u${u}`] !== undefined && rec.faltas[`u${u}`] !== "") {
+          semFaltas += Number(rec.faltas[`u${u}`]) || 0;
+        }
+      }
+
+      const faltasEvaluadas = isSemestre ? semFaltas : effectiveF;
+      const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+
+      let estatus = "APROBADO";
+      if (isExceeded) {
+        if (modoExceder === "perder_asistencia") estatus = "SIN PUNTOS ASISTENCIA";
+        else if (modoExceder === "alerta_sd") estatus = "SIN DERECHO (SD)";
+        else if (modoExceder === "reprobar_cero") estatus = "SIN DERECHO (CALIF 0)";
+        else estatus = "SIN DERECHO / SIN ASIST";
+      }
 
       return [
         idx + 1,
