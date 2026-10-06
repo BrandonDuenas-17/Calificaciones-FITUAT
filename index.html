@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=47">
+  <link rel="stylesheet" href="styles.css?v=48">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -543,18 +543,31 @@
               </div>
             </div>
 
-            <div>
-              <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Consecuencia al Superar el Límite de Faltas:</label>
-              <select id="manageModoExcederSelect" class="form-control" style="font-size: 12px;" onchange="App.onModoExcederChange(this.value)">
-                <option value="perder_asistencia">📉 Perder Puntos de Asistencia (Asistencia = 0 pts; conserva derecho a examen)</option>
-                <option value="alerta_sd">⛔ Sin Derecho a Examen (Alerta Preventiva Badge SD)</option>
-                <option value="reprobar_cero">🚫 Sin Derecho a Examen Estricto (Calificación 0 / Unidad cancelada)</option>
-                <option value="ambas_alerta">⛔📉 Combinado: Alerta SD + Perder Puntos de Asistencia</option>
-                <option value="ambas_cero">🚫📉 Combinado: Calificación 0 + Perder Puntos de Asistencia</option>
-              </select>
-              <p id="manageModoExcederExplicacion" style="font-size: 11px; color: var(--text-tertiary); margin: 6px 0 0 2px; line-height: 1.4;">
-                💡 <b>Perder Asistencia:</b> Si el alumno supera el límite de faltas, los puntos de asistencia se anulan (0 pts), pero sus firmas y examen se califican con normalidad.
-              </p>
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 10px 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <span style="font-size: 12px; font-weight: 700; color: var(--uat-blue-night);">Consecuencia al Superar el Límite de Faltas:</span>
+                  <p style="font-size: 11px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Aplica una sanción automática si el alumno supera las faltas permitidas.</p>
+                </div>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
+                  <input type="checkbox" id="manageToggleConsecuencia" onchange="App.toggleManageConsecuencia(this.checked)" style="accent-color: var(--uat-orange);" />
+                  Activar Consecuencia
+                </label>
+              </div>
+
+              <div id="manageConsecuenciaContainer" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 8px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Tipo de Sanción / Consecuencia:</label>
+                <select id="manageModoExcederSelect" class="form-control" style="font-size: 12px;" onchange="App.onModoExcederChange(this.value)">
+                  <option value="perder_asistencia">📉 Perder Puntos de Asistencia (Asistencia = 0 pts; conserva derecho a examen)</option>
+                  <option value="alerta_sd">⛔ Sin Derecho a Examen (Alerta Preventiva Badge SD)</option>
+                  <option value="reprobar_cero">🚫 Sin Derecho a Examen Estricto (Calificación 0 / Unidad cancelada)</option>
+                  <option value="ambas_alerta">⛔📉 Combinado: Alerta SD + Perder Puntos de Asistencia</option>
+                  <option value="ambas_cero">🚫📉 Combinado: Calificación 0 + Perder Puntos de Asistencia</option>
+                </select>
+                <p id="manageModoExcederExplicacion" style="font-size: 11px; color: var(--text-tertiary); margin: 6px 0 0 2px; line-height: 1.4;">
+                  💡 <b>Perder Asistencia:</b> Si el alumno supera el límite de faltas, los puntos de asistencia se anulan (0 pts), pero sus firmas y examen se califican con normalidad.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -927,9 +940,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=47"></script>
-  <script src="sample_data.js?v=47"></script>
-  <script src="exporter.js?v=47"></script>
-  <script src="app.js?v=47"></script>
+  <script src="supabase_service.js?v=48"></script>
+  <script src="sample_data.js?v=48"></script>
+  <script src="exporter.js?v=48"></script>
+  <script src="app.js?v=48"></script>
 </body>
 </html>

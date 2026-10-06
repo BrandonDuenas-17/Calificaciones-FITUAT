@@ -776,12 +776,15 @@ const App = {
     // Configuración opcional de límite de faltas e inasistencias
     const asistCfg = course.asistenciaConfig || {};
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
+      ? !!asistCfg.consecuenciaActiva
+      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
     const ambitoLimite = asistCfg.ambitoLimite || "unidad"; // "unidad" o "semestre"
     const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = asistCfg.modoExceder || "alerta_sd";
-    const pierdeAsistencia = (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esSinDerecho = (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esReprobarCero = (modoExceder === "reprobar_cero" || modoExceder === "ambas_cero");
+    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
+    const pierdeAsistencia = consecuenciaActiva && (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esSinDerecho = consecuenciaActiva && (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esReprobarCero = consecuenciaActiva && (modoExceder === "reprobar_cero" || modoExceder === "ambas_cero");
 
     const isSinDerechoU = {};
     const asistenciaPerdidaU = {};
@@ -799,7 +802,7 @@ const App = {
       faltasU[u] = fNum;
       totalFaltasSemestre += fNum;
     }
-    const excedeSemestre = limiteFaltasActivo && (ambitoLimite === "semestre") && (totalFaltasSemestre > maxFaltas);
+    const excedeSemestre = limiteFaltasActivo && consecuenciaActiva && (ambitoLimite === "semestre") && (totalFaltasSemestre > maxFaltas);
 
     // 1. Evaluación de cada Unidad (U1 a Un)
     for (let u = 1; u <= totalUnitsCount; u++) {
@@ -828,7 +831,7 @@ const App = {
 
       // Si al menos hay un criterio evaluado en la unidad
       if (hasFirmas || hasExamen || hasAsist || hasPart) {
-        const excedeUnidad = limiteFaltasActivo && (ambitoLimite === "unidad") && (faltas > maxFaltas);
+        const excedeUnidad = limiteFaltasActivo && consecuenciaActiva && (ambitoLimite === "unidad") && (faltas > maxFaltas);
         const estaSancionado = (ambitoLimite === "semestre") ? excedeSemestre : excedeUnidad;
 
         let puntajeFirmas = 0;
@@ -950,7 +953,8 @@ const App = {
       case "reprobar_cero": return "Estricto (Calif 0)";
       case "ambas_alerta": return "SD + 0 Pts Asist";
       case "ambas_cero": return "Calif 0 + 0 Pts Asist";
-      default: return "Alerta SD";
+      case "ninguna": return "Solo Informativo";
+      default: return "Solo Informativo";
     }
   },
 
@@ -2632,16 +2636,19 @@ const App = {
     if (elP) elP.textContent = p;
     const asistCfg = course.asistenciaConfig || {};
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
+      ? !!asistCfg.consecuenciaActiva
+      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
     const ambitoLimite = asistCfg.ambitoLimite || "unidad";
     const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = asistCfg.modoExceder || "alerta_sd";
+    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
     const isSemestre = (ambitoLimite === "semestre");
 
     const semFaltas = this.getStudentSemesterFaltas(rec, course, currentUnit, effectiveFaltas);
     const faltasEvaluadas = isSemestre ? semFaltas : effectiveFaltas;
-    const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
-    const pierdeAsist = (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esSd = (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const isExceeded = limiteFaltasActivo && consecuenciaActiva && (faltasEvaluadas > maxFaltas);
+    const pierdeAsist = consecuenciaActiva && (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esSd = consecuenciaActiva && (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
 
     if (elF) {
       if (isSemestre) {
@@ -3029,12 +3036,15 @@ const App = {
 
     const asistCfg = course.asistenciaConfig || {};
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
+      ? !!asistCfg.consecuenciaActiva
+      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
     const ambitoLimite = asistCfg.ambitoLimite || "unidad";
     const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = asistCfg.modoExceder || "alerta_sd";
+    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
     const isSemestre = (ambitoLimite === "semestre");
-    const pierdeAsist = (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esSd = (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const pierdeAsist = consecuenciaActiva && (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const esSd = consecuenciaActiva && (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
 
     // Modo activo (por defecto: 'sabana' para cuadrícula completa estilo Notion/Excel)
     if (!this.attendanceMode) {
@@ -3205,7 +3215,7 @@ const App = {
           const effectiveFaltas = f + Math.floor(r / 2);
           const semFaltas = this.getStudentSemesterFaltas(rec, course, currentUnit, effectiveFaltas);
           const faltasEvaluadas = isSemestre ? semFaltas : effectiveFaltas;
-          const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+          const isExceeded = limiteFaltasActivo && consecuenciaActiva && (faltasEvaluadas > maxFaltas);
 
           let statusBadgeHtml = '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>';
           if (isExceeded) {
@@ -3390,7 +3400,7 @@ const App = {
           const unitPct = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? Number(rec.asistencia[uKey]) : 100;
           const semFaltas = this.getStudentSemesterFaltas(rec, course);
           const faltasEvaluadas = isSemestre ? semFaltas : unitFaltas;
-          const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+          const isExceeded = limiteFaltasActivo && consecuenciaActiva && (faltasEvaluadas > maxFaltas);
 
           let badgePrefix = '';
           if (isExceeded) {
@@ -3518,7 +3528,7 @@ const App = {
 
         const semFaltas = this.getStudentSemesterFaltas(rec, course, currentUnit, numF);
         const faltasEvaluadas = isSemestre ? semFaltas : numF;
-        const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+        const isExceeded = limiteFaltasActivo && consecuenciaActiva && (faltasEvaluadas > maxFaltas);
 
         let statusBadgeHtml = '<span class="status-badge status-aprobado" style="font-size: 11px;">Aprobado</span>';
         if (isExceeded) {
@@ -3647,7 +3657,7 @@ const App = {
               • <span class="badge-legend badge-legend-r">R</span> Retardo (0.5)
               • <span class="badge-legend badge-legend-j">J</span> Justif.
               ${wAsist > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación: ${wAsist}%</span>` : ''}
-              ${limiteFaltasActivo ? ` • <span style="color: var(--color-red); font-weight: 700;">Límite ${asistCfg.ambitoLimite === 'semestre' ? 'Semestral' : 'por Unidad'}: Máx ${maxFaltas} faltas (${this.getModoExcederLabel(asistCfg.modoExceder)})</span>` : ''}
+              ${limiteFaltasActivo ? ` • <span style="color: var(--color-red); font-weight: 700;">Límite ${asistCfg.ambitoLimite === 'semestre' ? 'Semestral' : 'por Unidad'}: Máx ${maxFaltas} faltas ${consecuenciaActiva ? `(${this.getModoExcederLabel(asistCfg.modoExceder)})` : '(Solo Informativo)'}</span>` : ''}
             </p>
           </div>
           <div class="gradebook-actions-col">
@@ -5268,11 +5278,20 @@ const App = {
     const selAmbito = document.getElementById("manageAmbitoLimiteSelect");
     const inpMaxFaltas = document.getElementById("manageMaxFaltasInput");
     const selModo = document.getElementById("manageModoExcederSelect");
+    const toggleConsecuencia = document.getElementById("manageToggleConsecuencia");
+    const containerConsecuencia = document.getElementById("manageConsecuenciaContainer");
     const ambitoVal = asistCfg.ambitoLimite || "unidad";
+
+    const isConsecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
+      ? !!asistCfg.consecuenciaActiva
+      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
+
+    if (toggleConsecuencia) toggleConsecuencia.checked = isConsecuenciaActiva;
+    if (containerConsecuencia) containerConsecuencia.style.display = isConsecuenciaActiva ? "block" : "none";
 
     if (selAmbito) selAmbito.value = ambitoVal;
     if (inpMaxFaltas) inpMaxFaltas.value = asistCfg.maxFaltas ?? asistCfg.maxFaltasPorUnidad ?? (ambitoVal === 'semestre' ? 8 : 3);
-    if (selModo) selModo.value = asistCfg.modoExceder || "perder_asistencia";
+    if (selModo) selModo.value = (asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna") ? asistCfg.modoExceder : "perder_asistencia";
 
     this.onAmbitoLimiteChange(ambitoVal, true);
     this.onModoExcederChange(selModo ? selModo.value : "perder_asistencia");
@@ -5339,6 +5358,11 @@ const App = {
 
   toggleManageLimiteFaltas: function(checked) {
     const container = document.getElementById("manageLimiteFaltasContainer");
+    if (container) container.style.display = checked ? "block" : "none";
+  },
+
+  toggleManageConsecuencia: function(checked) {
+    const container = document.getElementById("manageConsecuenciaContainer");
     if (container) container.style.display = checked ? "block" : "none";
   },
 
@@ -5550,9 +5574,14 @@ const App = {
     if (toggleLimiteFaltas && toggleLimiteFaltas.checked) {
       const ambitoVal = document.getElementById("manageAmbitoLimiteSelect")?.value || "unidad";
       const maxFaltasVal = Math.max(1, Math.min(50, Number(document.getElementById("manageMaxFaltasInput")?.value) || 3));
-      const modoVal = document.getElementById("manageModoExcederSelect")?.value || "perder_asistencia";
+      const toggleConsecuencia = document.getElementById("manageToggleConsecuencia");
+      const isConsecuenciaActiva = !!(toggleConsecuencia && toggleConsecuencia.checked);
+      const modoVal = isConsecuenciaActiva
+        ? (document.getElementById("manageModoExcederSelect")?.value || "perder_asistencia")
+        : "ninguna";
       course.asistenciaConfig = {
         limiteFaltasActivo: true,
+        consecuenciaActiva: isConsecuenciaActiva,
         ambitoLimite: ambitoVal,
         maxFaltas: maxFaltasVal,
         maxFaltasPorUnidad: maxFaltasVal,
@@ -5561,10 +5590,11 @@ const App = {
     } else {
       course.asistenciaConfig = {
         limiteFaltasActivo: false,
+        consecuenciaActiva: false,
         ambitoLimite: "unidad",
         maxFaltas: 3,
         maxFaltasPorUnidad: 3,
-        modoExceder: "alerta_sd"
+        modoExceder: "ninguna"
       };
     }
 

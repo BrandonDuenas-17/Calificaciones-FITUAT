@@ -273,9 +273,12 @@ const Exporter = {
 
     const asistCfg = course.asistenciaConfig || {};
     const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
+    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
+      ? !!asistCfg.consecuenciaActiva
+      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
     const ambitoLimite = asistCfg.ambitoLimite || "unidad";
     const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = asistCfg.modoExceder || "alerta_sd";
+    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
     const isSemestre = (ambitoLimite === "semestre");
 
     const rows = records.map((rec, idx) => {
@@ -305,7 +308,7 @@ const Exporter = {
       }
 
       const faltasEvaluadas = isSemestre ? semFaltas : effectiveF;
-      const isExceeded = limiteFaltasActivo && (faltasEvaluadas > maxFaltas);
+      const isExceeded = limiteFaltasActivo && consecuenciaActiva && (faltasEvaluadas > maxFaltas);
 
       let estatus = "APROBADO";
       if (isExceeded) {
