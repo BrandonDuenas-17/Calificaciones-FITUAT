@@ -2597,6 +2597,21 @@ const App = {
   onExcelImportUnitChanged: function(val) {
     if (!this._excelAttendanceState) return;
     this._excelAttendanceState.targetUnit = Number(val) || 1;
+    if (this._excelAttendanceState.workbook && this._excelAttendanceState.sheets && this._excelAttendanceState.sheets.length > 1) {
+      const bestForUnit = this.detectBestAttendanceSheet(this._excelAttendanceState.workbook, this._excelAttendanceState.targetUnit);
+      if (bestForUnit && bestForUnit !== this._excelAttendanceState.selectedSheet) {
+        const cleanBest = this._cleanMatchText(bestForUnit);
+        if (cleanBest.includes(`u${this._excelAttendanceState.targetUnit}`) || cleanBest.includes(`unidad ${this._excelAttendanceState.targetUnit}`) || cleanBest.includes(`parcial ${this._excelAttendanceState.targetUnit}`)) {
+          this._excelAttendanceState.selectedSheet = bestForUnit;
+          this._excelAttendanceState.autoDetectedSheet = bestForUnit;
+          const sheetSelect = document.getElementById("excelImportSheetSelect");
+          if (sheetSelect) sheetSelect.value = bestForUnit;
+          const autoBadge = document.getElementById("excelImportSheetAutoBadge");
+          if (autoBadge) autoBadge.textContent = "🎯 Auto-detectada para U" + this._excelAttendanceState.targetUnit;
+        }
+      }
+    }
+    this.analyzeCurrentExcelSheet();
     const btnApply = document.getElementById("btnApplyExcelAttendance");
     if (btnApply) {
       const matchCount = (this._excelAttendanceState.matches || []).filter(m => m.status === 'ok').length;
@@ -2612,7 +2627,76 @@ const App = {
   onExcelImportSheetChanged: function(val) {
     if (!this._excelAttendanceState || !this._excelAttendanceState.workbook) return;
     this._excelAttendanceState.selectedSheet = val;
+    const autoBadge = document.getElementById("excelImportSheetAutoBadge");
+    if (autoBadge) {
+      autoBadge.textContent = (val === this._excelAttendanceState.autoDetectedSheet)
+        ? "🎯 Auto-detectada"
+        : "✏️ Manual";
+    }
     this.analyzeCurrentExcelSheet();
+  },
+
+  detectBestAttendanceSheet: function(workbook, targetUnit) {
+    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) return null;
+    if (workbook.SheetNames.length === 1) return workbook.SheetNames[0];
+
+    const currentSubject = this.getCurrentSubject();
+    const students = (currentSubject && Array.isArray(currentSubject.alumnos)) ? currentSubject.alumnos : [];
+    const targetUnitNum = parseInt(targetUnit, 10) || 1;
+
+    let bestSheet = workbook.SheetNames[0];
+    let highestScore = -999;
+
+    workbook.SheetNames.forEach(sheetName => {
+      let score = 0;
+      const cleanName = this._cleanMatchText(sheetName);
+
+      // 1. Puntuación por nombre de la hoja
+      if (/asistenc|asist|lista|falta|inasist|pase/.test(cleanName)) score += 60;
+      if (cleanName.includes(`u${targetUnitNum}`) || cleanName.includes(`unidad ${targetUnitNum}`) || cleanName.includes(`parcial ${targetUnitNum}`)) score += 35;
+      if (/calif|evalua|examen|tarea|ponder|rubric|acredita/.test(cleanName) && !/asist/.test(cleanName)) score -= 25;
+
+      // 2. Muestreo de contenido de la hoja
+      try {
+        const worksheet = workbook.Sheets[sheetName];
+        if (worksheet) {
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false });
+          if (Array.isArray(rows) && rows.length > 0) {
+            let foundAttendanceHeader = false;
+            let matchedStudentCount = 0;
+            const sampleRows = rows.slice(0, 30);
+
+            sampleRows.forEach(row => {
+              if (!Array.isArray(row)) return;
+              const rowStr = row.map(c => this._cleanMatchText(String(c))).join(' ');
+              if (/falta|inasist|asist|asistencia|asistencias|pase lista|retardo/.test(rowStr)) {
+                foundAttendanceHeader = true;
+              }
+
+              row.forEach(cell => {
+                const cellStr = String(cell).trim();
+                if (!cellStr) return;
+                if (students.some(s => s.matricula && String(s.matricula).trim() === cellStr)) {
+                  matchedStudentCount++;
+                }
+              });
+            });
+
+            if (foundAttendanceHeader) score += 40;
+            score += Math.min(matchedStudentCount * 6, 60);
+          }
+        }
+      } catch (e) {
+        // Ignorar error al inspeccionar hoja
+      }
+
+      if (score > highestScore) {
+        highestScore = score;
+        bestSheet = sheetName;
+      }
+    });
+
+    return bestSheet;
   },
 
   processAttendanceExcelFile: function(file) {
@@ -2638,7 +2722,9 @@ const App = {
 
         state.workbook = workbook;
         state.sheets = workbook.SheetNames;
-        state.selectedSheet = workbook.SheetNames[0];
+        const bestSheet = this.detectBestAttendanceSheet(workbook, state.targetUnit);
+        state.selectedSheet = bestSheet || workbook.SheetNames[0];
+        state.autoDetectedSheet = bestSheet;
 
         const dropzoneContent = document.getElementById("excelImportDropzoneContent");
         if (dropzoneContent) {
@@ -2659,10 +2745,17 @@ const App = {
 
         const sheetContainer = document.getElementById("excelImportSheetSelectorContainer");
         const sheetSelect = document.getElementById("excelImportSheetSelect");
+        const autoBadge = document.getElementById("excelImportSheetAutoBadge");
         if (sheetContainer && sheetSelect) {
           if (workbook.SheetNames.length > 1) {
             sheetContainer.style.display = "block";
-            sheetSelect.innerHTML = workbook.SheetNames.map(s => `<option value="${this.escapeHtml(s)}" ${s === state.selectedSheet ? 'selected' : ''}>${this.escapeHtml(s)}</option>`).join('');
+            sheetSelect.innerHTML = workbook.SheetNames.map(s => {
+              const isAuto = s === state.autoDetectedSheet;
+              return `<option value="${this.escapeHtml(s)}" ${s === state.selectedSheet ? 'selected' : ''}>${this.escapeHtml(s)}${isAuto ? ' 🎯 (Detectada automáticamente)' : ''}</option>`;
+            }).join('');
+            if (autoBadge) {
+              autoBadge.textContent = state.autoDetectedSheet ? "🎯 Auto-detectada" : "";
+            }
           } else {
             sheetContainer.style.display = "none";
           }
@@ -3004,6 +3097,12 @@ const App = {
       if (colFaltas !== -1) colDiag.push(`Totales de Faltas`);
       if (colPct !== -1 || colAsist !== -1) colDiag.push(`% de Asistencia`);
 
+      let sheetInfoHtml = '';
+      if (state.sheets && state.sheets.length > 1) {
+        const isAuto = state.selectedSheet === state.autoDetectedSheet;
+        sheetInfoHtml = ` • <b>Hoja:</b> "${this.escapeHtml(state.selectedSheet)}"${isAuto ? ' 🎯 (Detección automática)' : ''}`;
+      }
+
       banner.style.background = matchCount > 0 ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)";
       banner.style.border = matchCount > 0 ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)";
       banner.style.color = matchCount > 0 ? "var(--color-green)" : "var(--color-red)";
@@ -3012,7 +3111,7 @@ const App = {
           ${matchCount > 0 ? `✅ Se detectaron ${matchCount} de ${totalAlumnos} alumnos (${pctMatch}% de coincidencia)` : `⚠️ No se detectaron coincidencias con los alumnos de este grupo`}
         </div>
         <div style="font-size: 11px; color: var(--text-secondary); opacity: 0.9;">
-          <b>Estructura reconocida en el archivo:</b> ${colDiag.length > 0 ? colDiag.join(" • ") : "Formato libre"}.
+          <b>Estructura reconocida:</b> ${colDiag.length > 0 ? colDiag.join(" • ") : "Formato libre"}${sheetInfoHtml}.
         </div>
       `;
     }
