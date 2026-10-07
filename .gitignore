@@ -23,3 +23,8 @@ ReporteGruposDetalle*.xlsx
 # Scripts temporales de diagnóstico
 .agents/*.ps1
 
+# Impeccable local overrides & caches
+.impeccable/*.local.json
+.impeccable/*.cache.json
+
+
