@@ -2141,6 +2141,78 @@ const App = {
     }
   },
 
+  // Deduplica y consolida sesiones de asistencia con la misma fecha para evitar columnas repetidas
+  deduplicateCourseAttendanceSessions: function(course) {
+    if (!course || !Array.isArray(course.attendanceSessions) || course.attendanceSessions.length <= 1) return;
+
+    const records = course.records || [];
+    const dateMap = {};
+
+    course.attendanceSessions.forEach(s => {
+      let f = s.fecha;
+      if (!f && s.tema && /^\d{4}-\d{2}-\d{2}$/.test(s.tema)) f = s.tema;
+      if (!f) f = s.id;
+      if (!dateMap[f]) dateMap[f] = [];
+      dateMap[f].push(s);
+    });
+
+    let hasDuplicates = false;
+    Object.keys(dateMap).forEach(f => {
+      if (dateMap[f].length > 1) hasDuplicates = true;
+    });
+
+    if (!hasDuplicates) return;
+
+    const uniqueSessions = [];
+
+    Object.keys(dateMap).forEach(f => {
+      const sessList = dateMap[f];
+      if (sessList.length === 1) {
+        uniqueSessions.push(sessList[0]);
+        return;
+      }
+
+      // Encontrar la sesión que tenga más marcas registradas de alumnos
+      let bestSess = sessList[0];
+      let bestMarksCount = -1;
+
+      sessList.forEach(s => {
+        let marksCount = 0;
+        records.forEach(r => {
+          if (r.attendanceDays && r.attendanceDays[s.id]) marksCount++;
+        });
+        if (marksCount > bestMarksCount) {
+          bestMarksCount = marksCount;
+          bestSess = s;
+        }
+      });
+
+      // Transferir marcas de las sesiones duplicadas hacia la mejor sesión y limpiar
+      sessList.forEach(s => {
+        if (s.id !== bestSess.id) {
+          if (s.isAltasBajas) bestSess.isAltasBajas = true;
+          if (s.isLimiteBaja) bestSess.isLimiteBaja = true;
+          if (s.tema && !/^\d{4}-\d{2}-\d{2}$/.test(s.tema) && /^\d{4}-\d{2}-\d{2}$/.test(bestSess.tema || "")) {
+            bestSess.tema = s.tema;
+          }
+
+          records.forEach(r => {
+            if (r.attendanceDays && r.attendanceDays[s.id]) {
+              if (!r.attendanceDays[bestSess.id]) {
+                r.attendanceDays[bestSess.id] = r.attendanceDays[s.id];
+              }
+              delete r.attendanceDays[s.id];
+            }
+          });
+        }
+      });
+
+      uniqueSessions.push(bestSess);
+    });
+
+    course.attendanceSessions = uniqueSessions;
+  },
+
   openOfficialCalendarModal: function() {
     const modal = document.getElementById("officialCalendarModal");
     if (!modal) return;
@@ -3664,17 +3736,18 @@ const App = {
         }
       }
 
-      // Si syncSessions está activo, crear las sesiones para cada unidad
+      // Si syncSessions está activo, crear o reutilizar las sesiones para cada unidad
       if (syncSessions) {
         const createdSessionIds = [];
         dateColumns.forEach((dCol, dIdx) => {
           const assignedUnit = dateToUnitMap[dIdx] || 1;
-          let existingSess = course.attendanceSessions.find(s => s.unidad === assignedUnit && s.tema === dCol.label);
+          let fechaStr = new Date().toISOString().slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
+
+          // Buscar sesión existente por fecha exacta o por tema/etiqueta
+          let existingSess = course.attendanceSessions.find(s => s.fecha === fechaStr || s.tema === dCol.label);
           if (!existingSess) {
             const sessId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + dIdx;
-            let fechaStr = new Date().toISOString().slice(0, 10);
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
-
             existingSess = {
               id: sessId,
               unidad: assignedUnit,
@@ -3682,9 +3755,22 @@ const App = {
               tema: dCol.label
             };
             course.attendanceSessions.push(existingSess);
+          } else {
+            existingSess.unidad = assignedUnit;
+            if (!existingSess.fecha) existingSess.fecha = fechaStr;
           }
-          createdSessionIds.push({ dIdx: dIdx, id: existingSess.id, unit: assignedUnit });
+          createdSessionIds.push({ dIdx: dIdx, id: existingSess.id, unit: assignedUnit, fecha: fechaStr });
         });
+
+        // Remover sesiones fantasma sin marcas que no están en el Excel (ej. viernes inhábil)
+        const excelDates = new Set(createdSessionIds.map(cs => cs.fecha));
+        course.attendanceSessions = course.attendanceSessions.filter(s => {
+          if (excelDates.has(s.fecha)) return true;
+          return (course.records || []).some(r => r.attendanceDays && r.attendanceDays[s.id]);
+        });
+
+        // Deduplicar sesiones
+        this.deduplicateCourseAttendanceSessions(course);
 
         // Guardar marcas P, F, R, J de cada alumno
         state.matches.forEach(item => {
@@ -3695,8 +3781,13 @@ const App = {
 
           createdSessionIds.forEach(sessInfo => {
             const sessKey = `date_${sessInfo.dIdx}`;
-            const markVal = (item.sessionsData && item.sessionsData[sessKey]) ? item.sessionsData[sessKey].mark : "P";
-            rec.attendanceDays[sessInfo.id] = markVal;
+            const sData = (item.sessionsData && item.sessionsData[sessKey]);
+            const markVal = sData ? sData.mark : "";
+            if (markVal) {
+              rec.attendanceDays[sessInfo.id] = markVal;
+            } else {
+              delete rec.attendanceDays[sessInfo.id];
+            }
           });
         });
       }
@@ -3744,12 +3835,12 @@ const App = {
 
       const createdSessionIds = [];
       dateColumns.forEach((dCol, dIdx) => {
-        let existingSess = course.attendanceSessions.find(s => s.unidad === targetUnit && s.tema === dCol.label);
+        let fechaStr = new Date().toISOString().slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
+
+        let existingSess = course.attendanceSessions.find(s => s.fecha === fechaStr || s.tema === dCol.label);
         if (!existingSess) {
           const sessId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + dIdx;
-          let fechaStr = new Date().toISOString().slice(0, 10);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
-
           existingSess = {
             id: sessId,
             unidad: targetUnit,
@@ -3757,9 +3848,21 @@ const App = {
             tema: dCol.label
           };
           course.attendanceSessions.push(existingSess);
+        } else {
+          existingSess.unidad = targetUnit;
+          if (!existingSess.fecha) existingSess.fecha = fechaStr;
         }
-        createdSessionIds.push({ dIdx: dIdx, id: existingSess.id });
+        createdSessionIds.push({ dIdx: dIdx, id: existingSess.id, fecha: fechaStr });
       });
+
+      const excelDates = new Set(createdSessionIds.map(cs => cs.fecha));
+      course.attendanceSessions = course.attendanceSessions.filter(s => {
+        if (s.unidad !== targetUnit) return true;
+        if (excelDates.has(s.fecha)) return true;
+        return (course.records || []).some(r => r.attendanceDays && r.attendanceDays[s.id]);
+      });
+
+      this.deduplicateCourseAttendanceSessions(course);
 
       state.matches.forEach(item => {
         if (item.status !== "ok") return;
@@ -3769,8 +3872,13 @@ const App = {
         if (!rec.attendanceDays) rec.attendanceDays = {};
         createdSessionIds.forEach(sessInfo => {
           const sessKey = `date_${sessInfo.dIdx}`;
-          const markVal = (item.sessionsData && item.sessionsData[sessKey]) ? item.sessionsData[sessKey].mark : "P";
-          rec.attendanceDays[sessInfo.id] = markVal;
+          const sData = (item.sessionsData && item.sessionsData[sessKey]);
+          const markVal = sData ? sData.mark : "";
+          if (markVal) {
+            rec.attendanceDays[sessInfo.id] = markVal;
+          } else {
+            delete rec.attendanceDays[sessInfo.id];
+          }
         });
       });
     }
@@ -4324,6 +4432,9 @@ const App = {
     if (!course.attendanceSessions) {
       course.attendanceSessions = [];
     }
+
+    // Auto-limpieza proactiva de sesiones duplicadas para que la cuadrícula siempre esté 100% limpia
+    this.deduplicateCourseAttendanceSessions(course);
 
     // Carga automática de los días oficiales del semestre (Calendario UAT 2026) si la lista está vacía
     if (course.attendanceSessions.length === 0) {
