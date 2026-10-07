@@ -2640,9 +2640,13 @@ const App = {
     if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) return null;
     if (workbook.SheetNames.length === 1) return workbook.SheetNames[0];
 
-    const currentSubject = this.getCurrentSubject();
-    const students = (currentSubject && Array.isArray(currentSubject.alumnos)) ? currentSubject.alumnos : [];
+    const course = this.getActiveCourse();
+    const records = (course && course.records) ? course.records : [];
     const targetUnitNum = parseInt(targetUnit, 10) || 1;
+
+    // Palabras clave de la materia activa
+    const courseTokens = course && course.name ? this._getNameTokens(course.name) : [];
+    const groupClean = course && course.group ? this._cleanMatchText(course.group) : "";
 
     let bestSheet = workbook.SheetNames[0];
     let highestScore = -999;
@@ -2651,12 +2655,26 @@ const App = {
       let score = 0;
       const cleanName = this._cleanMatchText(sheetName);
 
-      // 1. Puntuación por nombre de la hoja
-      if (/asistenc|asist|lista|falta|inasist|pase/.test(cleanName)) score += 60;
-      if (cleanName.includes(`u${targetUnitNum}`) || cleanName.includes(`unidad ${targetUnitNum}`) || cleanName.includes(`parcial ${targetUnitNum}`)) score += 35;
+      // 1. Puntuación por nombre de la materia o grupo en la pestaña
+      if (courseTokens.length > 0) {
+        let matchingTokens = 0;
+        courseTokens.forEach(t => {
+          if (cleanName.includes(t)) matchingTokens++;
+        });
+        if (matchingTokens > 0) {
+          score += matchingTokens * 35; // Preferencia si la hoja lleva el nombre de esta materia
+        }
+      }
+      if (groupClean && cleanName.includes(groupClean)) {
+        score += 30; // Preferencia si lleva el grupo (ej. "A", "GPO 1", etc.)
+      }
+
+      // 2. Puntuación por términos de asistencia y unidad
+      if (/asistenc|asist|lista|falta|inasist|pase/.test(cleanName)) score += 50;
+      if (cleanName.includes(`u${targetUnitNum}`) || cleanName.includes(`unidad ${targetUnitNum}`) || cleanName.includes(`parcial ${targetUnitNum}`)) score += 30;
       if (/calif|evalua|examen|tarea|ponder|rubric|acredita/.test(cleanName) && !/asist/.test(cleanName)) score -= 25;
 
-      // 2. Muestreo de contenido de la hoja
+      // 3. Muestreo de contenido de la hoja buscando alumnos de ESTA materia
       try {
         const worksheet = workbook.Sheets[sheetName];
         if (worksheet) {
@@ -2664,7 +2682,7 @@ const App = {
           if (Array.isArray(rows) && rows.length > 0) {
             let foundAttendanceHeader = false;
             let matchedStudentCount = 0;
-            const sampleRows = rows.slice(0, 30);
+            const sampleRows = rows.slice(0, 40);
 
             sampleRows.forEach(row => {
               if (!Array.isArray(row)) return;
@@ -2674,16 +2692,17 @@ const App = {
               }
 
               row.forEach(cell => {
-                const cellStr = String(cell).trim();
+                const cellStr = String(cell).trim().replace(/[^0-9a-zA-Z]/g, "").toLowerCase();
                 if (!cellStr) return;
-                if (students.some(s => s.matricula && String(s.matricula).trim() === cellStr)) {
+                // Coincidencia con matrículas del grupo de la materia activa
+                if (records.some(r => String(r.matricula || "").replace(/[^0-9a-zA-Z]/g, "").toLowerCase() === cellStr)) {
                   matchedStudentCount++;
                 }
               });
             });
 
-            if (foundAttendanceHeader) score += 40;
-            score += Math.min(matchedStudentCount * 6, 60);
+            if (foundAttendanceHeader) score += 30;
+            score += Math.min(matchedStudentCount * 8, 80); // Fuerte preferencia a las matrículas reales del grupo
           }
         }
       } catch (e) {
