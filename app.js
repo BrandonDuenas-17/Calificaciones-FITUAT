@@ -2871,8 +2871,8 @@ const App = {
     const targetUnitNum = parseInt(targetUnit, 10) || 1;
 
     // Palabras clave de la materia activa
-    const courseTokens = course && course.name ? this._getNameTokens(course.name) : [];
-    const groupClean = course && course.group ? this._cleanMatchText(course.group) : "";
+    const courseTokens = course && (course.nombre || course.name) ? this._getNameTokens(course.nombre || course.name) : [];
+    const groupClean = course && (course.grupo || course.group) ? this._cleanMatchText(course.grupo || course.group) : "";
 
     let bestSheet = workbook.SheetNames[0];
     let highestScore = -999;
@@ -3054,23 +3054,50 @@ const App = {
     }
 
     let headerRowIdx = -1;
-    let maxHeaderScore = 0;
+    let maxHeaderScore = -1;
 
     for (let r = 0; r < Math.min(25, rawRows.length); r++) {
       const row = rawRows[r] || [];
       let score = 0;
+      let hasMat = false;
+      let hasNom = false;
+      let isMetadataOrLegend = false;
+
       row.forEach(cell => {
-        const txt = this._cleanMatchText(cell);
+        const str = String(cell || "").trim();
+        if (!str) return;
+        const txt = this._cleanMatchText(str);
         if (!txt) return;
-        if (/matr|clave|id|cuenta|control/.test(txt)) score += 5;
-        if (/nom|alum|estud|persona/.test(txt)) score += 5;
-        if (/falta|inasist|ausenc/.test(txt)) score += 4;
-        if (/asist|presente/.test(txt)) score += 3;
-        if (/retard/.test(txt)) score += 2;
-        if (/justif/.test(txt)) score += 2;
-        if (/^u\d|unidad/.test(txt)) score += 2;
-        if (/\d{1,2}[/-]\d{1,2}|clase|sesion/.test(txt)) score += 2;
+
+        // Descartar si es un bloque de leyenda, título o metadatos de la materia
+        if (str.length > 45 || /^materia\s*:|^periodo\s*:|^leyenda\s*:|^lista de asistencia/i.test(str)) {
+          isMetadataOrLegend = true;
+          return;
+        }
+
+        if (/matr|clave|control|cuenta|id|no\s*cuenta/.test(txt) && !/grupo|materia|prof/.test(txt)) {
+          score += 25;
+          hasMat = true;
+        }
+        if (/nom|alum|estud/.test(txt) && !/docente|profesor|materia/.test(txt)) {
+          score += 25;
+          hasNom = true;
+        }
+        if (/asis|presente/.test(txt)) score += 5;
+        if (/falt|inasist|ausenc/.test(txt)) score += 5;
+        if (/ret|retard/.test(txt)) score += 3;
+        if (/just|justif/.test(txt)) score += 3;
+        if (/%\s*asis|pct|porcentaje/.test(txt)) score += 4;
+        if (/^u\d|unidad/.test(txt)) score += 3;
+        if (/\d{1,2}[/-]\d{1,2}|clase|sesion/.test(txt)) score += 3;
       });
+
+      if (hasMat && hasNom && !isMetadataOrLegend) {
+        score += 60;
+      } else if (isMetadataOrLegend) {
+        score = -10;
+      }
+
       if (score > maxHeaderScore) {
         maxHeaderScore = score;
         headerRowIdx = r;
@@ -3081,6 +3108,7 @@ const App = {
     state.headerRowIndex = headerRowIdx;
 
     const headers = rawRows[headerRowIdx] || [];
+    const nextRow = rawRows[headerRowIdx + 1] || [];
 
     let colMatricula = -1;
     let colNombre = -1;
@@ -3091,6 +3119,11 @@ const App = {
     let colJustif = -1;
     const dateColumns = [];
 
+    const monthMap = {
+      "agosto": "08", "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12",
+      "enero": "01", "febrero": "02", "marzo": "03", "abril": "04", "mayo": "05", "junio": "06", "julio": "07"
+    };
+
     headers.forEach((cell, cIdx) => {
       const hText = this._cleanMatchText(cell);
       if (!hText) return;
@@ -3099,17 +3132,24 @@ const App = {
         colMatricula = cIdx;
       } else if (colNombre === -1 && /nom|alum|estud/.test(hText) && !/docente|profesor|materia/.test(hText)) {
         colNombre = cIdx;
-      } else if (/^pct|%\s*asist|porcentaje/.test(hText)) {
+      } else if (colPct === -1 && (/^pct|%\s*asis|porcentaje/.test(hText) || hText === "% asis" || hText === "asis")) {
         colPct = cIdx;
-      } else if (colFaltas === -1 && /total\s*f|faltas?|inasist|ausenc/.test(hText) && !/fecha|dia/.test(hText)) {
+      } else if (colFaltas === -1 && (/total\s*f|falt|inasist|ausenc/.test(hText) || hText === "falt") && !/fecha|dia/.test(hText)) {
         colFaltas = cIdx;
-      } else if (colAsist === -1 && /total\s*a|total\s*p|asistencias?|presentes?/.test(hText) && !/fecha|dia/.test(hText)) {
+      } else if (colAsist === -1 && (/total\s*a|total\s*p|asis|presentes?/.test(hText) || hText === "asis") && !/fecha|dia/.test(hText)) {
         colAsist = cIdx;
-      } else if (colRetardos === -1 && /retard/.test(hText)) {
+      } else if (colRetardos === -1 && (/ret|retard/.test(hText) || hText === "ret")) {
         colRetardos = cIdx;
-      } else if (colJustif === -1 && /justif/.test(hText)) {
+      } else if (colJustif === -1 && (/just|justif/.test(hText) || hText === "just")) {
         colJustif = cIdx;
-      } else if (/\d{1,2}[/-]\d{1,2}|\d{1,2}-[a-z]{3}|clase\s*\d+|sesi[oó]n\s*\d+|dia\s*\d+/.test(hText) || (typeof cell === 'number' && cell > 44000)) {
+      }
+    });
+
+    // 1. Método Estándar: Detección de fechas directas en la fila de encabezados
+    headers.forEach((cell, cIdx) => {
+      if (cIdx === colMatricula || cIdx === colNombre || cIdx === colFaltas || cIdx === colAsist || cIdx === colPct || cIdx === colRetardos || cIdx === colJustif) return;
+      const hText = this._cleanMatchText(cell);
+      if (/\d{1,2}[/-]\d{1,2}|\d{1,2}-[a-z]{3}|clase\s*\d+|sesi[oó]n\s*\d+|dia\s*\d+/.test(hText) || (typeof cell === 'number' && cell > 44000)) {
         let label = String(cell).trim();
         if (typeof cell === 'number' && cell > 44000) {
           try {
@@ -3121,13 +3161,43 @@ const App = {
       }
     });
 
+    // 2. Método Institucional UAT: Mes en fila superior y día numérico en la fila siguiente
+    if (dateColumns.length === 0 && nextRow && nextRow.length > 0) {
+      let activeMonth = "";
+      const maxCol = Math.max(headers.length, nextRow.length);
+      for (let c = 0; c < maxCol; c++) {
+        if (c === colMatricula || c === colNombre || c === colFaltas || c === colAsist || c === colPct || c === colRetardos || c === colJustif) continue;
+
+        const hVal = String(headers[c] || "").trim().toLowerCase();
+        for (const mKey of Object.keys(monthMap)) {
+          if (hVal.includes(mKey)) {
+            activeMonth = mKey;
+            break;
+          }
+        }
+
+        const nextCellVal = String(nextRow[c] || "").trim();
+        if (/^\d{1,2}$/.test(nextCellVal)) {
+          const dayNum = parseInt(nextCellVal, 10);
+          if (dayNum >= 1 && dayNum <= 31) {
+            const mCode = monthMap[activeMonth] || "";
+            const dStr = String(dayNum).padStart(2, "0");
+            let label = mCode ? `2026-${mCode}-${dStr}` : `Día ${dStr}`;
+            dateColumns.push({ colIdx: c, label: label });
+          }
+        }
+      }
+    }
+
     const sampleRows = rawRows.slice(headerRowIdx + 1, headerRowIdx + 40);
+
+    // Fallback matricula y nombre
     if (colMatricula === -1) {
-      for (let c = 0; c < headers.length; c++) {
+      for (let c = 0; c < 15; c++) {
         let numericIds = 0;
         sampleRows.forEach(r => {
           const v = String(r[c] || "").trim();
-          if (/^\d{7,9}$/.test(v)) numericIds++;
+          if (/^\d{7,11}$/.test(v)) numericIds++;
         });
         if (numericIds >= Math.min(3, sampleRows.length)) {
           colMatricula = c;
@@ -3137,12 +3207,12 @@ const App = {
     }
 
     if (colNombre === -1) {
-      for (let c = 0; c < headers.length; c++) {
+      for (let c = 0; c < 15; c++) {
         if (c === colMatricula) continue;
         let nameLike = 0;
         sampleRows.forEach(r => {
           const v = String(r[c] || "").trim();
-          if (v.length > 5 && v.includes(" ") && !/\d{5}/.test(v)) nameLike++;
+          if (v.length > 5 && v.includes(" ") && !/\d{5}/.test(v) && !/^(lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)$/i.test(v)) nameLike++;
         });
         if (nameLike >= Math.min(3, sampleRows.length)) {
           colNombre = c;
@@ -3151,15 +3221,17 @@ const App = {
       }
     }
 
+    // Fallback: Si todavía no hay dateColumns, buscar columnas con marcas de asistencia
     if (dateColumns.length === 0) {
-      for (let c = 0; c < headers.length; c++) {
-        if (c === colMatricula || c === colNombre || c === colFaltas || c === colAsist || c === colPct) continue;
+      const maxCol = Math.max(headers.length, (rawRows[headerRowIdx + 3] || []).length);
+      for (let c = 0; c < maxCol; c++) {
+        if (c === colMatricula || c === colNombre || c === colFaltas || c === colAsist || c === colPct || c === colRetardos || c === colJustif) continue;
         let attendanceMarks = 0;
         sampleRows.forEach(r => {
           const val = String(r[c] || "").trim().toUpperCase();
-          if (/^[PFRJ10✓✗]$/.test(val)) attendanceMarks++;
+          if (/^[AFPRJ10✓✗]$/.test(val)) attendanceMarks++;
         });
-        if (attendanceMarks >= Math.max(2, Math.floor(sampleRows.length * 0.4))) {
+        if (attendanceMarks >= 2) {
           const hName = String(headers[c] || `Clase ${dateColumns.length + 1}`).trim();
           dateColumns.push({ colIdx: c, label: hName });
         }
@@ -3188,6 +3260,9 @@ const App = {
 
     if (dateColumns.length > 0) {
       if (modeContainer) modeContainer.style.display = "block";
+      if (!state.unitRanges || Object.keys(state.unitRanges).length === 0) {
+        this.autoDistributeExcelDatesEvenly();
+      }
       if (state.mode === "multi_unit") {
         if (targetUnitContainer) targetUnitContainer.style.display = "none";
         if (delimContainer) {
@@ -3215,7 +3290,9 @@ const App = {
       const rawName = colNombre !== -1 ? String(row[colNombre] || "").trim() : "";
       const nameTokens = this._getNameTokens(rawName);
 
-      if (!cleanMat && nameTokens.length === 0) continue;
+      // Descartar filas de sub-encabezados (números de día o días de la semana)
+      if (rawName && /^(lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)$/i.test(rawName)) continue;
+      if (!cleanMat && nameTokens.length < 2) continue;
 
       excelRowsData.push({
         rowIdx: r,
@@ -3292,17 +3369,45 @@ const App = {
           let pCnt = 0, fCnt = 0, rCnt = 0, jCnt = 0;
           dateColumns.forEach((col, dIdx) => {
             const rawVal = String(row[col.colIdx] || "").trim().toUpperCase();
-            let mark = "P";
-            if (/^F|A|0|✗|-$/.test(rawVal)) { mark = "F"; fCnt++; }
-            else if (/^R$/.test(rawVal)) { mark = "R"; rCnt++; }
-            else if (/^J$/.test(rawVal)) { mark = "J"; jCnt++; }
-            else { mark = "P"; pCnt++; }
+            let mark = "";
+            if (rawVal === "A" || rawVal === "P" || rawVal === "1" || rawVal === "✓") {
+              mark = "P";
+              pCnt++;
+            } else if (rawVal === "F" || rawVal === "0" || rawVal === "✗") {
+              mark = "F";
+              fCnt++;
+            } else if (rawVal === "R") {
+              mark = "R";
+              rCnt++;
+            } else if (rawVal === "J") {
+              mark = "J";
+              jCnt++;
+            }
             sessionsData[`date_${dIdx}`] = { mark: mark, label: col.label };
           });
 
           const totalClases = pCnt + fCnt + rCnt + jCnt;
           detectedF = fCnt + Math.floor(rCnt / 2);
           detectedPct = totalClases > 0 ? Math.round(((pCnt + (rCnt * 0.5) + jCnt) / totalClases) * 100) : 100;
+
+          // Si el alumno no tuvo marcas de clase individuales pero el Excel tiene columnas de totales (ASIS/FALT)
+          if (totalClases === 0 && (colFaltas !== -1 || colPct !== -1 || colAsist !== -1)) {
+            if (colFaltas !== -1) {
+              const parsedF = Number(String(row[colFaltas]).replace(/[^0-9]/g, ''));
+              detectedF = !isNaN(parsedF) ? parsedF : 0;
+            }
+            if (colPct !== -1) {
+              let parsedPct = Number(String(row[colPct]).replace(/[^0-9.]/g, ''));
+              if (parsedPct <= 1 && parsedPct > 0) parsedPct = Math.round(parsedPct * 100);
+              detectedPct = !isNaN(parsedPct) ? Math.min(100, Math.max(0, parsedPct)) : 100;
+            } else if (colAsist !== -1) {
+              const parsedA = Number(String(row[colAsist]).replace(/[^0-9]/g, ''));
+              if (!isNaN(parsedA)) {
+                const totalEst = parsedA + detectedF;
+                detectedPct = totalEst > 0 ? Math.round((parsedA / totalEst) * 100) : 100;
+              }
+            }
+          }
 
           // Estadísticas independientes por unidad según delimitación
           for (let u = 1; u <= numUnits; u++) {
@@ -3311,11 +3416,11 @@ const App = {
             if (range.startIdx !== -1 && range.endIdx !== -1 && range.startIdx <= range.endIdx) {
               for (let d = range.startIdx; d <= range.endIdx; d++) {
                 if (d < dateColumns.length) {
-                  const m = sessionsData[`date_${d}`] ? sessionsData[`date_${d}`].mark : "P";
-                  if (m === "F") uF++;
+                  const m = sessionsData[`date_${d}`] ? sessionsData[`date_${d}`].mark : "";
+                  if (m === "P") uP++;
+                  else if (m === "F") uF++;
                   else if (m === "R") uR++;
                   else if (m === "J") uJ++;
-                  else uP++;
                 }
               }
             }
