@@ -5181,3 +5181,21 @@ textarea.form-control {
   font-weight: 600;
   display: inline-block;
 }
+
+.excel-range-unit-card {
+  display: grid;
+  grid-template-columns: 80px 1fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+  background: var(--bg-card);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+@media (max-width: 640px) {
+  .excel-range-unit-card {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

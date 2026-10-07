@@ -2028,33 +2028,71 @@ const App = {
     const numUnits = Math.max(1, Number(course.unidadesCount) || 3);
     course.attendanceSessions = [];
 
-    // Distribuir días uniformemente entre las unidades
-    const baseCount = Math.floor(validClassDays.length / numUnits);
-    const remainder = validClassDays.length % numUnits;
+    // Si course.unitDates está configurado, usar esos rangos para asignar las unidades
+    const uDates = course.unitDates || {};
+    const hasConfiguredDates = Object.keys(uDates).some(k => uDates[k] && uDates[k].inicio && uDates[k].fin);
 
-    let dayIdx = 0;
-    for (let u = 1; u <= numUnits; u++) {
-      const countForUnit = baseCount + (u <= remainder ? 1 : 0);
-      for (let i = 0; i < countForUnit; i++) {
-        if (dayIdx >= validClassDays.length) break;
-        const dateStr = validClassDays[dayIdx];
+    if (hasConfiguredDates) {
+      const unitClassCounts = {};
+      for (let u = 1; u <= numUnits; u++) unitClassCounts[u] = 0;
+
+      validClassDays.forEach(dateStr => {
+        let assignedUnit = 1;
+        for (let u = 1; u <= numUnits; u++) {
+          const cfg = uDates[`u${u}`];
+          if (cfg && cfg.inicio && cfg.fin && dateStr >= cfg.inicio && dateStr <= cfg.fin) {
+            assignedUnit = u;
+            break;
+          }
+        }
+        unitClassCounts[assignedUnit] = (unitClassCounts[assignedUnit] || 0) + 1;
+        const i = unitClassCounts[assignedUnit];
         const isAltasBajas = (dateStr >= calCfg.altasBajas.inicio && dateStr <= calCfg.altasBajas.fin);
         const isLimiteBaja = (dateStr === calCfg.altasBajas.fechaLimiteBaja);
 
-        let tema = `Clase ${i + 1}`;
+        let tema = `Clase ${i}`;
         if (isAltasBajas) tema += ' (Altas y Bajas)';
         else if (isLimiteBaja) tema += ' (Límite Baja)';
 
         const sess = {
           id: 'sess_' + dateStr.replace(/-/g, '') + '_' + Math.random().toString(36).substring(2, 6),
-          unidad: u,
+          unidad: assignedUnit,
           fecha: dateStr,
           tema: tema,
           isAltasBajas: isAltasBajas,
           isLimiteBaja: isLimiteBaja
         };
         course.attendanceSessions.push(sess);
-        dayIdx++;
+      });
+    } else {
+      // Distribuir días uniformemente entre las unidades
+      const baseCount = Math.floor(validClassDays.length / numUnits);
+      const remainder = validClassDays.length % numUnits;
+
+      let dayIdx = 0;
+      for (let u = 1; u <= numUnits; u++) {
+        const countForUnit = baseCount + (u <= remainder ? 1 : 0);
+        for (let i = 0; i < countForUnit; i++) {
+          if (dayIdx >= validClassDays.length) break;
+          const dateStr = validClassDays[dayIdx];
+          const isAltasBajas = (dateStr >= calCfg.altasBajas.inicio && dateStr <= calCfg.altasBajas.fin);
+          const isLimiteBaja = (dateStr === calCfg.altasBajas.fechaLimiteBaja);
+
+          let tema = `Clase ${i + 1}`;
+          if (isAltasBajas) tema += ' (Altas y Bajas)';
+          else if (isLimiteBaja) tema += ' (Límite Baja)';
+
+          const sess = {
+            id: 'sess_' + dateStr.replace(/-/g, '') + '_' + Math.random().toString(36).substring(2, 6),
+            unidad: u,
+            fecha: dateStr,
+            tema: tema,
+            isAltasBajas: isAltasBajas,
+            isLimiteBaja: isLimiteBaja
+          };
+          course.attendanceSessions.push(sess);
+          dayIdx++;
+        }
       }
     }
 
@@ -2508,11 +2546,22 @@ const App = {
       sheets: [],
       selectedSheet: null,
       targetUnit: currentUnit,
+      mode: 'multi_unit',
+      unitRanges: {},
       rawRows: [],
       headerRowIndex: -1,
       detectedColumns: null,
       matches: []
     };
+
+    const modeSelect = document.getElementById("excelImportModeSelect");
+    if (modeSelect) modeSelect.value = "multi_unit";
+
+    const targetUnitContainer = document.getElementById("excelImportTargetUnitContainer");
+    if (targetUnitContainer) targetUnitContainer.style.display = "none";
+
+    const delimContainer = document.getElementById("excelImportUnitDelimitationContainer");
+    if (delimContainer) delimContainer.style.display = "none";
 
     const unitSelect = document.getElementById("excelImportTargetUnit");
     if (unitSelect) {
@@ -2592,6 +2641,183 @@ const App = {
     if (files && files.length > 0) {
       this.processAttendanceExcelFile(files[0]);
     }
+  },
+
+  onExcelImportModeChanged: function(mode) {
+    if (!this._excelAttendanceState) return;
+    this._excelAttendanceState.mode = mode;
+    const targetUnitContainer = document.getElementById("excelImportTargetUnitContainer");
+    const delimContainer = document.getElementById("excelImportUnitDelimitationContainer");
+    const dateColumns = (this._excelAttendanceState.detectedColumns && this._excelAttendanceState.detectedColumns.dateColumns)
+      ? this._excelAttendanceState.detectedColumns.dateColumns
+      : [];
+
+    if (mode === "single_unit") {
+      if (targetUnitContainer) targetUnitContainer.style.display = "block";
+      if (delimContainer) delimContainer.style.display = "none";
+    } else {
+      if (targetUnitContainer) targetUnitContainer.style.display = "none";
+      if (delimContainer) {
+        delimContainer.style.display = (dateColumns.length > 0) ? "block" : "none";
+        this.renderExcelUnitRangesInputs();
+      }
+    }
+    this.analyzeCurrentExcelSheet();
+  },
+
+  autoDistributeExcelDatesEvenly: function() {
+    const state = this._excelAttendanceState;
+    if (!state || !state.detectedColumns) return;
+    const dateColumns = state.detectedColumns.dateColumns || [];
+    if (dateColumns.length === 0) return;
+
+    const course = this.getActiveCourse();
+    const numUnits = Math.max(1, Number(course ? course.unidadesCount : 3) || 3);
+    const totalDates = dateColumns.length;
+
+    const baseCount = Math.floor(totalDates / numUnits);
+    const remainder = totalDates % numUnits;
+
+    state.unitRanges = {};
+    let currStart = 0;
+    for (let u = 1; u <= numUnits; u++) {
+      const count = baseCount + (u <= remainder ? 1 : 0);
+      const startIdx = currStart;
+      const endIdx = Math.min(totalDates - 1, currStart + Math.max(0, count - 1));
+      state.unitRanges[u] = {
+        startIdx: startIdx,
+        endIdx: endIdx
+      };
+      currStart += count;
+    }
+
+    this.renderExcelUnitRangesInputs();
+    this.analyzeCurrentExcelSheet();
+  },
+
+  renderExcelUnitRangesInputs: function() {
+    const state = this._excelAttendanceState;
+    if (!state || !state.detectedColumns) return;
+    const dateColumns = state.detectedColumns.dateColumns || [];
+    const container = document.getElementById("excelImportUnitRangesRows");
+    const totalBadge = document.getElementById("excelImportDatesTotalBadge");
+    if (!container) return;
+
+    if (totalBadge) {
+      totalBadge.textContent = `(${dateColumns.length} fechas detectadas)`;
+    }
+
+    if (dateColumns.length === 0) {
+      container.innerHTML = `<span style="font-size: 11.5px; color: var(--text-tertiary);">No se detectaron columnas con formato de fecha en esta hoja.</span>`;
+      return;
+    }
+
+    const course = this.getActiveCourse();
+    const numUnits = Math.max(1, Number(course ? course.unidadesCount : 3) || 3);
+
+    if (!state.unitRanges || Object.keys(state.unitRanges).length === 0) {
+      let matchedAny = false;
+      const cDates = (course && course.unitDates) ? course.unitDates : {};
+      const newRanges = {};
+
+      for (let u = 1; u <= numUnits; u++) {
+        const uCfg = cDates[`u${u}`];
+        if (uCfg && uCfg.inicio && uCfg.fin) {
+          let sIdx = -1;
+          let eIdx = -1;
+          dateColumns.forEach((dc, idx) => {
+            if (dc.label >= uCfg.inicio && dc.label <= uCfg.fin) {
+              if (sIdx === -1) sIdx = idx;
+              eIdx = idx;
+            }
+          });
+          if (sIdx !== -1 && eIdx !== -1) {
+            newRanges[u] = { startIdx: sIdx, endIdx: eIdx };
+            matchedAny = true;
+          }
+        }
+      }
+
+      if (matchedAny) {
+        state.unitRanges = newRanges;
+      } else {
+        const baseCount = Math.floor(dateColumns.length / numUnits);
+        const remainder = dateColumns.length % numUnits;
+        let cStart = 0;
+        state.unitRanges = {};
+        for (let u = 1; u <= numUnits; u++) {
+          const count = baseCount + (u <= remainder ? 1 : 0);
+          state.unitRanges[u] = {
+            startIdx: cStart,
+            endIdx: Math.min(dateColumns.length - 1, cStart + Math.max(0, count - 1))
+          };
+          cStart += count;
+        }
+      }
+    }
+
+    let html = "";
+    for (let u = 1; u <= numUnits; u++) {
+      const range = state.unitRanges[u] || { startIdx: 0, endIdx: 0 };
+      const count = Math.max(0, range.endIdx - range.startIdx + 1);
+
+      const startOptions = dateColumns.map((dc, idx) =>
+        `<option value="${idx}" ${idx === range.startIdx ? 'selected' : ''}>${this.escapeHtml(dc.label)} (Col ${dc.colIdx + 1})</option>`
+      ).join('');
+
+      const endOptions = dateColumns.map((dc, idx) =>
+        `<option value="${idx}" ${idx === range.endIdx ? 'selected' : ''}>${this.escapeHtml(dc.label)} (Col ${dc.colIdx + 1})</option>`
+      ).join('');
+
+      html += `
+        <div class="excel-range-unit-card">
+          <div style="font-weight: 800; font-size: 12.5px; color: var(--uat-blue-night);">
+            Unidad ${u}:
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="font-size: 11px; color: var(--text-tertiary); font-weight: 600;">Desde:</span>
+            <select class="form-control" style="font-size: 11.5px; padding: 3px 6px; height: 28px;" onchange="App.onExcelUnitRangeChanged(${u}, true, this.value)">
+              ${startOptions}
+            </select>
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="font-size: 11px; color: var(--text-tertiary); font-weight: 600;">Hasta:</span>
+            <select class="form-control" style="font-size: 11.5px; padding: 3px 6px; height: 28px;" onchange="App.onExcelUnitRangeChanged(${u}, false, this.value)">
+              ${endOptions}
+            </select>
+          </div>
+          <div>
+            <span id="excelUnitRangeBadge_${u}" class="status-badge status-aprobado" style="font-size: 11px; font-weight: 700;">
+              ${count} fechas
+            </span>
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+  },
+
+  onExcelUnitRangeChanged: function(unitIdx, isStart, val) {
+    const state = this._excelAttendanceState;
+    if (!state || !state.unitRanges) return;
+    const numVal = parseInt(val, 10) || 0;
+    if (!state.unitRanges[unitIdx]) {
+      state.unitRanges[unitIdx] = { startIdx: 0, endIdx: 0 };
+    }
+    if (isStart) {
+      state.unitRanges[unitIdx].startIdx = numVal;
+      if (state.unitRanges[unitIdx].endIdx < numVal) {
+        state.unitRanges[unitIdx].endIdx = numVal;
+      }
+    } else {
+      state.unitRanges[unitIdx].endIdx = numVal;
+      if (state.unitRanges[unitIdx].startIdx > numVal) {
+        state.unitRanges[unitIdx].startIdx = numVal;
+      }
+    }
+    this.renderExcelUnitRangesInputs();
+    this.analyzeCurrentExcelSheet();
   },
 
   onExcelImportUnitChanged: function(val) {
@@ -2954,6 +3180,30 @@ const App = {
     const course = this.getActiveCourse();
     const records = (course && course.records) ? course.records : [];
     const studentsMap = this.getStudentsMap();
+    const numUnits = Math.max(1, Number(course ? course.unidadesCount : 3) || 3);
+
+    const modeContainer = document.getElementById("excelImportModeContainer");
+    const targetUnitContainer = document.getElementById("excelImportTargetUnitContainer");
+    const delimContainer = document.getElementById("excelImportUnitDelimitationContainer");
+
+    if (dateColumns.length > 0) {
+      if (modeContainer) modeContainer.style.display = "block";
+      if (state.mode === "multi_unit") {
+        if (targetUnitContainer) targetUnitContainer.style.display = "none";
+        if (delimContainer) {
+          delimContainer.style.display = "block";
+          this.renderExcelUnitRangesInputs();
+        }
+      } else {
+        if (targetUnitContainer) targetUnitContainer.style.display = "block";
+        if (delimContainer) delimContainer.style.display = "none";
+      }
+    } else {
+      state.mode = "single_unit";
+      if (modeContainer) modeContainer.style.display = "none";
+      if (targetUnitContainer) targetUnitContainer.style.display = "block";
+      if (delimContainer) delimContainer.style.display = "none";
+    }
 
     const excelRowsData = [];
     for (let r = headerRowIdx + 1; r < rawRows.length; r++) {
@@ -3036,6 +3286,7 @@ const App = {
         let detectedF = 0;
         let detectedPct = 100;
         const sessionsData = {};
+        const unitStats = {};
 
         if (dateColumns.length > 0) {
           let pCnt = 0, fCnt = 0, rCnt = 0, jCnt = 0;
@@ -3052,6 +3303,27 @@ const App = {
           const totalClases = pCnt + fCnt + rCnt + jCnt;
           detectedF = fCnt + Math.floor(rCnt / 2);
           detectedPct = totalClases > 0 ? Math.round(((pCnt + (rCnt * 0.5) + jCnt) / totalClases) * 100) : 100;
+
+          // Estadísticas independientes por unidad según delimitación
+          for (let u = 1; u <= numUnits; u++) {
+            const range = (state.unitRanges && state.unitRanges[u]) ? state.unitRanges[u] : { startIdx: -1, endIdx: -1 };
+            let uP = 0, uF = 0, uR = 0, uJ = 0;
+            if (range.startIdx !== -1 && range.endIdx !== -1 && range.startIdx <= range.endIdx) {
+              for (let d = range.startIdx; d <= range.endIdx; d++) {
+                if (d < dateColumns.length) {
+                  const m = sessionsData[`date_${d}`] ? sessionsData[`date_${d}`].mark : "P";
+                  if (m === "F") uF++;
+                  else if (m === "R") uR++;
+                  else if (m === "J") uJ++;
+                  else uP++;
+                }
+              }
+            }
+            const uTot = uP + uF + uR + uJ;
+            const uFaltas = uF + Math.floor(uR / 2);
+            const uPct = uTot > 0 ? Math.min(100, Math.max(0, Math.round(((uP + (uR * 0.5) + uJ) / uTot) * 100))) : 100;
+            unitStats[u] = { faltas: uFaltas, pct: uPct, totalClases: uTot };
+          }
         } else {
           if (colFaltas !== -1) {
             const parsedF = Number(String(row[colFaltas]).replace(/[^0-9]/g, ''));
@@ -3080,6 +3352,7 @@ const App = {
           matchLabel: matchLabel,
           faltas: detectedF,
           asistenciaPct: detectedPct,
+          unitStats: unitStats,
           sessionsData: sessionsData,
           status: "ok"
         });
@@ -3087,6 +3360,14 @@ const App = {
         const uKey = `u${state.targetUnit || 1}`;
         const currF = (rec.faltas && rec.faltas[uKey] !== undefined) ? rec.faltas[uKey] : "-";
         const currA = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? rec.asistencia[uKey] : "-";
+        const emptyUnitStats = {};
+        for (let u = 1; u <= numUnits; u++) {
+          emptyUnitStats[u] = {
+            faltas: (rec.faltas && rec.faltas[`u${u}`] !== undefined) ? Number(rec.faltas[`u${u}`]) : 0,
+            pct: (rec.asistencia && rec.asistencia[`u${u}`] !== undefined) ? Number(rec.asistencia[`u${u}`]) : 100,
+            totalClases: 0
+          };
+        }
         matches.push({
           recIndex: recIdx,
           matricula: rec.matricula,
@@ -3095,6 +3376,7 @@ const App = {
           matchLabel: "No localizado en Excel",
           faltas: currF,
           asistenciaPct: currA,
+          unitStats: emptyUnitStats,
           sessionsData: {},
           status: "missing"
         });
@@ -3140,6 +3422,7 @@ const App = {
       dateOptRow.style.display = dateColumns.length > 0 ? "block" : "none";
     }
 
+    const isMultiUnit = (state.mode === "multi_unit" && dateColumns.length > 0);
     const previewContainer = document.getElementById("excelImportPreviewContainer");
     const previewTbody = document.getElementById("excelImportPreviewTbody");
     const matchBadge = document.getElementById("excelImportMatchCountBadge");
@@ -3149,6 +3432,20 @@ const App = {
       if (matchBadge) {
         matchBadge.textContent = `${matchCount} / ${records.length} Vinculados`;
         matchBadge.className = matchCount > 0 ? "status-badge status-aprobado" : "status-badge status-reprobado";
+      }
+
+      const previewThead = previewContainer.querySelector("table thead");
+      if (previewThead) {
+        previewThead.innerHTML = `
+          <tr style="background: var(--bg-hover); position: sticky; top: 0; z-index: 2;">
+            <th style="padding: 6px 8px; width: 34px; text-align: center;">#</th>
+            <th style="padding: 6px 8px;">Alumno en la Materia</th>
+            <th style="padding: 6px 8px; width: 130px;">Vinculado Por</th>
+            <th style="padding: 6px 8px; width: ${isMultiUnit ? '140px' : '70px'}; text-align: center;">${isMultiUnit ? 'Faltas / Unidad' : 'Faltas'}</th>
+            <th style="padding: 6px 8px; width: ${isMultiUnit ? '160px' : '80px'}; text-align: center;">${isMultiUnit ? '% Asist. / Unidad' : '% Asist.'}</th>
+            <th style="padding: 6px 8px; width: 95px; text-align: center;">Estado</th>
+          </tr>
+        `;
       }
 
       let rowsHtml = "";
@@ -3163,6 +3460,26 @@ const App = {
         }
 
         const isOk = item.status === "ok";
+        let faltasCell = "";
+        let pctCell = "";
+
+        if (isMultiUnit) {
+          const fArr = [];
+          const pArr = [];
+          for (let u = 1; u <= numUnits; u++) {
+            const st = item.unitStats && item.unitStats[u];
+            const fVal = st ? st.faltas : 0;
+            const pVal = st ? st.pct : 100;
+            fArr.push(`U${u}: <b style="${fVal > 0 ? 'color: var(--color-red);' : ''}">${fVal}</b>`);
+            pArr.push(`U${u}: <b style="color: var(--uat-orange);">${pVal}%</b>`);
+          }
+          faltasCell = `<div style="font-size: 11px;">${fArr.join(" • ")}</div>`;
+          pctCell = `<div style="font-size: 11px;">${pArr.join(" • ")}</div>`;
+        } else {
+          faltasCell = `<span style="font-weight: 700; ${isOk && item.faltas > 0 ? 'color: var(--color-red);' : ''}">${item.faltas !== undefined ? item.faltas : '-'}</span>`;
+          pctCell = `<span style="font-weight: 700; ${isOk ? 'color: var(--uat-orange);' : ''}">${item.asistenciaPct !== undefined ? item.asistenciaPct + '%' : '-'}</span>`;
+        }
+
         rowsHtml += `
           <tr style="${!isOk ? 'opacity: 0.6; background: rgba(0,0,0,0.015);' : ''}">
             <td style="text-align: center; color: var(--text-tertiary);">${idx + 1}</td>
@@ -3173,11 +3490,11 @@ const App = {
             <td style="font-size: 11px; color: var(--text-secondary);">
               ${this.escapeHtml(item.matchLabel)}
             </td>
-            <td style="text-align: center; font-weight: 700; ${isOk && item.faltas > 0 ? 'color: var(--color-red);' : ''}">
-              ${item.faltas !== undefined ? item.faltas : '-'}
+            <td style="text-align: center;">
+              ${faltasCell}
             </td>
-            <td style="text-align: center; font-weight: 700; ${isOk ? 'color: var(--uat-orange);' : ''}">
-              ${item.asistenciaPct !== undefined ? item.asistenciaPct + '%' : '-'}
+            <td style="text-align: center;">
+              ${pctCell}
             </td>
             <td style="text-align: center;">
               ${badgeHtml}
@@ -3191,14 +3508,24 @@ const App = {
     const btnApply = document.getElementById("btnApplyExcelAttendance");
     if (btnApply) {
       btnApply.disabled = matchCount === 0;
-      btnApply.innerHTML = `⚡ Aplicar Asistencias a Unidad ${state.targetUnit || 1} (${matchCount} alumnos)`;
+      if (isMultiUnit) {
+        btnApply.innerHTML = `⚡ Aplicar Asistencias a las ${numUnits} Unidades (${matchCount} alumnos)`;
+      } else {
+        btnApply.innerHTML = `⚡ Aplicar Asistencias a Unidad ${state.targetUnit || 1} (${matchCount} alumnos)`;
+      }
     }
 
     const summaryFooter = document.getElementById("excelImportFooterSummary");
     if (summaryFooter) {
-      summaryFooter.textContent = matchCount > 0
-        ? `${matchCount} alumnos listos para sincronizar a la Unidad ${state.targetUnit || 1}.`
-        : "Revisa que el archivo contenga nombres o matrículas de este grupo.";
+      if (isMultiUnit) {
+        summaryFooter.textContent = matchCount > 0
+          ? `${matchCount} alumnos listos para sincronizar a las ${numUnits} unidades.`
+          : "Revisa que el archivo contenga nombres o matrículas de este grupo.";
+      } else {
+        summaryFooter.textContent = matchCount > 0
+          ? `${matchCount} alumnos listos para sincronizar a la Unidad ${state.targetUnit || 1}.`
+          : "Revisa que el archivo contenga nombres o matrículas de este grupo.";
+      }
     }
   },
 
@@ -3209,12 +3536,103 @@ const App = {
     const course = this.getActiveCourse();
     if (!course) return;
 
-    const targetUnit = state.targetUnit || 1;
-    const uKey = `u${targetUnit}`;
+    const numUnits = Math.max(1, Number(course.unidadesCount) || 3);
     const syncSessions = document.getElementById("excelImportSyncSessionsCheckbox")?.checked;
     const dateColumns = state.detectedColumns ? state.detectedColumns.dateColumns : [];
+    const isMultiUnit = (state.mode === "multi_unit" && dateColumns.length > 0);
 
     let appliedCount = 0;
+
+    if (isMultiUnit) {
+      if (!course.attendanceSessions) course.attendanceSessions = [];
+
+      // Mapear cada columna de fecha a su unidad según state.unitRanges
+      const dateToUnitMap = {};
+      for (let u = 1; u <= numUnits; u++) {
+        const range = (state.unitRanges && state.unitRanges[u]) ? state.unitRanges[u] : { startIdx: -1, endIdx: -1 };
+        if (range.startIdx !== -1 && range.endIdx !== -1 && range.startIdx <= range.endIdx) {
+          for (let d = range.startIdx; d <= range.endIdx; d++) {
+            if (d < dateColumns.length) {
+              dateToUnitMap[d] = u;
+            }
+          }
+        }
+      }
+
+      // Si syncSessions está activo, crear las sesiones para cada unidad
+      if (syncSessions) {
+        const createdSessionIds = [];
+        dateColumns.forEach((dCol, dIdx) => {
+          const assignedUnit = dateToUnitMap[dIdx] || 1;
+          let existingSess = course.attendanceSessions.find(s => s.unidad === assignedUnit && s.tema === dCol.label);
+          if (!existingSess) {
+            const sessId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + dIdx;
+            let fechaStr = new Date().toISOString().slice(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
+
+            existingSess = {
+              id: sessId,
+              unidad: assignedUnit,
+              fecha: fechaStr,
+              tema: dCol.label
+            };
+            course.attendanceSessions.push(existingSess);
+          }
+          createdSessionIds.push({ dIdx: dIdx, id: existingSess.id, unit: assignedUnit });
+        });
+
+        // Guardar marcas P, F, R, J de cada alumno
+        state.matches.forEach(item => {
+          if (item.status !== "ok") return;
+          const rec = course.records[item.recIndex];
+          if (!rec) return;
+          if (!rec.attendanceDays) rec.attendanceDays = {};
+
+          createdSessionIds.forEach(sessInfo => {
+            const sessKey = `date_${sessInfo.dIdx}`;
+            const markVal = (item.sessionsData && item.sessionsData[sessKey]) ? item.sessionsData[sessKey].mark : "P";
+            rec.attendanceDays[sessInfo.id] = markVal;
+          });
+        });
+      }
+
+      // Asignar faltas y porcentajes calculados para cada una de las unidades
+      state.matches.forEach(item => {
+        if (item.status !== "ok") return;
+        const rec = course.records[item.recIndex];
+        if (!rec) return;
+
+        if (!rec.faltas) rec.faltas = {};
+        if (!rec.asistencia) rec.asistencia = {};
+        if (!rec.asistenciaAuto) rec.asistenciaAuto = {};
+
+        for (let u = 1; u <= numUnits; u++) {
+          const uKey = `u${u}`;
+          const uStats = (item.unitStats && item.unitStats[u]) ? item.unitStats[u] : null;
+          if (uStats) {
+            rec.faltas[uKey] = uStats.faltas;
+            rec.asistencia[uKey] = uStats.pct;
+            rec.asistenciaAuto[uKey] = true;
+          }
+        }
+        appliedCount++;
+      });
+
+      // Recalcular métricas de cada unidad
+      for (let u = 1; u <= numUnits; u++) {
+        this.recalculateAttendanceForUnit(course, u);
+      }
+
+      this.saveData();
+      this.closeExcelAttendanceImportModal();
+      this.render();
+      this.showToast(`🎉 ¡Asistencias y porcentajes calculados y asignados exitosamente a las ${numUnits} unidades para ${appliedCount} alumnos!`);
+      return;
+    }
+
+    // Modo Unidad Única (single_unit)
+    const targetUnit = state.targetUnit || 1;
+    const uKey = `u${targetUnit}`;
 
     if (syncSessions && dateColumns.length > 0) {
       if (!course.attendanceSessions) course.attendanceSessions = [];
@@ -3259,12 +3677,15 @@ const App = {
 
       if (!rec.faltas) rec.faltas = {};
       if (!rec.asistencia) rec.asistencia = {};
+      if (!rec.asistenciaAuto) rec.asistenciaAuto = {};
 
       rec.faltas[uKey] = item.faltas;
       rec.asistencia[uKey] = item.asistenciaPct;
+      rec.asistenciaAuto[uKey] = true;
       appliedCount++;
     });
 
+    this.recalculateAttendanceForUnit(course, targetUnit);
     this.saveData();
     this.closeExcelAttendanceImportModal();
     this.render();
@@ -6026,6 +6447,7 @@ const App = {
 
     this._tempManageUnitsCount = Number(course.unidadesCount) || 5;
     this._tempManageMaxFirmas = { ...(course.firmasMaxConfig || {}) };
+    this._tempManageUnitDates = JSON.parse(JSON.stringify(course.unitDates || {}));
 
     for (let u = 1; u <= this._tempManageUnitsCount; u++) {
       if (!this._tempManageMaxFirmas[`u${u}`]) {
@@ -6034,6 +6456,7 @@ const App = {
     }
 
     this.renderManageCourseUnitsInputs();
+    this.renderManageCourseUnitDatesInputs();
 
     // Inicializar controles de Ponderación de Criterios (Firmas, Exámenes, Asistencia, Participación)
     const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
@@ -6216,6 +6639,7 @@ const App = {
 
     this._tempManageUnitsCount = num;
     this.renderManageCourseUnitsInputs();
+    this.renderManageCourseUnitDatesInputs();
   },
 
   renderManageCourseUnitsInputs: function() {
@@ -6268,6 +6692,102 @@ const App = {
     this._tempManageMaxFirmas[uKey] = num;
   },
 
+  renderManageCourseUnitDatesInputs: function() {
+    const container = document.getElementById("manageCourseUnitDatesContainer");
+    if (!container) return;
+
+    if (!this._tempManageUnitDates) {
+      this._tempManageUnitDates = {};
+    }
+
+    let html = "";
+    for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+      const uKey = `u${u}`;
+      const uDate = this._tempManageUnitDates[uKey] || { inicio: "", fin: "" };
+      html += `
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--bg-card); padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--uat-orange); min-width: 65px;">Unidad ${u}:</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="font-size: 11px; color: var(--text-tertiary);">Del:</span>
+              <input type="date" value="${uDate.inicio || ''}" class="form-control" style="font-size: 11.5px; padding: 3px 6px; width: 130px; height: 30px;"
+                onchange="App._syncManageUnitDate('${uKey}', 'inicio', this.value)" />
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="font-size: 11px; color: var(--text-tertiary);">Al:</span>
+              <input type="date" value="${uDate.fin || ''}" class="form-control" style="font-size: 11.5px; padding: 3px 6px; width: 130px; height: 30px;"
+                onchange="App._syncManageUnitDate('${uKey}', 'fin', this.value)" />
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    container.innerHTML = html;
+  },
+
+  _syncManageUnitDate: function(uKey, field, val) {
+    if (!this._tempManageUnitDates) this._tempManageUnitDates = {};
+    if (!this._tempManageUnitDates[uKey]) this._tempManageUnitDates[uKey] = {};
+    this._tempManageUnitDates[uKey][field] = val;
+  },
+
+  suggestOfficialUnitDates: function() {
+    const course = this.getActiveCourse();
+    const periodo = (course && course.periodo) || this.getSelectedSemester() || "2026 - 3 OTOÑO";
+    const normPeriodo = this.normalizePeriodo(periodo);
+    const calCfg = (this.UAT_CALENDAR_2026 && this.UAT_CALENDAR_2026[normPeriodo]) || (this.UAT_CALENDAR_2026 && this.UAT_CALENDAR_2026["2026 - 3 OTOÑO"]);
+
+    if (!calCfg || !calCfg.inicioClases || !calCfg.finClases) {
+      this.showToast("No se encontró configuración de calendario para este periodo.", "warning");
+      return;
+    }
+
+    const start = new Date(calCfg.inicioClases + 'T12:00:00');
+    const end = new Date(calCfg.finClases + 'T12:00:00');
+    const holidayMap = {};
+    (calCfg.diasInhabiles || []).forEach(h => { holidayMap[h.fecha] = true; });
+
+    const validDays = [];
+    let curr = new Date(start);
+    while (curr <= end) {
+      const dow = curr.getDay();
+      if (dow !== 0 && dow !== 6) {
+        const yyyy = curr.getFullYear();
+        const mm = String(curr.getMonth() + 1).padStart(2, '0');
+        const dd = String(curr.getDate()).padStart(2, '0');
+        const dStr = `${yyyy}-${mm}-${dd}`;
+        if (!holidayMap[dStr]) validDays.push(dStr);
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    if (validDays.length === 0) return;
+
+    const numUnits = this._tempManageUnitsCount || (course && Number(course.unidadesCount)) || 5;
+    const baseCount = Math.floor(validDays.length / numUnits);
+    const remainder = validDays.length % numUnits;
+
+    if (!this._tempManageUnitDates) this._tempManageUnitDates = {};
+
+    let dayIdx = 0;
+    for (let u = 1; u <= numUnits; u++) {
+      const countForUnit = baseCount + (u <= remainder ? 1 : 0);
+      const startDay = validDays[dayIdx];
+      const endDay = validDays[dayIdx + countForUnit - 1] || startDay;
+      dayIdx += countForUnit;
+
+      this._tempManageUnitDates[`u${u}`] = {
+        inicio: startDay,
+        fin: endDay
+      };
+    }
+
+    this.renderManageCourseUnitDatesInputs();
+    this.showToast(`✨ Se sugirieron fechas oficiales UAT distribuidas entre las ${numUnits} unidades.`);
+  },
+
   changeManageModalUnitsCount: function(delta) {
     for (let u = 1; u <= this._tempManageUnitsCount; u++) {
       const inp = document.getElementById(`manageModalMaxF_u${u}`);
@@ -6285,6 +6805,7 @@ const App = {
 
     this._tempManageUnitsCount = newCount;
     this.renderManageCourseUnitsInputs();
+    this.renderManageCourseUnitDatesInputs();
   },
 
   closeManageCourseModal: function() {
@@ -6339,6 +6860,7 @@ const App = {
     for (let u = 1; u <= newCount; u++) {
       course.firmasMaxConfig[`u${u}`] = this._tempManageMaxFirmas[`u${u}`] || 10;
     }
+    course.unitDates = JSON.parse(JSON.stringify(this._tempManageUnitDates || {}));
 
     // Recoger Ponderaciones de Criterios (Firmas, Exámenes, Asistencia, Participación)
     const toggleCriterios = document.getElementById("manageToggleCriterios");
@@ -6391,6 +6913,7 @@ const App = {
     if (newCount < oldCount) {
       for (let u = newCount + 1; u <= 12; u++) {
         delete course.firmasMaxConfig[`u${u}`];
+        if (course.unitDates) delete course.unitDates[`u${u}`];
       }
       if (course.lockedUnits) {
         for (let u = newCount + 1; u <= 12; u++) {
@@ -6416,6 +6939,21 @@ const App = {
           }
         });
       }
+    }
+
+    // Si hay sesiones de asistencia registradas y fechas de unidad configuradas, sincronizar unidad correspondiente
+    if (course.attendanceSessions && course.attendanceSessions.length > 0 && course.unitDates) {
+      course.attendanceSessions.forEach(sess => {
+        if (sess.fecha) {
+          for (let u = 1; u <= newCount; u++) {
+            const uD = course.unitDates[`u${u}`];
+            if (uD && uD.inicio && uD.fin && sess.fecha >= uD.inicio && sess.fecha <= uD.fin) {
+              sess.unidad = u;
+              break;
+            }
+          }
+        }
+      });
     }
 
     // Sincronizar explícitamente en memoria todas las capas activas antes de persistir
