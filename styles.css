@@ -57,6 +57,8 @@
    ========================================================================== */
 
 :root {
+  color-scheme: light;
+
   /* Colores Institucionales FIUAT - UAT */
   --uat-blue-night: #212052;     /* Azul Noche UAT */
   --uat-blue-navy: #353372;      /* Azul Marino FI */
@@ -102,6 +104,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-primary: #191919;
   --bg-secondary: #222222;
   --bg-hover: #2d2d2d;
@@ -534,8 +537,21 @@ body {
   text-overflow: ellipsis;
 }
 
+.gradebook-semester-select optgroup,
+.gradebook-course-select optgroup,
+select optgroup,
+optgroup {
+  background-color: var(--bg-card, #ffffff);
+  color: var(--uat-blue-night, #212052);
+  font-weight: 700;
+  font-style: normal;
+  padding: 6px 10px;
+}
+
 .gradebook-semester-select option,
-.gradebook-course-select option {
+.gradebook-course-select option,
+select option,
+option {
   background: var(--bg-card, #ffffff);
   color: var(--text-primary, #1e293b);
   font-weight: normal;
@@ -555,6 +571,13 @@ body {
   color: var(--uat-orange);
 }
 
+[data-theme="dark"] select,
+[data-theme="dark"] .gradebook-semester-select,
+[data-theme="dark"] .gradebook-course-select,
+[data-theme="dark"] .form-control {
+  color-scheme: dark !important;
+}
+
 [data-theme="dark"] .gradebook-semester-select {
   color: var(--uat-orange) !important;
 }
@@ -563,10 +586,23 @@ body {
   color: #ffffff !important;
 }
 
+[data-theme="dark"] .gradebook-semester-select optgroup,
+[data-theme="dark"] .gradebook-course-select optgroup,
+[data-theme="dark"] select optgroup,
+[data-theme="dark"] optgroup {
+  background-color: #141720 !important;
+  color: #ffa366 !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  padding: 6px 10px;
+}
+
 [data-theme="dark"] .gradebook-semester-select option,
-[data-theme="dark"] .gradebook-course-select option {
-  background: #1e222d;
-  color: #f1f5f9;
+[data-theme="dark"] .gradebook-course-select option,
+[data-theme="dark"] select option,
+[data-theme="dark"] option {
+  background: #1e222d !important;
+  color: #f1f5f9 !important;
 }
 
 .gradebook-header-bottom {
