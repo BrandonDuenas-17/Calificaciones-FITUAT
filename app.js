@@ -5077,11 +5077,8 @@ const App = {
           <div class="gradebook-desc-col">
             <p class="page-desc">
               Control de Asistencias & Participación • Periodo <b>${this.escapeHtml(course.periodo)}</b>
-              • <span class="badge-legend badge-legend-p">P</span> Presente
-              • <span class="badge-legend badge-legend-f">F</span> Falta
-              • <span class="badge-legend badge-legend-r">R</span> Retardo (0.5)
-              • <span class="badge-legend badge-legend-j">J</span> Justif.
-              ${wAsist > 0 ? ` • <span style="color: var(--uat-orange); font-weight: 600;">Ponderación: ${wAsist}%</span>` : ''}
+              ${wAsist > 0 ? ` • <span style="color: #a84b15; font-weight: 700;">Ponderación: ${wAsist}%</span>` : ''}
+              ${wPart > 0 ? ` • <span style="color: #a84b15; font-weight: 700;">Participación: ${wPart}%</span>` : ''}
               ${limiteFaltasActivo ? ` • <span style="color: var(--color-red); font-weight: 700;">Límite ${asistCfg.ambitoLimite === 'semestre' ? 'Semestral' : 'por Unidad'}: Máx ${maxFaltas} faltas ${consecuenciaActiva ? `(${this.getModoExcederLabel(asistCfg.modoExceder)})` : '(Solo Informativo)'}</span>` : ''}
             </p>
           </div>
