@@ -86,15 +86,60 @@ components:
 
 **Creative North Star: "El Cuaderno de Ingeniería Digital"**
 
-El sistema de calificaciones y asistencias de la Facultad de Ingeniería Tampico (FIUAT - UAT) fusiona la inmediatez, robustez y densidad de información de una hoja de cálculo ejecutiva (estilo Excel / Notion con paneles inmovilizados) con la elegancia sobria y moderna de una suite académica institucional contemporánea.
+El sistema de calificaciones y asistencias de la Facultad de Ingeniería Tampico (FIUAT - UAT) fusiona la inmediatez, robustez y densidad de datos de una hoja de cálculo ejecutiva (estilo Excel / Notion con paneles inmovilizados) con la elegancia sobria y moderna de una suite académica institucional.
 
-Su propósito central es ofrecer una experiencia de captura rápida y libre de fricción a docentes universitarios en salones, cubículos y dispositivos móviles, al tiempo que proporciona paneles analíticos de supervisión en tiempo real para la Coordinación Académica. El diseño visual descarta la dispersión decorativa innecesaria en favor de la máxima legibilidad de datos, contraste accesible (WCAG AA), y jerarquía táctica mediante el color naranja institucional como acento focal.
+**Directriz de Diseño:** Este sistema NO es un panel analítico genérico de marketing ni un dashboard con menús laterales. Es una **herramienta de trabajo intensivo en pantalla completa horizontal**. El objetivo visual es preservar el formato y la distribución de pantalla ya consolidados, elevando la calidad de los acabados, la tipografía, el contraste y la sutileza de los componentes existentes.
 
 **Key Characteristics:**
-- **Zero Window Scroll en Escritorio:** El viewport se fija a 100vh. Todo el desplazamiento vertical y horizontal ocurre dentro de los contenedores de datos (tablas con freeze panes).
+- **Zero Window Scroll en Escritorio:** El viewport se fija a 100vh. Todo el desplazamiento vertical y horizontal ocurre dentro de la sábana de datos (tabla con freeze panes).
+- **Layout Horizontal Sin Barra Lateral:** Toda la navegación ocurre en el encabezado superior mediante pestañas horizontales.
 - **Identidad Institucional Fuerte:** Uso armónico del Azul Noche UAT (`#0f2744`), Azul Marino FI (`#1b2a4a`) y Naranja UAT (`#e07e33`), equilibrados sobre fondos neutros limpios.
 - **Doble Esquema de Color Completo:** Modo Claro y Modo Oscuro nativos y contrastados gobernados por `color-scheme` y variables CSS.
 - **Tipografía Geométrica Humanista:** *Visby CF* como fuente rectora oficial, aportando seriedad técnica y legibilidad en números y textos densos.
+
+---
+
+## Layout & Screen Wireframe (Arquitectura Estricta)
+
+Para cualquier iteración visual en Stitch o herramientas de diseño, **se debe respetar estrictamente el siguiente esquema de pantalla sin agregar barras laterales ni reestructurar las secciones**:
+
+```
++-------------------------------------------------------------------------------------------------------+
+| 1. NOTION TOPBAR: Logo UAT/FI | UAT Gestión Docente | Estado Nube | Perfil Docente | Modo Oscuro      |
+| 2. NAV TABS:      [Materia • Grupo A (35 alumnos)] [Asistencias] [Directorio Maestro]                 |
++-------------------------------------------------------------------------------------------------------+
+| 3. HEADER CALIFICADOR:                                                                                |
+|    - Fila Sup: Título Materia [Badge Grupo]  ...   [Píldora SEMESTRE: ...] [Píldora MATERIA/GRUPO: ...] |
+|    - Fila Inf: Descripción / Unidades activas ... [Control Stepper de Unidades: 1, 2, 3]              |
+|                                                                                                       |
+| 4. TOOLBAR: [ Buscar alumno... ] ... [Exportar Excel] [Ponderación] [Importar] [Modo Enfoque]          |
++-------------------------------------------------------------------------------------------------------+
+| 5. TABLA SÁBANA CON PANELES INMOVILIZADOS (FREEZE-PANES 100vh):                                        |
+|    +----+------------+----------------------+----------+----------+----------+------------+---------+  |
+|    | #  | Matrícula  | Nombre Estudiante    | Tareas   | Examen   | Lab      | Cal. Final | Estatus |  |
+|    | (Fija izquierda)| (Fija izquierda)     |          |          |          |            |         |  |
+|    +----+------------+----------------------+----------+----------+----------+------------+---------+  |
+|    | 01 | 2183207005 | CASTILLO LUCAS Y.    |   9.5    |   8.0    |   10.0   |    9.0     | APROB.  |  |
+|    | 02 | 2183228140 | TORRES PEGO NICOLAS  |   7.0    |   6.5    |    8.0   |    7.1     | APROB.  |  |
+|    +----+------------+----------------------+----------+----------+----------+------------+---------+  |
++-------------------------------------------------------------------------------------------------------+
+```
+
+### Reglas Estructurales Obligatorias:
+1. **Header Institucional Superior (`.notion-header`):**
+   - Fila 1 (`.notion-topbar`): Logos institucionales + título a la izquierda; sincronización nube + perfil docente + switch de tema a la derecha.
+   - Fila 2 (`.nav-tabs`): Barra horizontal de pestañas con bordes inferiores y badges de conteo.
+2. **Zona de Título y Filtros:**
+   - Nombre de la materia con badge de grupo.
+   - Doble selector de píldoras (`.gradebook-select-pill`) para Semestre y Grupo a la derecha.
+3. **Barra de Herramientas (`.table-toolbar`):**
+   - Buscador rápido con icono de lupa a la izquierda.
+   - Botonera de acciones a la derecha (`.btn-default`, `.btn-primary`).
+4. **Sábana de Datos (Calificador / Asistencias):**
+   - Ocupa el 100% del alto restante con scroll independiente.
+   - Fila superior (`thead`) inmovilizada al hacer scroll vertical.
+   - Columnas de Matrícula y Nombre inmovilizadas a la izquierda al hacer scroll horizontal.
+   - Celdas editables directas con teclado numérico.
 
 ---
 
@@ -155,22 +200,6 @@ La paleta cromática está anclada a los manuales de identidad de la Universidad
 
 ---
 
-## Layout
-
-1. **Estructura Vertical Fija (App Shell):**
-   - **Header Institucional (`.notion-header`):** Fijado arriba (`flex: 0 0 auto`, `z-index: 100`).
-   - **Banner de Supervisión (Opcional):** Para vistas de directores y coordinadores.
-   - **Contenedor Principal (`.main-content`):** Ocupa exactamente el espacio remanente (`flex: 1 1 0`, `overflow: hidden`).
-2. **Paneles Inmovilizados (Excel Freeze-Panes):**
-   - **Fila Superior de Cabeceras (`thead th`):** `position: sticky; top: 0; z-index: 35;` con borde inferior naranja de 3px.
-   - **Columna 1 (Matrícula):** `position: sticky; left: 0; z-index: 20; width: 130px;`
-   - **Columna 2 (Nombre de Alumno):** `position: sticky; left: 130px; z-index: 20; width: 270px;` con sombra divisoria suave.
-   - **Esquina Superior Izquierda:** Mayor jerarquía de apilamiento (`z-index: 65;`).
-3. **Modo Enfoque:**
-   - Permite colapsar el área de títulos (`body.gradebook-focus-mode`) para maximizar las filas visibles de la tabla a más de 25 alumnos por pantalla simultáneamente.
-
----
-
 ## Elevation & Depth
 
 El sistema utiliza **elevación híbrida táctica**: superficies predominantemente planas con bordes nítidos de 1px en reposo, y sombras suaves y controladas para separar niveles de profundidad funcional.
@@ -215,16 +244,19 @@ El sistema utiliza **elevación híbrida táctica**: superficies predominantemen
 
 ---
 
-## Do's and Don'ts
+## Do's and Don'ts (Reglas Estrictas Anti-Distorsión)
 
 ### Do:
+- **Do** mantener el layout 100% fiel a la distribución horizontal actual: Header con tabs arriba, selector de materia a la derecha, toolbar con buscador y botones, y tabla sábana en el área central.
 - **Do** respetar siempre la inmovilización de paneles al rediseñar la sábana de notas. La matrícula y el nombre del estudiante nunca deben perderse de vista al hacer scroll horizontal.
 - **Do** mantener el ratio de contraste accesible (mínimo 4.5:1 para texto normal y 3:1 para controles UI grandes) tanto en Modo Claro como en Modo Oscuro.
 - **Do** preservar los colores oficiales de la Universidad (`#0f2744`, `#1b2a4a`, `#e07e33`) en encabezados e identidades de marca.
-- **Do** optimizar cada pantalla para un uso rápido con teclado (Tab, Enter, flechas) y pantallas táctiles en tablets dentro del aula.
+- **Do** enfocar las mejoras en: tipografía más nítida, micro-interacciones sutiles en hover/focus, pulido de scrollbars, refinamiento de bordes e inputs, y mayor elegancia en botones y estados activos.
 
-### Don't:
-- **Don't** permitir que el documento completo (`html`/`body`) haga scroll infinito en escritorios; el contenedor de la tabla debe gestionar su propio desplazamiento.
-- **Don't** utilizar rojos o verdes genéricos chillones. Utilizar siempre las variantes institucionales calibradas (`--color-green: #0f7b6c`, `--color-red: #b91c1c`).
-- **Don't** saturar las tablas con sombras o bordes pesados que distraigan de los números y cálculos académicos.
-- **Don't** alterar la base de datos o lógica de negocio al modificar los estilos visuales de la interfaz.
+### Don't (Prohibiciones Terminantes de Rediseño):
+- **Don't agregar NINGUNA barra lateral izquierda (Sidebar / Menú vertical).** La aplicación NO usa sidebars. La navegación es exclusivamente mediante pestañas horizontales en el encabezado.
+- **Don't agregar avatares circulares ni subtítulos de carreras a las filas de los estudiantes.** La tabla debe mantener alta densidad de datos (estilo Excel profesional). Solo muestra Matrícula y Nombre Completo en una sola línea.
+- **Don't agregar tarjetas o cajas gigantescas de estadísticas (KPI cards) arriba de la tabla.** La tabla es la protagonista y debe ocupar casi todo el alto de la pantalla.
+- **Don't agregar barras de estado inferiores de "Terminal" o consolas inventadas.**
+- **Don't permitir que el documento completo (`html`/`body`) haga scroll infinito en escritorios;** el contenedor de la tabla gestiona su propio desplazamiento con freeze-panes.
+- **Don't alterar la estructura de pestañas:** Solo existen las pestañas del docente (`Materia • Grupo`, `Asistencias`, `Directorio de Alumnos`) o del administrador (`Panel Maestro`, `Nuevo Docente`).
