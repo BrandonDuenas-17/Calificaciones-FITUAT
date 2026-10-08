@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.10.07.v56";
+      const CURRENT_APP_VERSION = "2026.10.07.v57";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=56">
+  <link rel="stylesheet" href="styles.css?v=57">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -184,7 +184,7 @@
       background-clip: padding-box !important;
       border-bottom: 3px solid var(--uat-orange) !important;
       border-right: 1px solid var(--border-color) !important;
-      box-shadow: 0 3px 6px rgba(33, 32, 82, 0.12) !important;
+      box-shadow: 0 3px 6px rgba(15, 23, 42, 0.08) !important;
     }
 
     [data-theme="dark"] .notion-table thead th {
@@ -216,7 +216,7 @@
       width: 270px !important;
       min-width: 270px !important;
       max-width: 270px !important;
-      box-shadow: 4px 0 8px rgba(33, 32, 82, 0.1) !important;
+      box-shadow: 4px 0 8px rgba(15, 23, 42, 0.06) !important;
     }
 
     /* 4. Esquinas superiores izquierdas (Intersección con mayor prioridad) */
@@ -236,7 +236,7 @@
       z-index: 65 !important;
       background-color: var(--bg-secondary) !important;
       background-clip: padding-box !important;
-      box-shadow: 4px 3px 8px rgba(33, 32, 82, 0.15) !important;
+      box-shadow: 4px 3px 8px rgba(15, 23, 42, 0.08) !important;
     }
 
     /* 5. Pie de tabla congelado a la izquierda */
@@ -245,7 +245,7 @@
       left: 0 !important;
       z-index: 20 !important;
       background-color: var(--bg-secondary) !important;
-      box-shadow: 4px 0 8px rgba(33, 32, 82, 0.1) !important;
+      box-shadow: 4px 0 8px rgba(15, 23, 42, 0.06) !important;
     }
 
     /* Hover de filas manteniendo fondo sólido en columnas fijas */
@@ -440,11 +440,11 @@
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
             <div>
               <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Unidades de la Materia:</span>
-              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Cada unidad crea automáticamente una columna de firmas y su examen correspondiente.</p>
+              <p style="font-size: 12px; color: var(--text-tertiary); margin: 2px 0 0 0;">Cada unidad crea automáticamente una columna de firmas y su examen correspondiente.</p>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 4px 8px;">
               <button type="button" class="btn btn-sm btn-default" id="btnRemoveUnitManageModal" style="padding: 2px 8px; font-weight: 800; font-size: 14px;" onclick="App.changeManageModalUnitsCount(-1)">−</button>
-              <input type="number" id="manageModalUnitsInput" min="1" max="8" value="5" class="form-control" style="width: 52px; height: 32px; text-align: center; font-weight: 800; font-size: 16px; color: var(--uat-orange); padding: 0 4px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);" oninput="App.onManageUnitsInputDirect(this.value)" />
+              <input type="number" id="manageModalUnitsInput" min="1" max="8" value="5" class="form-control" style="width: 52px; height: 32px; text-align: center; font-weight: 800; font-size: 16px; color: #a84b15; padding: 0 4px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);" oninput="App.onManageUnitsInputDirect(this.value)" />
               <button type="button" class="btn btn-sm btn-default" id="btnAddUnitManageModal" style="padding: 2px 8px; font-weight: 800; font-size: 14px;" onclick="App.changeManageModalUnitsCount(1)">+</button>
             </div>
           </div>
@@ -468,7 +468,7 @@
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
             <div>
               <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Criterios de Evaluación por Unidad:</span>
-              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Define los porcentajes de cada criterio. Deben sumar 100%.</p>
+              <p style="font-size: 12px; color: var(--text-tertiary); margin: 2px 0 0 0;">Define los porcentajes de cada criterio. Deben sumar 100%.</p>
             </div>
             <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
               <input type="checkbox" id="manageToggleCriterios" onchange="App.toggleManageCriterios(this.checked)" style="accent-color: var(--uat-orange);" />
@@ -479,38 +479,38 @@
           <div id="manageWeightsContainer" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 12px; margin-top: 8px;">
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px;">
               <div>
-                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 4px;">Firmas / Tareas</label>
+                <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 4px;">Firmas / Tareas</label>
                 <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
                   <input type="number" min="0" max="100" id="manageWeightFirmas" class="form-control" style="text-align: center; font-weight: 700;" value="30" oninput="App.onWeightsInputChange()" />
-                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                  <span style="font-size: 12px; font-weight: 700; color: var(--text-tertiary);">%</span>
                 </div>
               </div>
               <div>
-                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 4px;">Exámenes</label>
+                <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 4px;">Exámenes</label>
                 <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
                   <input type="number" min="0" max="100" id="manageWeightExamen" class="form-control" style="text-align: center; font-weight: 700;" value="40" oninput="App.onWeightsInputChange()" />
-                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                  <span style="font-size: 12px; font-weight: 700; color: var(--text-tertiary);">%</span>
                 </div>
               </div>
               <div>
-                <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">Asistencia</label>
+                <label style="font-size: 12px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">Asistencia</label>
                 <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
                   <input type="number" min="0" max="100" id="manageWeightAsist" class="form-control" style="text-align: center; font-weight: 700;" value="15" oninput="App.onWeightsInputChange()" />
-                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                  <span style="font-size: 12px; font-weight: 700; color: var(--text-tertiary);">%</span>
                 </div>
               </div>
               <div>
-                <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">Participación</label>
+                <label style="font-size: 12px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">Participación</label>
                 <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
                   <input type="number" min="0" max="100" id="manageWeightPart" class="form-control" style="text-align: center; font-weight: 700;" value="15" oninput="App.onWeightsInputChange()" />
-                  <span style="font-size: 11px; font-weight: 700; color: var(--text-tertiary);">%</span>
+                  <span style="font-size: 12px; font-weight: 700; color: var(--text-tertiary);">%</span>
                 </div>
               </div>
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span id="manageWeightsTotalBadge" class="status-badge status-aprobado" style="font-size: 11px; padding: 4px 8px;">Suma: 100% (Correcto)</span>
-              <button type="button" class="btn btn-xs btn-default" onclick="App.resetWeightsToDefault()" style="font-size: 11px;">Restablecer a 50/50</button>
+              <span id="manageWeightsTotalBadge" class="status-badge status-aprobado" style="font-size: 12px; padding: 4px 8px;">Suma: 100% (Correcto)</span>
+              <button type="button" class="btn btn-xs btn-default" onclick="App.resetWeightsToDefault()" style="font-size: 12px;">Restablecer a 50/50</button>
             </div>
           </div>
         </div>
@@ -520,7 +520,7 @@
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div>
               <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Reglas y Límites de Inasistencias:</span>
-              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Aplica sanciones automáticas (perder puntos de asistencia o derecho a examen).</p>
+              <p style="font-size: 12px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Aplica sanciones automáticas (perder puntos de asistencia o derecho a examen).</p>
             </div>
             <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
               <input type="checkbox" id="manageToggleLimiteFaltas" onchange="App.toggleManageLimiteFaltas(this.checked)" style="accent-color: var(--uat-orange);" />
@@ -531,14 +531,14 @@
           <div id="manageLimiteFaltasContainer" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 12px; margin-top: 10px;">
             <div style="display: grid; grid-template-columns: 1fr 140px; gap: 12px; margin-bottom: 10px; align-items: start;">
               <div>
-                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Ámbito de Evaluación:</label>
+                <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Ámbito de Evaluación:</label>
                 <select id="manageAmbitoLimiteSelect" class="form-control" style="font-size: 12px;" onchange="App.onAmbitoLimiteChange(this.value)">
                   <option value="unidad">📍 Por Unidad (Límite evaluado individualmente en cada unidad)</option>
                   <option value="semestre">🎓 Por Semestre (Límite evaluado sobre el total del semestre)</option>
                 </select>
               </div>
               <div>
-                <label id="manageMaxFaltasLabel" style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px; text-align: center;">Máx. Faltas por Unidad:</label>
+                <label id="manageMaxFaltasLabel" style="font-size: 12px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px; text-align: center;">Máx. Faltas por Unidad:</label>
                 <input type="number" min="1" max="50" id="manageMaxFaltasInput" class="form-control" style="text-align: center; font-weight: 700;" value="3" />
               </div>
             </div>
@@ -547,16 +547,16 @@
               <div style="display: flex; align-items: center; justify-content: space-between;">
                 <div>
                   <span style="font-size: 12px; font-weight: 700; color: var(--uat-blue-night);">Consecuencia al Superar el Límite de Faltas:</span>
-                  <p style="font-size: 11px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Aplica una sanción automática si el alumno supera las faltas permitidas.</p>
+                  <p style="font-size: 12px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Aplica una sanción automática si el alumno supera las faltas permitidas.</p>
                 </div>
-                <label style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--uat-orange);">
                   <input type="checkbox" id="manageToggleConsecuencia" onchange="App.toggleManageConsecuencia(this.checked)" style="accent-color: var(--uat-orange);" />
                   Activar Consecuencia
                 </label>
               </div>
 
               <div id="manageConsecuenciaContainer" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 8px;">
-                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Tipo de Sanción / Consecuencia:</label>
+                <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 4px;">Tipo de Sanción / Consecuencia:</label>
                 <select id="manageModoExcederSelect" class="form-control" style="font-size: 12px;" onchange="App.onModoExcederChange(this.value)">
                   <option value="perder_asistencia">📉 Perder Puntos de Asistencia (Asistencia = 0 pts; conserva derecho a examen)</option>
                   <option value="alerta_sd">⛔ Sin Derecho a Examen (Alerta Preventiva Badge SD)</option>
@@ -564,7 +564,7 @@
                   <option value="ambas_alerta">⛔📉 Combinado: Alerta SD + Perder Puntos de Asistencia</option>
                   <option value="ambas_cero">🚫📉 Combinado: Calificación 0 + Perder Puntos de Asistencia</option>
                 </select>
-                <p id="manageModoExcederExplicacion" style="font-size: 11px; color: var(--text-tertiary); margin: 6px 0 0 2px; line-height: 1.4;">
+                <p id="manageModoExcederExplicacion" style="font-size: 12px; color: var(--text-tertiary); margin: 6px 0 0 2px; line-height: 1.4;">
                   💡 <b>Perder Asistencia:</b> Si el alumno supera el límite de faltas, los puntos de asistencia se anulan (0 pts), pero sus firmas y examen se califican con normalidad.
                 </p>
               </div>
@@ -577,9 +577,9 @@
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
             <div>
               <span style="font-size: 13px; font-weight: 700; color: var(--uat-blue-night);">Periodos y Fechas de cada Unidad:</span>
-              <p style="font-size: 11.5px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Delimita qué fechas corresponden a cada unidad para sincronizar con el calendario y asistencias.</p>
+              <p style="font-size: 12px; color: var(--text-tertiary); margin: 2px 0 0 0;">Opcional: Delimita qué fechas corresponden a cada unidad para sincronizar con el calendario y asistencias.</p>
             </div>
-            <button type="button" class="btn btn-xs btn-default" onclick="App.suggestOfficialUnitDates()" style="font-size: 11px;">
+            <button type="button" class="btn btn-xs btn-default" onclick="App.suggestOfficialUnitDates()" style="font-size: 12px; padding: 4px 8px;">
               🪄 Sugerir Fechas UAT
             </button>
           </div>
@@ -728,7 +728,7 @@
           </div>
           <div>
             <h3 style="margin: 0; font-size: 16.5px;">Importar Asistencias desde Archivo Excel</h3>
-            <p style="margin: 2px 0 0; font-size: 11.5px; color: var(--text-secondary);">
+            <p style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary);">
               Sube tu archivo en <b>.xlsx, .xls o .csv</b>. El sistema detecta y vincula faltas y asistencias automáticamente por <b>Matrícula</b> o <b>Nombre</b>.
             </p>
           </div>
@@ -756,22 +756,22 @@
         <div id="excelImportOptionsContainer" style="display: none; margin-top: 14px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px;">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
             <div class="form-group" id="excelImportModeContainer" style="margin-bottom: 0;">
-              <label style="font-size: 11.5px; font-weight: 700;">Modo de Asignación por Unidades:</label>
+              <label style="font-size: 12px; font-weight: 700;">Modo de Asignación por Unidades:</label>
               <select id="excelImportModeSelect" class="form-control" style="font-size: 12.5px;" onchange="App.onExcelImportModeChanged(this.value)">
                 <option value="multi_unit">⚡ Distribuir a Todas las Unidades (Delimitar Fechas)</option>
                 <option value="single_unit">🎯 Aplicar a una Sola Unidad Específica</option>
               </select>
             </div>
             <div class="form-group" id="excelImportTargetUnitContainer" style="margin-bottom: 0; display: none;">
-              <label style="font-size: 11.5px; font-weight: 700;">Unidad de Destino en el Calificador:</label>
+              <label style="font-size: 12px; font-weight: 700;">Unidad de Destino en el Calificador:</label>
               <select id="excelImportTargetUnit" class="form-control" style="font-size: 12.5px;" onchange="App.onExcelImportUnitChanged(this.value)">
                 <!-- Opciones generadas dinámicamente -->
               </select>
             </div>
             <div class="form-group" id="excelImportSheetSelectorContainer" style="margin-bottom: 0; display: none;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <label style="font-size: 11.5px; font-weight: 700; margin-bottom: 0;">Hoja del Libro Excel a Procesar:</label>
-                <span id="excelImportSheetAutoBadge" style="font-size: 10px; color: var(--color-green); font-weight: 700;"></span>
+                <label style="font-size: 12px; font-weight: 700; margin-bottom: 0;">Hoja del Libro Excel a Procesar:</label>
+                <span id="excelImportSheetAutoBadge" style="font-size: 12px; color: var(--color-green); font-weight: 700;"></span>
               </div>
               <select id="excelImportSheetSelect" class="form-control" style="font-size: 12.5px;" onchange="App.onExcelImportSheetChanged(this.value)">
                 <!-- Opciones de hojas -->
@@ -784,9 +784,9 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
               <div>
                 <b style="font-size: 12px; color: var(--uat-blue-night);">📅 Delimitación de Semanas / Fechas por Unidad:</b>
-                <span id="excelImportDatesTotalBadge" style="font-size: 11px; margin-left: 6px; color: var(--text-tertiary);"></span>
+                <span id="excelImportDatesTotalBadge" style="font-size: 12px; margin-left: 6px; color: var(--text-tertiary);"></span>
               </div>
-              <button type="button" class="btn btn-xs btn-default" onclick="App.autoDistributeExcelDatesEvenly()" style="font-size: 10.5px; font-weight: 700; color: var(--uat-orange); border-color: var(--uat-orange);">
+              <button type="button" class="btn btn-xs btn-default" onclick="App.autoDistributeExcelDatesEvenly()" style="font-size: 12px; padding: 4px 10px; font-weight: 700; color: #a84b15; border-color: #a84b15;">
                 🪄 Repartir Fechas Equitativamente
               </button>
             </div>
@@ -810,9 +810,9 @@
         <div id="excelImportPreviewContainer" style="display: none; margin-top: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <span style="font-size: 12px; font-weight: 700; color: var(--uat-blue-night);">Previsualización de Coincidencias en el Grupo:</span>
-            <span id="excelImportMatchCountBadge" style="font-size: 11px; font-weight: 700;" class="status-badge status-aprobado">0 / 0</span>
+            <span id="excelImportMatchCountBadge" style="font-size: 12px; font-weight: 700;" class="status-badge status-aprobado">0 / 0</span>
           </div>
-          <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px;">
+          <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 6px;">
             <table class="notion-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
               <thead>
                 <tr style="background: var(--bg-hover); position: sticky; top: 0; z-index: 2;">
@@ -888,7 +888,7 @@
         </p>
         <div id="syncRosterProgressWrap" style="display: none; margin-bottom: 16px;">
           <div style="background: var(--border-color); border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 8px;">
-            <div id="syncRosterProgressBar" style="width: 0%; height: 100%; background: var(--uat-orange); transition: width 0.2s ease;"></div>
+            <div id="syncRosterProgressBar" style="width: 0%; height: 100%; background: var(--uat-orange);"></div>
           </div>
           <div id="syncRosterStatusText" style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">Iniciando...</div>
         </div>
@@ -979,7 +979,7 @@
           </div>
           <div>
             <h3 style="margin: 0; font-size: 16px;">Administración de Cuenta Docente</h3>
-            <span style="font-size: 11px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase;">Coordinación Académica FIUAT</span>
+            <span style="font-size: 12px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase;">Coordinación Académica FIUAT</span>
           </div>
         </div>
         <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeAdminManageTeacherModal()">✕</button>
@@ -991,7 +991,7 @@
         <div style="background: var(--bg-hover); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 16px;">
           <div id="adminManageTeacherNombre" style="font-weight: 700; color: var(--text-primary); font-size: 14.5px; margin-bottom: 2px;"></div>
           <div id="adminManageTeacherUsuario" style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 2px;"></div>
-          <div id="adminManageTeacherDepto" style="font-size: 11.5px; color: var(--text-tertiary);"></div>
+          <div id="adminManageTeacherDepto" style="font-size: 12px; color: var(--text-tertiary);"></div>
         </div>
 
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.45;">
@@ -1000,7 +1000,7 @@
 
         <!-- Botón de Restablecimiento Rápido a 123 -->
         <div style="margin-bottom: 16px;">
-          <button type="button" class="btn btn-default btn-sm" onclick="App.adminQuickResetDefault()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--uat-orange); color: var(--uat-orange); font-weight: 700; background: rgba(224, 90, 43, 0.05); padding: 9px 12px;">
+          <button type="button" class="btn btn-default btn-sm" onclick="App.adminQuickResetDefault()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: #a84b15; color: #a84b15; font-weight: 700; background: rgba(224, 90, 43, 0.05); padding: 9px 12px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
             <span>Restablecer a Clave Predeterminada ("123")</span>
           </button>
@@ -1038,7 +1038,7 @@
               👁️
             </button>
           </div>
-          <small style="color: var(--text-tertiary); font-size: 11px; display: block; margin-top: 4px;">Requerido criptográficamente por la base de datos para validar la autorización.</small>
+          <small style="color: var(--text-tertiary); font-size: 12px; display: block; margin-top: 4px;">Requerido criptográficamente por la base de datos para validar la autorización.</small>
         </div>
       </div>
       <div class="modal-footer">
@@ -1082,9 +1082,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=56"></script>
-  <script src="sample_data.js?v=56"></script>
-  <script src="exporter.js?v=56"></script>
-  <script src="app.js?v=56"></script>
+  <script src="supabase_service.js?v=57"></script>
+  <script src="sample_data.js?v=57"></script>
+  <script src="exporter.js?v=57"></script>
+  <script src="app.js?v=57"></script>
 </body>
 </html>

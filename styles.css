@@ -60,12 +60,12 @@
   color-scheme: light;
 
   /* Colores Institucionales FIUAT - UAT */
-  --uat-blue-night: #212052;     /* Azul Noche UAT */
-  --uat-blue-navy: #353372;      /* Azul Marino FI */
+  --uat-blue-night: #0f2744;     /* Azul Noche UAT Institucional */
+  --uat-blue-navy: #1b2a4a;      /* Azul Marino FI */
   --uat-orange: #e07e33;         /* Naranja UAT Primario */
   --uat-orange-dark: #c1672a;    /* Naranja Degradado / Sombra */
   --uat-orange-light: #fff2e6;   /* Fondo suave Naranja */
-  --fiuat-red: #dd3333;          /* Rojo Acento FI */
+  --fiuat-red: #b91c1c;          /* Rojo Acento FI (WCAG AA > 5.5:1) */
   --fiuat-wine: #772030;         /* Guinda / Vino Universitario */
 
   /* UI Tokens */
@@ -73,7 +73,7 @@
   --bg-secondary: #fbfbfa;
   --bg-hover: #f4f4f2;
   --bg-selected: #eaeae7;
-  --text-primary: #212052;
+  --text-primary: #0f2744;
   --text-secondary: #555555;
   --text-tertiary: #888888;
   --border-color: #e4e4e2;
@@ -87,17 +87,17 @@
   --color-green-bg: #e6f6f2;
   --color-orange: #e07e33;
   --color-orange-bg: #faebd7;
-  --color-red: #dd3333;
+  --color-red: #b91c1c;
   --color-red-bg: #fdebec;
-  --color-blue: #353372;
-  --color-blue-bg: #eef0f8;
+  --color-blue: #1e3a8a;
+  --color-blue-bg: #eff6ff;
 
   --font-sans: 'Visby CF', 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "SFMono-Regular", Menlo, Consolas, "PT Mono", monospace;
 
-  --shadow-sm: 0 1px 3px rgba(33, 32, 82, 0.06);
-  --shadow-md: 0 4px 14px rgba(33, 32, 82, 0.08);
-  --shadow-lg: 0 12px 28px rgba(33, 32, 82, 0.14);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 10px -1px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 8px 16px -2px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
   --radius-sm: 5px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -125,12 +125,12 @@
   --color-orange-bg: #3d2a13;
   --color-red: #f87171;
   --color-red-bg: #3d1c1c;
-  --color-blue: #7280bd;
-  --color-blue-bg: #1c2138;
+  --color-blue: #60a5fa;
+  --color-blue-bg: #1e293b;
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.65);
 }
 
 /* ==========================================================================
@@ -542,7 +542,7 @@ body {
 select optgroup,
 optgroup {
   background-color: var(--bg-card, #ffffff);
-  color: var(--uat-blue-night, #212052);
+  color: var(--uat-blue-night, #0f2744);
   font-weight: 700;
   font-style: normal;
   padding: 6px 10px;
@@ -773,7 +773,7 @@ option {
   white-space: nowrap;
   flex-shrink: 0;
   box-sizing: border-box;
-  line-height: 1;
+  line-height: 1.35;
 }
 
 .btn:active {
@@ -800,12 +800,12 @@ option {
 .btn-primary {
   background: linear-gradient(135deg, var(--uat-orange), var(--uat-orange-dark));
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(224, 126, 51, 0.3);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .btn-primary:hover {
   background: linear-gradient(135deg, #ea873d, #c96d30);
-  box-shadow: 0 4px 10px rgba(224, 126, 51, 0.4);
+  box-shadow: 0 4px 8px -1px rgba(15, 23, 42, 0.14), 0 2px 4px -2px rgba(15, 23, 42, 0.08);
 }
 
 .btn-success {
@@ -917,21 +917,21 @@ option {
 }
 
 .btn-focus-toggle:hover {
-  border-color: var(--uat-orange);
-  color: var(--uat-orange);
+  border-color: #a84b15;
+  color: #a84b15;
 }
 
 .freeze-panes-hint {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--uat-blue-night);
-  background: rgba(33, 32, 82, 0.05);
+  background: rgba(15, 23, 42, 0.05);
   padding: 3px 8px;
   border-radius: 12px;
-  border: 1px solid rgba(33, 32, 82, 0.1);
+  border: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 [data-theme="dark"] .freeze-panes-hint {
@@ -1022,7 +1022,7 @@ option {
   color: var(--uat-blue-night);
   white-space: nowrap;
   user-select: none;
-  box-shadow: 0 3px 6px rgba(33, 32, 82, 0.12);
+  box-shadow: 0 3px 6px rgba(15, 23, 42, 0.08);
 }
 
 [data-theme="dark"] .notion-table thead th {
@@ -1055,7 +1055,7 @@ option {
   width: 270px;
   min-width: 270px;
   max-width: 270px;
-  box-shadow: 4px 0 8px rgba(33, 32, 82, 0.1);
+  box-shadow: 4px 0 8px rgba(15, 23, 42, 0.06);
 }
 
 /* 4. Pie de tabla (Total Alumnos) inmovilizado a la izquierda */
@@ -1064,7 +1064,7 @@ option {
   left: 0 !important;
   z-index: 20 !important;
   background-color: var(--bg-secondary) !important;
-  box-shadow: 4px 0 8px rgba(33, 32, 82, 0.1);
+  box-shadow: 4px 0 8px rgba(15, 23, 42, 0.06);
 }
 
 /* 5. Esquinas superiores izquierdas (Intersección de fila de encabezados y columnas 1 y 2):
@@ -1085,7 +1085,7 @@ option {
   z-index: 65 !important;
   background-color: var(--bg-secondary) !important;
   background-clip: padding-box !important;
-  box-shadow: 4px 3px 8px rgba(33, 32, 82, 0.15) !important;
+  box-shadow: 4px 3px 8px rgba(15, 23, 42, 0.08) !important;
 }
 
 /* Efecto hover en filas manteniendo opacidad sólida en las columnas fijas */
@@ -1336,11 +1336,11 @@ option {
 .progress-fill {
   height: 100%;
   border-radius: 3px;
-  transition: width 0.3s ease, background-color 0.2s;
+  transition: background-color 0.2s;
 }
 
 .status-badge {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
@@ -1388,7 +1388,7 @@ option {
 
 .summary-label {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -1417,14 +1417,14 @@ option {
 .summary-chip-editable:hover {
   border-color: var(--uat-orange);
   background: var(--bg-primary);
-  box-shadow: 0 1px 4px rgba(224, 126, 51, 0.2);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .footer-max-firmas-input {
   width: 32px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--uat-orange);
+  color: #a84b15;
   font-size: 13px;
   font-weight: 800;
   text-align: center;
@@ -1439,6 +1439,7 @@ option {
 .footer-max-firmas-input:hover {
   background: var(--bg-secondary);
   border-color: var(--border-color);
+  color: #a84b15;
 }
 
 .footer-max-firmas-input:focus {
@@ -1643,12 +1644,11 @@ option {
 .student-result-card {
   margin-top: 20px;
   background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-left: 4px solid var(--uat-orange);
+  border: 1px solid rgba(224, 126, 51, 0.35);
   border-radius: var(--radius-md);
   padding: 20px;
   text-align: left;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ==========================================================================
@@ -1806,12 +1806,12 @@ textarea.form-control {
   font-weight: 700;
   transition: all 0.15s ease;
   user-select: none;
-  line-height: 1;
+  line-height: 1.35;
 }
 
 .btn-delete-row:hover {
   background: rgba(235, 87, 87, 0.12);
-  color: var(--color-red);
+  color: #b91c1c;
   transform: scale(1.15);
 }
 
@@ -1904,7 +1904,7 @@ textarea.form-control {
   display: flex;
   flex-direction: column;
   text-align: left;
-  line-height: 1.15;
+  line-height: 1.35;
 }
 
 .teacher-name-mini {
@@ -1918,7 +1918,7 @@ textarea.form-control {
 }
 
 .teacher-depto-mini {
-  font-size: 10px;
+  font-size: 11.5px;
   color: var(--uat-orange-light);
   font-weight: 500;
   max-width: 150px;
@@ -2000,7 +2000,7 @@ textarea.form-control {
 
 .teacher-badge-depto {
   display: inline-block;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
@@ -2051,8 +2051,7 @@ textarea.form-control {
   align-items: center;
   justify-content: center;
   padding: 32px 16px;
-  background: radial-gradient(circle at 50% 20%, rgba(224, 126, 51, 0.08) 0%, transparent 60%),
-              radial-gradient(circle at 80% 80%, rgba(33, 32, 82, 0.1) 0%, transparent 50%);
+  background: var(--bg-secondary);
 }
 
 .login-card {
@@ -2061,19 +2060,13 @@ textarea.form-control {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  box-shadow: 0 16px 40px rgba(33, 32, 82, 0.15);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
   overflow: hidden;
   position: relative;
 }
 
-.login-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--uat-blue-navy), var(--uat-orange), var(--uat-orange-dark));
+[data-theme="dark"] .login-card {
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
 }
 
 .login-header {
@@ -2211,7 +2204,7 @@ textarea.form-control {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: 0 4px 12px rgba(224, 126, 51, 0.3);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.06);
   transition: all 0.15s ease;
   font-family: inherit;
   margin-top: 20px;
@@ -2219,7 +2212,7 @@ textarea.form-control {
 
 .btn-login-submit:hover {
   background: linear-gradient(135deg, #ea873d, #c96d30);
-  box-shadow: 0 6px 16px rgba(224, 126, 51, 0.4);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16), 0 3px 6px rgba(15, 23, 42, 0.08);
   transform: translateY(-1px);
 }
 
@@ -2235,7 +2228,7 @@ textarea.form-control {
 }
 
 .demo-teachers-title {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -2297,19 +2290,25 @@ textarea.form-control {
 }
 
 .demo-sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
   margin-top: 2px;
 }
 
 .demo-badge-enter {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: var(--uat-orange);
-  background: rgba(224, 126, 51, 0.12);
+  color: #a84b15;
+  background: rgba(224, 126, 51, 0.14);
   padding: 3px 8px;
   border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.demo-teacher-card:hover .demo-badge-enter {
+  color: #8c3605;
+  background: rgba(224, 126, 51, 0.22);
 }
 
 /* ==========================================================================
@@ -2366,7 +2365,7 @@ textarea.form-control {
 .badge-role-admin {
   background: linear-gradient(135deg, #ffd700, #ffa500);
   color: #3b2300;
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-weight: 900;
   padding: 2px 6px;
   border-radius: 4px;
@@ -2515,7 +2514,7 @@ textarea.form-control {
   font-size: 26px;
   font-weight: 800;
   color: var(--text-primary);
-  line-height: 1.1;
+  line-height: 1.25;
 }
 
 .admin-stat-label {
@@ -2565,7 +2564,7 @@ textarea.form-control {
 
 .admin-teacher-card:hover {
   border-color: var(--uat-orange);
-  box-shadow: 0 8px 24px rgba(33, 32, 82, 0.12);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
   transform: translateY(-2px);
 }
 
@@ -2613,7 +2612,7 @@ textarea.form-control {
 
 .admin-teacher-depto {
   display: inline-block;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
   background: var(--uat-orange-light);
   color: var(--uat-orange-dark);
@@ -2673,7 +2672,7 @@ textarea.form-control {
 .btn-supervise:hover {
   background: linear-gradient(135deg, var(--uat-orange), var(--uat-orange-dark));
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(224, 126, 51, 0.3);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
 }
 
 /* Indicador de Estado de Conexión en la Nube (Firebase) */
@@ -2787,7 +2786,7 @@ textarea.form-control {
 /* Indicador móvil en la celda del alumno */
 .rollup-mobile-hint {
   display: none;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   background: var(--uat-orange-light);
   color: var(--uat-orange-dark);
@@ -2890,7 +2889,7 @@ textarea.form-control {
 }
 
 .student-mobile-final-summary {
-  background: linear-gradient(135deg, rgba(33, 32, 82, 0.05), rgba(224, 126, 51, 0.08));
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 14px;
@@ -3674,13 +3673,13 @@ textarea.form-control {
 .badge-edit {
   background: var(--uat-orange);
   color: #fff;
-  box-shadow: 0 1px 4px rgba(224, 126, 51, 0.3);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .badge-audit {
   background: #2563eb;
   color: #fff;
-  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .supervision-info-text {
@@ -3692,7 +3691,7 @@ textarea.form-control {
 }
 
 .supervision-hint {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
@@ -3747,7 +3746,7 @@ textarea.form-control {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 10px;
@@ -3793,7 +3792,8 @@ textarea.form-control {
 }
 
 .card-sin-derecho {
-  border-left: 3px solid var(--color-red) !important;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+  background-color: rgba(239, 68, 68, 0.04) !important;
 }
 
 .badge-faltas-loss {
@@ -3860,7 +3860,7 @@ textarea.form-control {
   background: var(--uat-blue-night);
   color: #ffffff;
   border-color: var(--uat-blue-night);
-  box-shadow: 0 2px 6px rgba(11, 43, 91, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 [data-theme="dark"] .attendance-unit-chip.active {
@@ -4122,7 +4122,7 @@ textarea.form-control {
 .session-pill.active {
   background: var(--bg-primary);
   border: 1.5px solid var(--uat-orange);
-  box-shadow: 0 2px 8px rgba(242, 107, 15, 0.15);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .session-pill-date {
@@ -4132,7 +4132,7 @@ textarea.form-control {
 }
 
 .session-pill-title {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
   max-width: 120px;
   overflow: hidden;
@@ -4165,8 +4165,8 @@ textarea.form-control {
   padding: 7px 14px;
   border-radius: var(--radius-md);
   background: transparent;
-  border: 1px dashed var(--uat-orange);
-  color: var(--uat-orange);
+  border: 1px dashed #a84b15;
+  color: #a84b15;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -4175,7 +4175,9 @@ textarea.form-control {
 }
 
 .btn-add-session-pill:hover {
-  background: rgba(242, 107, 15, 0.08);
+  background: rgba(224, 126, 51, 0.12);
+  color: #8c3605;
+  border-color: #8c3605;
 }
 
 /* Tarjeta Activa de Sesión y Estadísticas */
@@ -4327,13 +4329,13 @@ textarea.form-control {
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
+  line-height: 1.35;
   transition: all 0.12s ease;
 }
 
 .btn-part-step:hover:not(:disabled) {
-  border-color: var(--uat-orange);
-  color: var(--uat-orange);
+  border-color: #a84b15;
+  color: #a84b15;
   background: var(--bg-primary);
 }
 
@@ -4351,7 +4353,7 @@ textarea.form-control {
 }
 
 .part-count-badge.has-parts {
-  color: var(--uat-orange);
+  color: #a84b15;
   font-weight: 800;
 }
 
@@ -4407,7 +4409,7 @@ textarea.form-control {
   background: var(--uat-orange);
   color: #ffffff;
   border: none;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 12px;
@@ -4441,19 +4443,19 @@ textarea.form-control {
 }
 
 .att-header-dayname {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-tertiary);
   letter-spacing: 0.4px;
-  line-height: 1;
+  line-height: 1.35;
 }
 
 .att-header-daynum {
   font-size: 13.5px;
   font-weight: 800;
   color: var(--text-primary);
-  line-height: 1.1;
+  line-height: 1.3;
   margin-top: 1px;
 }
 
@@ -4494,13 +4496,13 @@ textarea.form-control {
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: 11.5px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  line-height: 1;
+  line-height: 1.35;
   transition: all 0.12s ease;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
@@ -4666,9 +4668,9 @@ textarea.form-control {
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.35;
   vertical-align: middle;
   margin: 0 3px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -4791,7 +4793,7 @@ textarea.form-control {
 
   .attendance-sabana-table {
     width: 100% !important;
-    font-size: 10px !important;
+    font-size: 11.5px !important;
   }
 
   .att-grid-badge {
@@ -4800,7 +4802,7 @@ textarea.form-control {
     color: #000 !important;
     width: 22px !important;
     height: 20px !important;
-    font-size: 10px !important;
+    font-size: 11.5px !important;
   }
 }
 
@@ -4812,20 +4814,18 @@ textarea.form-control {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  background: linear-gradient(135deg, rgba(2, 132, 199, 0.05) 0%, rgba(245, 158, 11, 0.05) 100%);
-  border: 1px solid rgba(2, 132, 199, 0.2);
-  border-left: 4px solid var(--uat-blue-night, #0f2744);
+  background: rgba(2, 132, 199, 0.04);
+  border: 1px solid rgba(2, 132, 199, 0.25);
   border-radius: 10px;
   padding: 10px 14px;
   margin: 10px 0 12px 0;
   flex-wrap: wrap;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme="dark"] .uat-calendar-strip {
-  background: linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, rgba(245, 158, 11, 0.1) 100%);
-  border-color: rgba(2, 132, 199, 0.35);
-  border-left-color: #38bdf8;
+  background: rgba(2, 132, 199, 0.1);
+  border-color: rgba(56, 189, 248, 0.3);
 }
 
 .uat-cal-strip-info {
@@ -4837,7 +4837,7 @@ textarea.form-control {
 
 .uat-cal-icon {
   font-size: 26px;
-  line-height: 1;
+  line-height: 1.3;
 }
 
 .uat-cal-title {
@@ -4850,7 +4850,7 @@ textarea.form-control {
 }
 
 .uat-cal-badge-pill {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 12px;
@@ -4907,7 +4907,7 @@ textarea.form-control {
 .uat-cal-milestone.milestone-pago .milestone-badge {
   color: #b45309;
   font-weight: 800;
-  font-size: 10px;
+  font-size: 11.5px;
   letter-spacing: 0.3px;
 }
 
@@ -4929,7 +4929,7 @@ textarea.form-control {
 .uat-cal-milestone.milestone-altasbajas .milestone-badge {
   color: #0284c7;
   font-weight: 800;
-  font-size: 10px;
+  font-size: 11.5px;
   letter-spacing: 0.3px;
 }
 
@@ -4945,7 +4945,7 @@ textarea.form-control {
 }
 
 .milestone-deadline {
-  font-size: 10px;
+  font-size: 11.5px;
   color: var(--text-secondary);
 }
 
@@ -4978,9 +4978,9 @@ textarea.form-control {
 
 .att-header-badge-tag {
   display: inline-block;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.35;
   padding: 2px 4px;
   border-radius: 4px;
   margin-top: 3px;
@@ -5053,7 +5053,7 @@ textarea.form-control {
 .official-cal-table th {
   text-align: center;
   padding: 3px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-tertiary);
   border-bottom: 1px solid var(--border-color);
@@ -5117,15 +5117,15 @@ textarea.form-control {
 
 /* Evaluaciones ordinarias */
 .cal-day-cell.day-ordinarias {
-  background: rgba(168, 85, 247, 0.2);
-  color: #7e22ce;
+  background: rgba(37, 99, 235, 0.14);
+  color: #1d4ed8;
   font-weight: 700;
-  border: 1px solid rgba(168, 85, 247, 0.4);
+  border: 1px solid rgba(37, 99, 235, 0.35);
 }
 
 [data-theme="dark"] .cal-day-cell.day-ordinarias {
-  background: rgba(168, 85, 247, 0.3);
-  color: #c084fc;
+  background: rgba(37, 99, 235, 0.25);
+  color: #93c5fd;
 }
 
 /* Días inhábiles oficiales */
@@ -5145,7 +5145,7 @@ textarea.form-control {
   background: var(--bg-secondary);
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .cal-legend-item {
@@ -5189,7 +5189,7 @@ textarea.form-control {
   background: rgba(16, 185, 129, 0.14);
   color: var(--color-green);
   border: 1px solid rgba(16, 185, 129, 0.3);
-  font-size: 10.5px;
+  font-size: 11.5px;
   padding: 2px 7px;
   border-radius: 4px;
   font-weight: 700;
@@ -5200,7 +5200,7 @@ textarea.form-control {
   background: rgba(43, 122, 120, 0.14);
   color: #2b7a78;
   border: 1px solid rgba(43, 122, 120, 0.3);
-  font-size: 10.5px;
+  font-size: 11.5px;
   padding: 2px 7px;
   border-radius: 4px;
   font-weight: 700;
@@ -5211,7 +5211,7 @@ textarea.form-control {
   background: rgba(156, 163, 175, 0.14);
   color: var(--text-tertiary);
   border: 1px solid rgba(156, 163, 175, 0.25);
-  font-size: 10.5px;
+  font-size: 11.5px;
   padding: 2px 7px;
   border-radius: 4px;
   font-weight: 600;
