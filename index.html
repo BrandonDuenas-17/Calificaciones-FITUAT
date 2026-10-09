@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.10.08.v62";
+      const CURRENT_APP_VERSION = "2026.10.09.v63";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=62">
+  <link rel="stylesheet" href="styles.css?v=63">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -299,16 +299,9 @@
 </head>
 <body>
 
-  <!-- Barra Superior Institucional FIT - UAT con Acabado macOS Executive -->
+  <!-- Barra Superior Institucional FIT - UAT -->
   <header class="notion-header">
     <div class="notion-topbar">
-      <!-- Controles de Ventana macOS (Traffic Lights) -->
-      <div class="mac-window-controls" title="macOS Executive Shell">
-        <span class="mac-dot mac-dot-close" title="Cerrar sesión" onclick="App.logout()"></span>
-        <span class="mac-dot mac-dot-minimize" title="Restaurar / Minimizar vista" onclick="App.toggleGradebookFocusMode()"></span>
-        <span class="mac-dot mac-dot-zoom" title="Maximizar calificador / Modo Enfoque (⌘F)" onclick="App.toggleGradebookFocusMode()"></span>
-      </div>
-
       <div class="workspace-badge">
         <div class="workspace-logo-container" title="Facultad de Ingeniería Tampico • UAT">
           <img src="Logos/FI-COLOR-HORIZONTAL-trim.png" alt="Facultad de Ingeniería Tampico" class="workspace-logo-img" />
@@ -1134,9 +1127,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=62"></script>
-  <script src="sample_data.js?v=62"></script>
-  <script src="exporter.js?v=62"></script>
-  <script src="app.js?v=62"></script>
+  <script src="supabase_service.js?v=63"></script>
+  <script src="sample_data.js?v=63"></script>
+  <script src="exporter.js?v=63"></script>
+  <script src="app.js?v=63"></script>
 </body>
 </html>
