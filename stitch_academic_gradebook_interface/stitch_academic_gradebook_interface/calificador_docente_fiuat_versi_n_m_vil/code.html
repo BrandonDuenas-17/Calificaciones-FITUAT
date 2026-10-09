@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+
+<html lang="es"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "error": "#ba1a1a", "on-background": "#1d1b1b", "surface-container": "#f3ecec", "inverse-primary": "#ffb4a8", "on-tertiary": "#ffffff", "on-primary-container": "#ffd0c9", "inverse-on-surface": "#f6efef", "on-error": "#ffffff", "tertiary": "#4a4747", "on-secondary-fixed": "#3f0400", "surface-dim": "#ded9d8", "tertiary-fixed-dim": "#cac5c5", "background": "#fef8f7", "on-primary-fixed": "#410000", "on-secondary-container": "#660a00", "surface-container-low": "#f8f2f2", "surface-container-high": "#ede7e6", "secondary-fixed": "#ffdad3", "secondary-container": "#fb6b50", "on-primary": "#ffffff", "surface-container-highest": "#e7e1e1", "inverse-surface": "#323030", "surface-container-lowest": "#ffffff", "outline": "#906f6a", "primary-fixed": "#ffdad4", "secondary-fixed-dim": "#ffb4a5", "on-surface-variant": "#5c403b", "secondary": "#ac331e", "on-tertiary-fixed": "#1d1b1b", "primary": "#960200", "on-surface": "#1d1b1b", "surface": "#fef8f7", "on-primary-fixed-variant": "#930200", "surface-bright": "#fef8f7", "tertiary-fixed": "#e7e1e1", "outline-variant": "#e5bdb7", "on-tertiary-container": "#dfd9d9", "error-container": "#ffdad6", "primary-fixed-dim": "#ffb4a8", "surface-variant": "#e7e1e1", "surface-tint": "#bc160a", "on-error-container": "#93000a", "on-secondary-fixed-variant": "#8b1a07", "on-secondary": "#ffffff", "tertiary-container": "#625f5f", "primary-container": "#be180c", "on-tertiary-fixed-variant": "#494646" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-lg": "0.875rem", "space-xl": "1.25rem", "margin": "0.875rem", "space-xs": "0.25rem", "gutter": "0.75rem", "space-sm": "0.375rem", "space-md": "0.625rem" }, "fontFamily": { "display": ["Space Grotesk"], "headline-md": ["Space Grotesk"], "body-default": ["Plus Jakarta Sans"], "body-caption": ["Plus Jakarta Sans"], "label-code": ["Space Grotesk"], "body-numeric": ["Space Grotesk"], "headline-lg": ["Space Grotesk"], "label-badge": ["Space Grotesk"], "title-sm": ["Plus Jakarta Sans"] }, "fontSize": { "display": ["1.625rem", { "lineHeight": "2rem", "letterSpacing": "-0.02em", "fontWeight": "700" }], "headline-md": ["1rem", { "lineHeight": "1.25rem", "fontWeight": "600" }], "body-default": ["0.8125rem", { "lineHeight": "1.125rem", "fontWeight": "400" }], "body-caption": ["0.75rem", { "lineHeight": "1rem", "fontWeight": "400" }], "label-code": ["0.75rem", { "lineHeight": "0.875rem", "letterSpacing": "0.05em", "fontWeight": "600" }], "body-numeric": ["0.8125rem", { "lineHeight": "1.125rem", "letterSpacing": "0.02em", "fontWeight": "500" }], "headline-lg": ["1.25rem", { "lineHeight": "1.5rem", "letterSpacing": "-0.015em", "fontWeight": "700" }], "label-badge": ["0.6875rem", { "lineHeight": "0.875rem", "letterSpacing": "0.04em", "fontWeight": "700" }], "title-sm": ["0.875rem", { "lineHeight": "1.125rem", "fontWeight": "600" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-default text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 inset-x-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-14 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm"><div class="flex items-center gap-space-xs"><span class="bg-primary text-on-primary font-headline-md text-headline-md px-space-xs py-0.5 rounded-lg tracking-tight">FIUAT</span><span class="text-on-surface-variant font-label-code text-label-code opacity-75">UAT</span></div><div class="flex items-center gap-1 bg-surface-container-high px-space-xs py-0.5 rounded-lg"><span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span><span class="material-symbols-outlined text-[14px] text-tertiary">cloud_done</span><span class="font-label-badge text-label-badge text-tertiary">SYNC</span></div></div><div class="flex items-center gap-space-xs"><button aria-label="Cambiar tema" class="w-11 h-11 flex items-center justify-center rounded-lg text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="flex items-center gap-space-xs pl-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-14 pb-20 bg-surface"><div class="flex flex-col w-full">
+<!-- 1. Header Contextual & Metadatos de Materia -->
+<div class="px-margin pt-space-xs pb-space-sm bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex flex-col min-w-0">
+<span class="text-secondary font-label-badge text-label-badge uppercase tracking-wider">FIUAT • Tronco Común</span>
+<h1 class="font-headline-md text-headline-md text-on-surface truncate tracking-tight">CREATIVIDAD, INNOVACIÓN Y CALIDAD LABORAL</h1>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+</div>
+</div>
+<!-- Píldoras de Metadatos -->
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="inline-flex items-center gap-1 bg-surface-container px-space-xs py-0.5 rounded-lg text-on-surface-variant font-label-code text-label-code">
+<span class="material-symbols-outlined text-[13px] text-primary">groups</span>
+        Grupo M
+      </span>
+<span class="inline-flex items-center gap-1 bg-surface-container px-space-xs py-0.5 rounded-lg text-on-surface-variant font-label-code text-label-code">
+<span class="material-symbols-outlined text-[13px] text-tertiary">calendar_month</span>
+        2026 - 3 OTOÑO
+      </span>
+<span class="inline-flex items-center gap-1 bg-surface-container-high px-space-xs py-0.5 rounded-lg text-primary font-label-badge text-label-badge">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+        19 ALUMNOS
+      </span>
+</div>
+<!-- Switcher de Unidades de Evaluación (Scroll Horizontal) -->
+<div class="flex items-center gap-space-xs overflow-x-auto py-1 mt-0.5 no-scrollbar">
+<button class="unit-tab shrink-0 px-space-md py-1 rounded-lg bg-primary-container text-on-primary font-label-code text-label-code flex items-center gap-1 transition-all" data-unit="U1">
+<span>U1: Fundamentos</span>
+<span class="bg-primary px-1 py-0.2 rounded text-[10px]">Activa</span>
+</button>
+<button class="unit-tab shrink-0 px-space-md py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all" data-unit="U2">
+        U2: Metodologías
+      </button>
+<button class="unit-tab shrink-0 px-space-md py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all" data-unit="U3">
+        U3: Calidad
+      </button>
+<button class="unit-tab shrink-0 px-space-md py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all" data-unit="U4">
+        U4: Prototipado
+      </button>
+<button class="unit-tab shrink-0 px-space-md py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all" data-unit="U5">
+        U5: Auditoría
+      </button>
+<button class="unit-tab shrink-0 px-space-md py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all" data-unit="Final">
+        Final Ordinario
+      </button>
+</div>
+</div>
+<!-- 2. Barra de Métricas y KPIs Condensados -->
+<div class="px-margin py-space-xs bg-surface-container-low shadow-sm">
+<div class="grid grid-cols-3 gap-space-xs text-center">
+<div class="bg-surface-container-lowest p-space-xs rounded-lg flex flex-col items-center">
+<span class="text-on-surface-variant font-body-caption text-body-caption">Promedio U1</span>
+<span class="font-body-numeric text-title-sm text-primary font-bold">8.64</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xs rounded-lg flex flex-col items-center">
+<span class="text-on-surface-variant font-body-caption text-body-caption">Tasa Aprob.</span>
+<span class="font-body-numeric text-title-sm text-on-surface font-bold">94.7%</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xs rounded-lg flex flex-col items-center">
+<span class="text-on-surface-variant font-body-caption text-body-caption">Entregas</span>
+<span class="font-body-numeric text-title-sm text-on-surface font-bold">18 / 19</span>
+</div>
+</div>
+</div>
+<!-- 3. Barra de Acciones Rápidas Táctil -->
+<div class="px-margin py-space-xs bg-surface flex items-center justify-between gap-space-xs">
+<!-- Buscador Táctil Compacto -->
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-tertiary text-[18px]">search</span>
+<input class="w-full h-8 pl-8 pr-2 bg-surface-container-low rounded-lg font-body-default text-body-default text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-sm" id="student-search" placeholder="Buscar por matrícula o nombre..." type="text"/>
+</div>
+<!-- Botón Rápido Primario Carmesí -->
+<button class="h-8 px-space-sm bg-primary-container hover:bg-primary text-on-primary font-title-sm text-title-sm rounded-lg shadow-sm flex items-center gap-1 shrink-0 active:scale-95 transition-transform" id="btn-quick-grade">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+<span>+ Evaluar</span>
+</button>
+<!-- Botones Secundarios -->
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-on-surface-variant hover:text-on-surface flex items-center justify-center shrink-0 shadow-sm active:bg-surface-container" id="btn-filter">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-on-surface-variant hover:text-on-surface flex items-center justify-center shrink-0 shadow-sm active:bg-surface-container" title="Descargar Acta">
+<span class="material-symbols-outlined text-[18px]">file_download</span>
+</button>
+</div>
+<!-- 4. Cuadrícula / Tarjetas Académicas Touch-Friendly -->
+<div class="px-margin py-space-xs flex flex-col gap-space-xs pb-safe" id="student-cards-container">
+<!-- Tarjeta Estudiante 1 -->
+<div class="student-card bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-space-xs relative overflow-hidden" data-id="220300184" data-name="ARMENTA RODRIGUEZ VALERIA ALEJANDRA">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-label-code text-primary bg-primary-fixed px-1.5 py-0.5 rounded">220300184</span>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-label-badge bg-surface-container text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              PRESENTE
+            </span>
+</div>
+<h2 class="font-headline-md text-body-default text-on-surface uppercase truncate mt-0.5 font-bold tracking-tight">ARMENTA RODRIGUEZ VALERIA ALEJANDRA</h2>
+</div>
+<span class="px-2 py-0.5 rounded-lg text-emerald-800 bg-emerald-100 font-label-badge text-label-badge font-bold shrink-0">APROB</span>
+</div>
+<!-- Fila de Calificaciones Táctiles (Firmas, Examen y Promedio) -->
+<div class="grid grid-cols-3 gap-space-xs pt-1 bg-surface-container-low p-space-xs rounded-lg items-center">
+<!-- Control Táctil Firmas -->
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Firmas (40%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<button class="btn-firmas-dec w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">-</button>
+<span class="val-firmas font-body-numeric text-title-sm text-on-surface font-semibold w-6 text-center">9</span>
+<button class="btn-firmas-inc w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">+</button>
+<span class="text-tertiary text-[11px]">/10</span>
+</div>
+</div>
+<!-- Examen Editable Rápido -->
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Examen (60%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<input class="input-grade w-12 h-6 px-1 text-center bg-surface-container-lowest rounded font-body-numeric text-body-numeric font-bold text-on-surface shadow-xs focus:bg-surface-container-lowest focus:text-primary outline-none" max="10" min="0" step="0.5" type="number" value="9.5"/>
+<span class="text-tertiary text-[11px]">pts</span>
+</div>
+</div>
+<!-- Calificación Resultante Acentuada -->
+<div class="flex flex-col items-end justify-center pl-1">
+<span class="text-secondary font-label-badge text-[10px] uppercase font-bold">U1 Final</span>
+<div class="flex items-baseline gap-0.5">
+<span class="score-display font-body-numeric text-headline-md font-bold text-primary">9.3</span>
+<span class="text-on-surface-variant font-label-badge text-[10px]">/10</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tarjeta Estudiante 2 -->
+<div class="student-card bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-space-xs relative overflow-hidden" data-id="220300192" data-name="BELTRAN VAZQUEZ ANGEL ADRIAN">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-label-code text-primary bg-primary-fixed px-1.5 py-0.5 rounded">220300192</span>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-label-badge bg-surface-container text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              PRESENTE
+            </span>
+</div>
+<h2 class="font-headline-md text-body-default text-on-surface uppercase truncate mt-0.5 font-bold tracking-tight">BELTRAN VAZQUEZ ANGEL ADRIAN</h2>
+</div>
+<span class="px-2 py-0.5 rounded-lg text-emerald-800 bg-emerald-100 font-label-badge text-label-badge font-bold shrink-0">APROB</span>
+</div>
+<div class="grid grid-cols-3 gap-space-xs pt-1 bg-surface-container-low p-space-xs rounded-lg items-center">
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Firmas (40%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<button class="btn-firmas-dec w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">-</button>
+<span class="val-firmas font-body-numeric text-title-sm text-on-surface font-semibold w-6 text-center">8</span>
+<button class="btn-firmas-inc w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">+</button>
+<span class="text-tertiary text-[11px]">/10</span>
+</div>
+</div>
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Examen (60%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<input class="input-grade w-12 h-6 px-1 text-center bg-surface-container-lowest rounded font-body-numeric text-body-numeric font-bold text-on-surface shadow-xs focus:text-primary outline-none" max="10" min="0" step="0.5" type="number" value="8.0"/>
+<span class="text-tertiary text-[11px]">pts</span>
+</div>
+</div>
+<div class="flex flex-col items-end justify-center pl-1">
+<span class="text-secondary font-label-badge text-[10px] uppercase font-bold">U1 Final</span>
+<div class="flex items-baseline gap-0.5">
+<span class="score-display font-body-numeric text-headline-md font-bold text-primary">8.0</span>
+<span class="text-on-surface-variant font-label-badge text-[10px]">/10</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tarjeta Estudiante 3 -->
+<div class="student-card bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-space-xs relative overflow-hidden" data-id="220300205" data-name="CASTILLO MORALES LUIS FERNANDO">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-label-code text-primary bg-primary-fixed px-1.5 py-0.5 rounded">220300205</span>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-label-badge bg-surface-container-highest text-secondary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+              RETARDO
+            </span>
+</div>
+<h2 class="font-headline-md text-body-default text-on-surface uppercase truncate mt-0.5 font-bold tracking-tight">CASTILLO MORALES LUIS FERNANDO</h2>
+</div>
+<span class="px-2 py-0.5 rounded-lg text-emerald-800 bg-emerald-100 font-label-badge text-label-badge font-bold shrink-0">APROB</span>
+</div>
+<div class="grid grid-cols-3 gap-space-xs pt-1 bg-surface-container-low p-space-xs rounded-lg items-center">
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Firmas (40%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<button class="btn-firmas-dec w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">-</button>
+<span class="val-firmas font-body-numeric text-title-sm text-on-surface font-semibold w-6 text-center">10</span>
+<button class="btn-firmas-inc w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">+</button>
+<span class="text-tertiary text-[11px]">/10</span>
+</div>
+</div>
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Examen (60%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<input class="input-grade w-12 h-6 px-1 text-center bg-surface-container-lowest rounded font-body-numeric text-body-numeric font-bold text-on-surface shadow-xs focus:text-primary outline-none" max="10" min="0" step="0.5" type="number" value="9.0"/>
+<span class="text-tertiary text-[11px]">pts</span>
+</div>
+</div>
+<div class="flex flex-col items-end justify-center pl-1">
+<span class="text-secondary font-label-badge text-[10px] uppercase font-bold">U1 Final</span>
+<div class="flex items-baseline gap-0.5">
+<span class="score-display font-body-numeric text-headline-md font-bold text-primary">9.4</span>
+<span class="text-on-surface-variant font-label-badge text-[10px]">/10</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tarjeta Estudiante 4 (Caso Pendiente / En Riesgo) -->
+<div class="student-card bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-space-xs relative overflow-hidden" data-id="220300220" data-name="DOMINGUEZ RIVERA SOFIA">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-label-code text-primary bg-primary-fixed px-1.5 py-0.5 rounded">220300220</span>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-label-badge bg-error-container text-on-error-container">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+              FALTA (JUSTIFICADA)
+            </span>
+</div>
+<h2 class="font-headline-md text-body-default text-on-surface uppercase truncate mt-0.5 font-bold tracking-tight">DOMINGUEZ RIVERA SOFIA</h2>
+</div>
+<span class="px-2 py-0.5 rounded-lg text-tertiary bg-surface-container-high font-label-badge text-label-badge font-bold shrink-0">PEN</span>
+</div>
+<div class="grid grid-cols-3 gap-space-xs pt-1 bg-surface-container-low p-space-xs rounded-lg items-center">
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Firmas (40%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<button class="btn-firmas-dec w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">-</button>
+<span class="val-firmas font-body-numeric text-title-sm text-on-surface font-semibold w-6 text-center">4</span>
+<button class="btn-firmas-inc w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">+</button>
+<span class="text-tertiary text-[11px]">/10</span>
+</div>
+</div>
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Examen (60%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<input class="input-grade w-12 h-6 px-1 text-center bg-surface-container-lowest rounded font-body-numeric text-body-numeric font-bold text-error shadow-xs focus:text-primary outline-none" max="10" min="0" step="0.5" type="number" value="5.5"/>
+<span class="text-tertiary text-[11px]">pts</span>
+</div>
+</div>
+<div class="flex flex-col items-end justify-center pl-1">
+<span class="text-secondary font-label-badge text-[10px] uppercase font-bold">U1 Final</span>
+<div class="flex items-baseline gap-0.5">
+<span class="score-display font-body-numeric text-headline-md font-bold text-error">4.9</span>
+<span class="text-on-surface-variant font-label-badge text-[10px]">/10</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tarjeta Estudiante 5 -->
+<div class="student-card bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-space-xs relative overflow-hidden" data-id="220300234" data-name="ESPINOZA HERNANDEZ CESAR OMAR">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-label-code text-primary bg-primary-fixed px-1.5 py-0.5 rounded">220300234</span>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-label-badge bg-surface-container text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              PRESENTE
+            </span>
+</div>
+<h2 class="font-headline-md text-body-default text-on-surface uppercase truncate mt-0.5 font-bold tracking-tight">ESPINOZA HERNANDEZ CESAR OMAR</h2>
+</div>
+<span class="px-2 py-0.5 rounded-lg text-emerald-800 bg-emerald-100 font-label-badge text-label-badge font-bold shrink-0">APROB</span>
+</div>
+<div class="grid grid-cols-3 gap-space-xs pt-1 bg-surface-container-low p-space-xs rounded-lg items-center">
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Firmas (40%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<button class="btn-firmas-dec w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">-</button>
+<span class="val-firmas font-body-numeric text-title-sm text-on-surface font-semibold w-6 text-center">10</span>
+<button class="btn-firmas-inc w-6 h-6 rounded bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-xs active:bg-outline-variant">+</button>
+<span class="text-tertiary text-[11px]">/10</span>
+</div>
+</div>
+<div class="flex flex-col">
+<span class="text-tertiary font-label-badge text-[10px] uppercase">Examen (60%)</span>
+<div class="flex items-center gap-1 mt-0.5">
+<input class="input-grade w-12 h-6 px-1 text-center bg-surface-container-lowest rounded font-body-numeric text-body-numeric font-bold text-on-surface shadow-xs focus:text-primary outline-none" max="10" min="0" step="0.5" type="number" value="10.0"/>
+<span class="text-tertiary text-[11px]">pts</span>
+</div>
+</div>
+<div class="flex flex-col items-end justify-center pl-1">
+<span class="text-secondary font-label-badge text-[10px] uppercase font-bold">U1 Final</span>
+<div class="flex items-baseline gap-0.5">
+<span class="score-display font-body-numeric text-headline-md font-bold text-primary">10.0</span>
+<span class="text-on-surface-variant font-label-badge text-[10px]">/10</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Toast de Notificación Táctil Instantánea -->
+<div class="fixed bottom-20 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-space-md py-space-xs rounded-lg font-label-badge text-label-badge shadow-lg flex items-center gap-2 opacity-0 pointer-events-none transition-opacity duration-200 z-50" id="toast-notification">
+<span class="material-symbols-outlined text-[16px] text-inverse-primary">check_circle</span>
+<span id="toast-text">Calificación guardada automáticamente</span>
+</div>
+</div>
+<script>
+  (function() {
+    // Calculador de Calificación Dinámica en Tarjeta
+    function recalculateRow(card) {
+      const firmasEl = card.querySelector('.val-firmas');
+      const examInput = card.querySelector('.input-grade');
+      const scoreDisplay = card.querySelector('.score-display');
+      
+      const firmasVal = parseFloat(firmasEl.textContent) || 0;
+      const examVal = parseFloat(examInput.value) || 0;
+      
+      // Ponderación: 40% firmas (base 10) + 60% examen (base 10)
+      const finalScore = ((firmasVal * 0.4) + (examVal * 0.6)).toFixed(1);
+      scoreDisplay.textContent = finalScore;
+
+      // Color de aprobación
+      if (finalScore >= 6.0) {
+        scoreDisplay.classList.remove('text-error');
+        scoreDisplay.classList.add('text-primary');
+      } else {
+        scoreDisplay.classList.remove('text-primary');
+        scoreDisplay.classList.add('text-error');
+      }
+
+      showToast(`Puntaje actualizado: ${finalScore}`);
+    }
+
+    // Handlers para Steppers de Firmas
+    document.querySelectorAll('.student-card').forEach(card => {
+      const btnDec = card.querySelector('.btn-firmas-dec');
+      const btnInc = card.querySelector('.btn-firmas-inc');
+      const firmasVal = card.querySelector('.val-firmas');
+      const examInput = card.querySelector('.input-grade');
+
+      if (btnDec && btnInc && firmasVal) {
+        btnDec.addEventListener('click', () => {
+          let curr = parseInt(firmasVal.textContent, 10);
+          if (curr > 0) {
+            firmasVal.textContent = curr - 1;
+            recalculateRow(card);
+          }
+        });
+
+        btnInc.addEventListener('click', () => {
+          let curr = parseInt(firmasVal.textContent, 10);
+          if (curr < 10) {
+            firmasVal.textContent = curr + 1;
+            recalculateRow(card);
+          }
+        });
+      }
+
+      if (examInput) {
+        examInput.addEventListener('change', () => {
+          let val = parseFloat(examInput.value);
+          if (isNaN(val)) val = 0;
+          if (val > 10) val = 10;
+          if (val < 0) val = 0;
+          examInput.value = val.toFixed(1);
+          recalculateRow(card);
+        });
+      }
+    });
+
+    // Filtro Rápido de Búsqueda
+    const searchInput = document.getElementById('student-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        document.querySelectorAll('.student-card').forEach(card => {
+          const name = card.getAttribute('data-name').toLowerCase();
+          const id = card.getAttribute('data-id').toLowerCase();
+          if (name.includes(query) || id.includes(query)) {
+            card.style.display = 'flex';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    }
+
+    // Cambio de Pestañas de Unidad
+    const unitTabs = document.querySelectorAll('.unit-tab');
+    unitTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        unitTabs.forEach(t => {
+          t.classList.remove('bg-primary-container', 'text-on-primary');
+          t.classList.add('bg-surface-container', 'text-on-surface-variant');
+          const badge = t.querySelector('span:last-child');
+          if (badge && badge.textContent === 'Activa') badge.remove();
+        });
+
+        tab.classList.remove('bg-surface-container', 'text-on-surface-variant');
+        tab.classList.add('bg-primary-container', 'text-on-primary');
+        showToast(`Cambiando a vista de ${tab.getAttribute('data-unit')}`);
+      });
+    });
+
+    // Toast de Feedback
+    let toastTimeout;
+    function showToast(msg) {
+      const toast = document.getElementById('toast-notification');
+      const toastText = document.getElementById('toast-text');
+      if (!toast || !toastText) return;
+
+      toastText.textContent = msg;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      toast.classList.add('opacity-100');
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 1800);
+    }
+
+    // Botón "+ Evaluar" (disparador rápido)
+    const btnQuick = document.getElementById('btn-quick-grade');
+    if (btnQuick) {
+      btnQuick.addEventListener('click', () => {
+        const firstInput = document.querySelector('.input-grade');
+        if (firstInput) {
+          firstInput.focus();
+          firstInput.select();
+          showToast('Modo captura rápida activado');
+        }
+      });
+    }
+  })();
+</script></main><nav class="fixed bottom-0 inset-x-0 z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-title-sm"><div class="flex justify-around items-center h-16 px-space-xs"><a aria-current="page" class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-xs py-1 rounded-lg transition-colors text-primary font-title-sm" data-path="calificador" href="#"><span class="material-symbols-outlined text-[22px]">table_chart</span><span class="font-label-badge text-label-badge mt-0.5">Calificador</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-xs py-1 rounded-lg text-on-surface-variant transition-colors" data-path="asistencias" href="#"><span class="material-symbols-outlined text-[22px]">how_to_reg</span><span class="font-label-badge text-label-badge mt-0.5">Asistencias</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-xs py-1 rounded-lg text-on-surface-variant transition-colors" data-path="directorio-maestro" href="#"><span class="material-symbols-outlined text-[22px]">group</span><span class="font-label-badge text-label-badge mt-0.5">Directorio</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-xs py-1 rounded-lg text-on-surface-variant transition-colors" data-path="ajustes-publicar" href="#"><span class="material-symbols-outlined text-[22px]">publish</span><span class="font-label-badge text-label-badge mt-0.5">Publicar</span></a></div></nav></body></html>

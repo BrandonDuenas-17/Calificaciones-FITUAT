@@ -1240,11 +1240,39 @@ const App = {
         Fórmulas & Ajustes
       </button>
 
-      <button class="nav-tab-btn" style="margin-left: auto; color: var(--uat-orange); font-weight: 700;" onclick="App.openNewCourseModal()">
+      <div class="nav-period-tag" style="margin-left: auto;">
+        <span>PERIODO: ${this.escapeHtml(this.getSelectedSemester())}</span>
+      </div>
+
+      <button class="nav-tab-btn" style="color: var(--uat-crimson, #960200); font-weight: 700; margin-left: 8px;" onclick="App.openNewCourseModal()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Nueva Materia / Grupo
+        Nueva Lista
       </button>
     `;
+
+    // Sincronizar barra táctil móvil (Stitch Mobile Tab Bar)
+    const mobTabMap = {
+      gradebook: document.getElementById("mobTabGradebook"),
+      attendance: document.getElementById("mobTabAttendance"),
+      directory: document.getElementById("mobTabDirectory"),
+      config: document.getElementById("mobTabConfig")
+    };
+    Object.keys(mobTabMap).forEach(key => {
+      const btn = mobTabMap[key];
+      if (btn) {
+        if (this.activeTab === key) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      }
+    });
+
+    // Sincronizar indicador de sesión en footer de escritorio
+    const footerSession = document.getElementById("footerSessionIndicator");
+    if (footerSession && this.currentUser) {
+      footerSession.innerHTML = `<span>SESIÓN: <b>${this.escapeHtml(this.currentUser.nombre || '')}</b> <span class="badge-role-admin" style="font-size:9.5px;padding:1px 5px;">${this.isAdmin() ? 'ADMIN' : 'DOCENTE'}</span></span>`;
+    }
   },
 
   switchTab: function(tabName) {
@@ -1702,7 +1730,7 @@ const App = {
             <h1 class="page-title" title="${this.escapeHtml(course.nombre)}">
               <span class="course-name-text">${this.escapeHtml(course.nombre)}</span>
               <span class="course-group-badge">
-                ${this.escapeHtml(course.grupo || 'Grupo A')}
+                ${this.escapeHtml(course.grupo || 'Grupo A')} • ${records.length} alumnos
               </span>
             </h1>
           </div>
@@ -1728,7 +1756,8 @@ const App = {
         <div class="gradebook-header-bottom">
           <div class="gradebook-desc-col">
             <p class="page-desc">
-              Control de evaluaciones por unidad y calificación final • Periodo <b>${this.escapeHtml(course.periodo)}</b> • <span class="page-desc-units-tag">${numUnits} Unidades y Exámenes</span>
+              Control de evaluaciones • Periodo <b>${this.escapeHtml(course.periodo)}</b> • <span class="page-desc-units-tag">${numUnits} Unidades</span>
+              <span class="page-desc-units-tag" style="background: rgba(16, 185, 129, 0.1); color: #065f46; border-color: rgba(16, 185, 129, 0.25);">✓ Ponderación: ${(Number(weights.firmas)||0) + (Number(weights.examen)||0) + (Number(weights.asistencia)||0) + (Number(weights.participacion)||0)}%</span>
               ${showAsist ? ' • <span style="color: var(--uat-orange); font-weight: 600;">Asistencia (' + weights.asistencia + '%)</span>' : ''}
               ${showPart ? ' • <span style="color: var(--uat-orange); font-weight: 600;">Participación (' + weights.participacion + '%)</span>' : ''}
             </p>

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+
+<html lang="es"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"tertiary-fixed-dim":"#cac5c5","tertiary":"#4a4747","surface-tint":"#bc160a","error-container":"#ffdad6","surface-container-highest":"#e7e1e1","on-surface":"#1d1b1b","secondary-fixed":"#ffdad3","on-background":"#1d1b1b","secondary-fixed-dim":"#ffb4a5","background":"#fef8f7","surface-container-lowest":"#ffffff","surface-container":"#f3ecec","surface-variant":"#e7e1e1","on-secondary-fixed":"#3f0400","inverse-surface":"#323030","secondary-container":"#fb6b50","on-surface-variant":"#5c403b","tertiary-fixed":"#e7e1e1","surface":"#fef8f7","secondary":"#ac331e","outline-variant":"#e5bdb7","on-primary":"#ffffff","primary-container":"#be180c","on-tertiary-fixed-variant":"#494646","surface-dim":"#ded9d8","primary-fixed":"#ffdad4","primary-fixed-dim":"#ffb4a8","on-error":"#ffffff","on-secondary-container":"#660a00","tertiary-container":"#625f5f","on-secondary":"#ffffff","on-tertiary-fixed":"#1d1b1b","on-primary-container":"#ffd0c9","error":"#ba1a1a","inverse-on-surface":"#f6efef","surface-bright":"#fef8f7","on-tertiary-container":"#dfd9d9","primary":"#960200","inverse-primary":"#ffb4a8","on-primary-fixed-variant":"#930200","on-error-container":"#93000a","on-primary-fixed":"#410000","surface-container-high":"#ede7e6","on-secondary-fixed-variant":"#8b1a07","outline":"#906f6a","surface-container-low":"#f8f2f2","on-tertiary":"#ffffff"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"gutter":"0.75rem","space-md":"0.625rem","space-sm":"0.375rem","space-lg":"0.875rem","space-xs":"0.25rem","margin":"0.875rem","space-xl":"1.25rem"},"fontFamily":{"headline-md":["Space Grotesk"],"label-code":["Space Grotesk"],"body-default":["Plus Jakarta Sans"],"body-caption":["Plus Jakarta Sans"],"title-sm":["Plus Jakarta Sans"],"headline-lg":["Space Grotesk"],"display":["Space Grotesk"],"body-numeric":["Space Grotesk"],"label-badge":["Space Grotesk"]},"fontSize":{"headline-md":["1rem",{"lineHeight":"1.25rem","fontWeight":"600"}],"label-code":["0.75rem",{"lineHeight":"0.875rem","letterSpacing":"0.05em","fontWeight":"600"}],"body-default":["0.8125rem",{"lineHeight":"1.125rem","fontWeight":"400"}],"body-caption":["0.75rem",{"lineHeight":"1rem","fontWeight":"400"}],"title-sm":["0.875rem",{"lineHeight":"1.125rem","fontWeight":"600"}],"headline-lg":["1.25rem",{"lineHeight":"1.5rem","letterSpacing":"-0.015em","fontWeight":"700"}],"display":["1.625rem",{"lineHeight":"2rem","letterSpacing":"-0.02em","fontWeight":"700"}],"body-numeric":["0.8125rem",{"lineHeight":"1.125rem","letterSpacing":"0.02em","fontWeight":"500"}],"label-badge":["0.6875rem",{"lineHeight":"0.875rem","letterSpacing":"0.04em","fontWeight":"700"}]}}}}</script></head><body class="bg-surface font-body-default text-body-default text-on-surface antialiased"><header class="fixed top-0 left-0 w-full z-50 flex flex-col"><div class="h-12 w-full bg-[#0f2744] text-[#ffffff] px-gutter flex items-center justify-between border-b border-[#1b3d66]"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="bg-primary-container text-on-primary font-headline-md text-headline-md px-space-sm py-space-xs rounded-lg uppercase tracking-wider">FIUAT</div><div class="flex flex-col leading-none"><span class="font-headline-md text-headline-md tracking-tight text-white">UAT · Campus Victoria</span><span class="font-label-code text-label-code text-slate-300">Facultad de Ingeniería y Ciencias</span></div></div><div class="h-5 w-px bg-slate-700 hidden sm:block"></div><div class="hidden md:flex items-center gap-space-xs text-slate-300 font-label-code text-label-code"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>Nube Conectada (14ms)</span></div></div><div class="flex items-center gap-space-md"><div class="hidden lg:flex items-center gap-space-xs bg-slate-800/80 px-space-md py-space-xs rounded-lg text-slate-200"><span class="material-symbols-outlined text-[16px]">school</span><span class="font-title-sm text-title-sm">Martínez Navarro José Luis</span><span class="font-label-badge text-label-badge bg-primary-container text-on-primary px-1.5 py-0.5 rounded">DOCENTE</span></div><button class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center transition-colors" title="Modo Oscuro" type="button"><span class="material-symbols-outlined text-[18px]">dark_mode</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-10 w-full bg-surface-container-lowest border-b border-surface-container-highest px-gutter flex items-center justify-between shadow-[0_1px_4px_rgba(0,0,0,0.04)]"><nav class="flex items-center h-full gap-space-lg" data-active-classes="text-primary-container border-b-2 border-primary-container font-semibold"><a aria-current="page" class="h-full inline-flex items-center px-space-xs transition-colors text-primary-container border-b-2 border-primary-container font-semibold" data-path="calificador-de-materias" href="#">Calificador de Materias</a><a class="h-full inline-flex items-center px-space-xs font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="asistencias-calendario" href="#">Asistencias &amp; Calendario</a><a class="h-full inline-flex items-center px-space-xs font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="directorio-de-alumnos" href="#">Directorio de Alumnos</a><a class="h-full inline-flex items-center px-space-xs font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="publicar-en-teams" href="#">Publicar en Teams</a><a class="h-full inline-flex items-center px-space-xs font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="formulas-ajustes" href="#">Fórmulas &amp; Ajustes</a></nav><div class="hidden sm:flex items-center gap-space-sm font-label-code text-label-code text-on-surface-variant"><span class="bg-surface-container-high px-space-sm py-space-xs rounded-lg">PERIODO: 2024-1 (PRIMAVERA)</span></div></div></header><main class="w-full pt-[88px] bg-surface min-h-[calc(100vh-88px)]"><div class="flex flex-col w-full h-[calc(100vh-88px)] overflow-hidden select-none bg-surface">
+<!-- 1. ACTIVE CONTEXT SUB-HEADER (Band Height: 54px) -->
+<section class="h-[54px] w-full bg-surface-container-low px-gutter flex items-center justify-between shrink-0 shadow-sm z-30">
+<div class="flex items-center gap-space-lg min-w-0">
+<div class="flex items-center gap-space-sm min-w-0">
+<span class="font-label-code text-label-code bg-surface-container-highest text-on-surface-variant px-space-sm py-0.5 rounded-lg shrink-0 tracking-wider">RC.ITCO1.3980.4-4</span>
+<h1 class="font-headline-md text-headline-md text-on-surface truncate tracking-tight uppercase">CREATIVIDAD, INNOVACIÓN Y CALIDAD LABORAL</h1>
+<span class="inline-flex items-center gap-1.5 bg-primary-container text-on-primary font-label-badge text-label-badge px-2 py-0.5 rounded-lg shrink-0 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-surface-container-lowest animate-pulse"></span>
+          GRUPO M · 19 ALUMNOS
+        </span>
+</div>
+<!-- Segmented Selectors with 8px radius -->
+<div class="hidden xl:flex items-center gap-space-sm">
+<div class="inline-flex items-center bg-surface-container-lowest text-on-surface text-body-caption font-title-sm px-2.5 py-1 rounded-lg shadow-sm cursor-pointer hover:bg-surface-container-high transition-colors">
+<span class="font-label-code text-label-code text-on-surface-variant mr-1">SEMESTRE:</span>
+<span>2026 - 3 OTOÑO</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant ml-1">expand_more</span>
+</div>
+<div class="inline-flex items-center bg-surface-container-lowest text-on-surface text-body-caption font-title-sm px-2.5 py-1 rounded-lg shadow-sm cursor-pointer hover:bg-surface-container-high transition-colors">
+<span class="font-label-code text-label-code text-on-surface-variant mr-1">LISTA / GRUPO:</span>
+<span>Grupo M (19 alumnos)</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant ml-1">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Stepper & Metrics -->
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center bg-surface-container-lowest px-1.5 py-1 rounded-lg shadow-sm">
+<span class="font-label-code text-label-code text-on-surface-variant px-2">UNIDADES</span>
+<button class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface font-headline-md text-headline-md leading-none transition-colors" title="Reducir Unidad" type="button">-</button>
+<span class="font-body-numeric text-body-numeric font-bold px-2.5 py-0.5 bg-surface-container text-primary rounded-lg">5</span>
+<button class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface font-headline-md text-headline-md leading-none transition-colors" title="Aumentar Unidad" type="button">+</button>
+</div>
+<div class="hidden md:flex items-center gap-space-xs bg-surface-container-highest px-space-md py-1 rounded-lg text-on-surface-variant font-label-code text-label-code">
+<span class="material-symbols-outlined text-[16px] text-secondary">verified</span>
+<span>PONDERACIÓN: 100% REGISTRADA</span>
+</div>
+</div>
+</section>
+<!-- 2. WORKSPACE ACTION TOOLBAR (Height: 46px) -->
+<section class="h-[46px] w-full bg-surface-container-lowest px-gutter flex items-center justify-between shrink-0 shadow-sm z-20">
+<div class="flex items-center gap-space-md flex-1 max-w-xl">
+<!-- Universal Search Pill with 8px radius -->
+<div class="relative flex items-center w-full max-w-xs">
+<span class="material-symbols-outlined absolute left-2.5 text-[16px] text-on-surface-variant pointer-events-none">search</span>
+<input class="w-full h-8 pl-8 pr-3 bg-surface-container-low rounded-lg text-body-default font-body-default text-on-surface placeholder:text-on-surface-variant outline-none focus:bg-surface-container-lowest focus:shadow-md transition-all" id="studentSearch" placeholder="Buscar por matrícula o nombre..." type="text"/>
+</div>
+<!-- Quick Toggle: Focus Mode -->
+<button class="inline-flex items-center gap-1.5 h-8 px-2.5 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-lg font-title-sm text-title-sm transition-colors" id="toggleFocusMode" title="Modo pantalla completa de sábana" type="button">
+<span class="material-symbols-outlined text-[16px]">fullscreen</span>
+<span class="hidden sm:inline">Modo Enfoque</span>
+</button>
+<!-- Fixed Columns Status Tag -->
+<span class="hidden lg:inline-flex items-center gap-1.5 font-label-code text-label-code text-on-surface-variant bg-surface-container px-2 py-1 rounded-lg">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+<span>19 alumnos · Columnas Fijas</span>
+</span>
+</div>
+<!-- Cluster of 8px Rounded Action Buttons -->
+<div class="flex items-center gap-space-xs shrink-0">
+<!-- Secondary Buttons with pure 8px radius & subtle shadow -->
+<button class="inline-flex items-center gap-1 h-8 px-2.5 bg-surface-container-lowest hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface rounded-lg font-title-sm text-title-sm shadow-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+<span class="hidden md:inline">Ajustes</span>
+</button>
+<button class="inline-flex items-center gap-1 h-8 px-2.5 bg-surface-container-lowest hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface rounded-lg font-title-sm text-title-sm shadow-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">content_paste</span>
+<span class="hidden md:inline">Pegar Alumnos</span>
+</button>
+<button class="inline-flex items-center gap-1 h-8 px-2.5 bg-surface-container-lowest hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface rounded-lg font-title-sm text-title-sm shadow-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+<span class="hidden xl:inline">Vaciar Grupo</span>
+</button>
+<button class="inline-flex items-center gap-1 h-8 px-2.5 bg-surface-container-lowest hover:bg-surface-container-high text-secondary hover:text-primary rounded-lg font-title-sm text-title-sm shadow-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">download</span>
+<span>Excel</span>
+</button>
+<!-- Primary Action: Crimson Theme -->
+<button class="inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary-container hover:bg-primary text-on-primary rounded-lg font-headline-md text-body-default font-semibold shadow-sm transition-transform active:scale-95" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>+ Nueva Lista</span>
+</button>
+</div>
+</section>
+<!-- 3. ZERO-SCROLL LEDGER CONTAINER WITH FREEZE-PANES (calc height) -->
+<main class="flex-1 w-full overflow-auto relative bg-surface-container-lowest" id="ledgerContainer">
+<table class="w-full border-collapse text-left text-body-default font-body-default min-w-[1380px]">
+<!-- STICKY HEADER -->
+<thead class="sticky top-0 z-20 bg-surface-container-low shadow-sm select-none">
+<tr class="h-9">
+<!-- Frozen Header Col 1: Index -->
+<th class="sticky left-0 z-30 w-10 bg-surface-container-low px-2 text-center font-label-code text-label-code text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">
+            #
+          </th>
+<!-- Frozen Header Col 2: Matrícula -->
+<th class="sticky left-10 z-30 w-28 bg-surface-container-low px-3 font-label-code text-label-code text-on-surface-variant tracking-wider shadow-[1px_0_0_0_#e7e1e1]">
+            MATRÍCULA
+          </th>
+<!-- Frozen Header Col 3: Alumno (Rollup) with Freeze Shadow -->
+<th class="sticky left-[152px] z-30 w-64 bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+<div class="flex items-center justify-between">
+<span>ALUMNO (ROLLUP)</span>
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">unfold_more</span>
+</div>
+</th>
+<!-- Horizontally Scrolling Headers (Evaluations) -->
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container text-on-surface-variant">
+            FIRMAS U1 (20%)
+          </th>
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container text-on-surface-variant">
+            PROY. U1 (30%)
+          </th>
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container text-on-surface-variant">
+            EXAMEN U1 (50%)
+          </th>
+<th class="w-20 px-2 text-center font-headline-md text-label-code bg-surface-container-high text-primary-container">
+            CALIF U1
+          </th>
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container-low text-on-surface-variant">
+            FIRMAS U2 (20%)
+          </th>
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container-low text-on-surface-variant">
+            PROY. U2 (30%)
+          </th>
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container-low text-on-surface-variant">
+            EXAMEN U2 (50%)
+          </th>
+<th class="w-20 px-2 text-center font-headline-md text-label-code bg-surface-container-high text-primary-container">
+            CALIF U2
+          </th>
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container text-on-surface-variant">
+            ASISTENCIA
+          </th>
+<th class="w-24 px-2 text-center font-headline-md text-label-code bg-surface-container-highest text-on-surface">
+            PROM. FINAL
+          </th>
+<th class="w-24 px-2 text-center font-label-code text-label-code bg-surface-container-highest text-on-surface">
+            ESTATUS
+          </th>
+<th class="w-28 px-3 text-left font-label-code text-label-code text-on-surface-variant">
+            OBSERVACIONES
+          </th>
+</tr>
+</thead>
+<!-- LEDGER BODY -->
+<tbody class="divide-y divide-surface-container bg-surface-container-lowest" id="studentRows">
+<!-- Student 1 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">01</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300184</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            AGUILAR LÓPEZ JORGE ALBERTO
+          </td>
+<!-- Units U1 -->
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9.5"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">9.5</td>
+<!-- Units U2 -->
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.5"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">9.1</td>
+<!-- Totals & Status -->
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">96%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">9.3</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Entrega puntual prototipo</td>
+</tr>
+<!-- Student 2 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">02</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300201</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            BALDERAS SALAS MONSERRAT
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">7.5</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">8.2</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">91%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">7.9</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Constante en participación</td>
+</tr>
+<!-- Student 3 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">03</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300244</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            CASTILLO HERNANDEZ RAMON
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-error rounded-lg outline-none py-0.5" type="text" value="5"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-error rounded-lg outline-none py-0.5" type="text" value="6"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-error rounded-lg outline-none py-0.5" type="text" value="5.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-error bg-surface-container-low">5.3</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="6"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface-variant rounded-lg outline-none py-0.5" type="text" value="-"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface-variant rounded-lg outline-none py-0.5" type="text" value="-"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-error bg-surface-container-low">PEND</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-error font-semibold">68%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-error bg-error-container text-on-error-container">5.3</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-error-container text-on-error-container font-bold rounded-lg">PEN</span>
+</td>
+<td class="px-3 text-body-caption text-error truncate font-medium">Riesgo por faltas acumuladas</td>
+</tr>
+<!-- Student 4 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">04</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300267</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            DE LA FUENTE RÍOS CLAUDIA
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9.8"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">9.9</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">10.0</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">100%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">9.9</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Mención de excelencia</td>
+</tr>
+<!-- Student 5 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">05</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300290</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            ESPINOZA TREJO DANIEL
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">8.2</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.5"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.5"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">8.6</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">94%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">8.4</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Revisión de informe final</td>
+</tr>
+<!-- Student 6 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">06</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300315</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            GARZA BUSTAMANTE EMILIANO
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7.5"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">7.4</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7.5"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">7.4</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">88%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">7.4</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Justificante médico recibido</td>
+</tr>
+<!-- Student 7 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">07</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300332</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            HERRERA MEDRANO GABRIELA
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.5"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">8.8</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">9.2</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">97%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">9.0</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Excelente liderazgo en equipo</td>
+</tr>
+<!-- Student 8 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">08</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300350</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            LOZANO MONTOYA HECTOR
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="6"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="6.5"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">6.6</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="6.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">6.5</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">82%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">6.6</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Condicionado a examen extraordinario</td>
+</tr>
+<!-- Student 9 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">09</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300388</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            MARTINEZ PEÑA IVANNA
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">10.0</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9.5"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="10.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">9.9</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">100%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">10.0</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Representante de grupo</td>
+</tr>
+<!-- Student 10 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">10</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300412</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            NAVARRETE OSORIO JESUS
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="7"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">7.8</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">8.0</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">90%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">7.9</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Sin incidencias</td>
+</tr>
+<!-- Student 11 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">11</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300439</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            ORTIZ CALVILLO KAREN
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="8"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">8.8</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface rounded-lg outline-none py-0.5" type="text" value="9.5"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-on-surface bg-surface-container-low">9.3</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-on-surface">95%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-primary-container bg-surface-container-high">9.1</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-surface-container-highest text-secondary font-bold rounded-lg">APROB</span>
+</td>
+<td class="px-3 text-body-caption text-on-surface-variant truncate">Participación sobresaliente</td>
+</tr>
+<!-- Student 12 -->
+<tr class="h-8 hover:bg-surface-container-low transition-colors group">
+<td class="sticky left-0 z-10 w-10 bg-surface-container-lowest group-hover:bg-surface-container-low text-center font-body-numeric text-body-numeric text-on-surface-variant shadow-[1px_0_0_0_#e7e1e1]">12</td>
+<td class="sticky left-10 z-10 w-28 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-label-code text-label-code text-on-surface shadow-[1px_0_0_0_#e7e1e1]">220300455</td>
+<td class="sticky left-[152px] z-10 w-64 bg-surface-container-lowest group-hover:bg-surface-container-low px-3 font-title-sm text-title-sm text-on-surface truncate shadow-[4px_0_8px_-2px_rgba(150,2,0,0.12)]">
+            PEREZ DOMINGUEZ LUIS ENRIQUE
+          </td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-error rounded-lg outline-none py-0.5" type="text" value="5"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-error rounded-lg outline-none py-0.5" type="text" value="5"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-error rounded-lg outline-none py-0.5" type="text" value="4.0"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-error bg-surface-container-low">4.5</td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface-variant rounded-lg outline-none py-0.5" type="text" value="-"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface-variant rounded-lg outline-none py-0.5" type="text" value="-"/></td>
+<td class="px-2 text-center"><input class="w-full text-center bg-transparent focus:bg-surface-container-highest font-body-numeric text-body-numeric text-on-surface-variant rounded-lg outline-none py-0.5" type="text" value="-"/></td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-error bg-surface-container-low">PEND</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric text-error font-semibold">52%</td>
+<td class="px-2 text-center font-body-numeric text-body-numeric font-bold text-error bg-error-container text-on-error-container">4.5</td>
+<td class="px-2 text-center">
+<span class="inline-block px-2 py-0.5 font-label-badge text-label-badge bg-error-container text-on-error-container font-bold rounded-lg">PEN</span>
+</td>
+<td class="px-3 text-body-caption text-error truncate font-medium">Baja temporal solicitada</td>
+</tr>
+</tbody>
+</table>
+</main>
+<!-- 4. BOTTOM FLOATING SYSTEM NOTIFICATION & STATUS DOCK -->
+<footer class="h-9 w-full bg-surface-container-lowest px-gutter flex items-center justify-between shrink-0 shadow-[0_-2px_6px_rgba(0,0,0,0.03)] z-40 select-none">
+<div class="flex items-center gap-space-lg text-body-caption font-body-caption text-on-surface-variant">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-label-code text-label-code">CALIFICADOR BASE v4.2</span>
+</div>
+<div class="hidden sm:flex items-center gap-space-sm">
+<span>Último autoguardado: <strong class="font-body-numeric text-body-numeric text-on-surface">14:28:02</strong></span>
+<span>·</span>
+<span>Alineación de Escala: <strong>0 - 10 Decimal</strong></span>
+</div>
+</div>
+<!-- Active Session Presence Chip (Strict 8px Radius) -->
+<div class="flex items-center gap-space-sm bg-surface-container px-2.5 py-1 rounded-lg shadow-sm">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-ping"></span>
+<span class="font-label-code text-label-code text-on-surface font-semibold tracking-wide">
+        SESIÓN: MARTINEZ NAVARRO JOSE LUIS
+      </span>
+<span class="font-label-badge text-label-badge bg-primary text-on-primary px-1.5 py-0.5 rounded-lg">DOCENTE</span>
+</div>
+</footer>
+</div>
+<script>
+  // Desktop Interaction & Instant Search Filter Micro-Interaction
+  document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('studentSearch');
+    const tableRows = document.querySelectorAll('#studentRows tr');
+    const focusToggle = document.getElementById('toggleFocusMode');
+    const ledger = document.getElementById('ledgerContainer');
+
+    // Instant Filter
+    searchInput?.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase().trim();
+      tableRows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(term) ? '' : 'none';
+      });
+    });
+
+    // Toggle Focus Mode (Max Data View)
+    focusToggle?.addEventListener('click', () => {
+      ledger.classList.toggle('bg-surface-container-low');
+      const isExpanded = focusToggle.classList.toggle('bg-primary-container');
+      if (isExpanded) {
+        focusToggle.classList.add('text-on-primary');
+        focusToggle.classList.remove('text-on-surface');
+      } else {
+        focusToggle.classList.remove('text-on-primary');
+        focusToggle.classList.add('text-on-surface');
+      }
+    });
+
+    // Direct Grade Input Auto-Select
+    const inputs = document.querySelectorAll('#studentRows input');
+    inputs.forEach(input => {
+      input.addEventListener('focus', function() {
+        this.select();
+      });
+    });
+  });
+</script></main></body></html>

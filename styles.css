@@ -5235,3 +5235,597 @@ textarea.form-control {
     gap: 6px;
   }
 }
+
+/* ==========================================================================
+   20. MÓDULO DE INTEGRACIÓN DE DISEÑO STITCH (ESCRITORIO & MÓVIL)
+   - Tipografía preservada estrictamente: Visby CF institucional
+   - Paleta Stitch: Superficies M3 / Crimson Institucional / Azul Noche UAT
+   - Header ejecutivo, freeze panes refinados, toolbar agrupada con radios 8px
+   - Móvil: Tab Bar táctil fija inferior, cards táctiles y resumen de KPIs
+   ========================================================================== */
+
+/* Variables de Superficies y Acentos Stitch */
+:root {
+  --uat-crimson: #960200;
+  --uat-crimson-container: #be180c;
+  --uat-crimson-light: #fef2f2;
+  --surface-container-low: #f8f2f2;
+  --surface-container: #f3ecec;
+  --surface-container-high: #ede7e6;
+  --surface-container-highest: #e7e1e1;
+  --surface-container-lowest: #ffffff;
+}
+
+[data-theme="dark"] {
+  --uat-crimson: #d93829;
+  --uat-crimson-container: #e64a39;
+  --uat-crimson-light: #381515;
+  --surface-container-low: #1c1f28;
+  --surface-container: #222634;
+  --surface-container-high: #2a2f40;
+  --surface-container-highest: #33394d;
+  --surface-container-lowest: #101218;
+}
+
+/* Animación de punto pulsante en vivo */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* --- 1. HEADER EJECUTIVO INSTITUCIONAL --- */
+.notion-header {
+  border-bottom: 1px solid rgba(27, 61, 102, 0.7) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16) !important;
+}
+
+.notion-topbar {
+  padding: 8px 20px !important;
+  min-height: 48px !important;
+}
+
+.workspace-badge {
+  gap: 10px !important;
+}
+
+.workspace-logo-container {
+  height: 34px !important;
+  padding: 3px 8px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.workspace-title-main {
+  font-family: var(--font-sans) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.2px !important;
+}
+
+.cloud-status-badge {
+  border-radius: 8px !important;
+  padding: 4px 10px !important;
+  font-family: var(--font-sans) !important;
+  font-weight: 600 !important;
+  font-size: 11.5px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.cloud-status-badge.connected {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+}
+
+.cloud-status-badge.connected .cloud-status-dot {
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 50% !important;
+  background: #34d399 !important;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.7) !important;
+  animation: pulse-dot 1.8s infinite ease-in-out !important;
+}
+
+.teacher-profile-btn {
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  padding: 4px 10px !important;
+  height: 34px !important;
+  font-family: var(--font-sans) !important;
+  transition: all 0.15s ease !important;
+}
+
+.teacher-profile-btn:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.badge-role-admin {
+  background: var(--uat-crimson-container) !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  letter-spacing: 0.04em !important;
+}
+
+#themeToggleBtn {
+  border-radius: 8px !important;
+  height: 34px !important;
+  padding: 0 10px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.15s ease !important;
+}
+
+#themeToggleBtn:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* --- 2. PESTAÑAS HORIZONTALES REFINADAS --- */
+.nav-tabs {
+  height: 40px !important;
+  padding: 0 20px !important;
+  background: var(--bg-primary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03) !important;
+  align-items: center !important;
+}
+
+.nav-tab-btn {
+  height: 100% !important;
+  padding: 0 16px !important;
+  font-family: var(--font-sans) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border-radius: 0 !important;
+  border-bottom: 2.5px solid transparent !important;
+  color: var(--text-secondary) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  transition: all 0.15s ease !important;
+}
+
+.nav-tab-btn:hover {
+  color: var(--uat-blue-night) !important;
+  background: var(--bg-hover) !important;
+}
+
+[data-theme="dark"] .nav-tab-btn:hover {
+  color: #ffffff !important;
+  background: var(--bg-hover) !important;
+}
+
+.nav-tab-btn.active {
+  color: var(--uat-crimson, #960200) !important;
+  border-bottom-color: var(--uat-crimson, #960200) !important;
+  font-weight: 700 !important;
+  background: var(--bg-primary) !important;
+}
+
+[data-theme="dark"] .nav-tab-btn.active {
+  color: #ffa366 !important;
+  border-bottom-color: #ffa366 !important;
+}
+
+.nav-tab-badge {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  padding: 2px 8px !important;
+  border-radius: 9999px !important;
+  background: var(--surface-container-high) !important;
+  color: var(--text-secondary) !important;
+}
+
+.nav-tab-btn.active .nav-tab-badge {
+  background: rgba(150, 2, 0, 0.1) !important;
+  color: var(--uat-crimson, #960200) !important;
+}
+
+[data-theme="dark"] .nav-tab-btn.active .nav-tab-badge {
+  background: rgba(242, 141, 68, 0.18) !important;
+  color: #ffa366 !important;
+}
+
+.nav-period-tag {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--surface-container-high);
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- 3. BANDA DE CONTEXTO DE MATERIA --- */
+.gradebook-header-container {
+  background: var(--surface-container-low) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+  padding: 8px 14px !important;
+  margin-bottom: 8px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+.course-group-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: var(--uat-crimson-container, #be180c) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 2px 10px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  box-shadow: 0 1px 2px rgba(150, 2, 0, 0.25) !important;
+}
+
+.course-group-badge::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: pulse-dot 1.8s infinite ease-in-out;
+}
+
+.gradebook-select-pill {
+  border-radius: 8px !important;
+  background: var(--surface-container-lowest) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+  height: 34px !important;
+  padding: 0 10px !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+
+.gradebook-select-pill:hover {
+  border-color: var(--uat-crimson, #960200) !important;
+}
+
+.units-quick-stepper {
+  border-radius: 8px !important;
+  background: var(--surface-container-lowest) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+  height: 34px !important;
+  padding: 0 8px !important;
+}
+
+.page-desc-units-tag {
+  background: var(--surface-container-highest) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  padding: 2px 8px !important;
+}
+
+/* --- 4. BARRA DE HERRAMIENTAS Y BOTONES --- */
+.table-toolbar {
+  background: var(--surface-container-lowest) !important;
+  border-radius: 8px !important;
+  padding: 6px 12px !important;
+  border: 1px solid var(--border-color) !important;
+  margin-bottom: 8px !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.search-input {
+  border-radius: 8px !important;
+  height: 34px !important;
+  background: var(--surface-container-low) !important;
+  border: 1px solid var(--border-color) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 13px !important;
+  transition: all 0.15s ease !important;
+}
+
+.search-input:focus {
+  background: var(--surface-container-lowest) !important;
+  border-color: var(--uat-crimson, #960200) !important;
+  box-shadow: 0 0 0 3px rgba(150, 2, 0, 0.12) !important;
+}
+
+.btn {
+  border-radius: 8px !important;
+  height: 34px !important;
+  font-family: var(--font-sans) !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  transition: all 0.15s ease !important;
+}
+
+.btn:active {
+  transform: scale(0.97) !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--uat-crimson-container, #be180c), var(--uat-crimson, #960200)) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 1px 3px rgba(150, 2, 0, 0.22) !important;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #d32014, #aa0300) !important;
+  box-shadow: 0 3px 8px rgba(150, 2, 0, 0.3) !important;
+}
+
+.btn-default {
+  background: var(--surface-container-lowest) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.btn-default:hover {
+  background: var(--surface-container-high) !important;
+  border-color: rgba(150, 2, 0, 0.3) !important;
+}
+
+.btn-focus-toggle {
+  border-radius: 8px !important;
+  height: 34px !important;
+  background: var(--surface-container-low) !important;
+  border: 1px solid var(--border-color) !important;
+  font-family: var(--font-sans) !important;
+}
+
+.freeze-panes-hint {
+  border-radius: 8px !important;
+  background: var(--surface-container) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  padding: 4px 10px !important;
+}
+
+/* --- 5. TABLA FREEZE-PANES ESTILO STITCH --- */
+.notion-table-wrapper {
+  border-radius: 8px !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.notion-table thead th {
+  background-color: var(--surface-container-low) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em !important;
+  border-bottom: 2px solid var(--uat-crimson-container, #be180c) !important;
+}
+
+[data-theme="dark"] .notion-table thead th {
+  background-color: #1e222d !important;
+  border-bottom: 2px solid var(--uat-crimson, #d93829) !important;
+}
+
+/* Freeze Shadow de la columna de estudiante */
+.notion-table .col-sticky-2 {
+  box-shadow: 4px 0 8px -2px rgba(15, 39, 68, 0.12) !important;
+}
+
+[data-theme="dark"] .notion-table .col-sticky-2 {
+  box-shadow: 4px 0 10px -2px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Columna de evaluación resaltada */
+.col-calc {
+  background-color: rgba(190, 24, 12, 0.03) !important;
+}
+
+[data-theme="dark"] .col-calc {
+  background-color: rgba(217, 56, 41, 0.06) !important;
+}
+
+/* Badges de estatus redondeados estilo Stitch */
+.status-badge {
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  font-size: 10.5px !important;
+  padding: 2px 8px !important;
+  letter-spacing: 0.03em !important;
+}
+
+.status-aprobado {
+  background: #d1fae5 !important;
+  color: #065f46 !important;
+}
+
+.status-pending {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: none !important;
+}
+
+.status-reprobado {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+}
+
+[data-theme="dark"] .status-aprobado {
+  background: rgba(16, 185, 129, 0.22) !important;
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .status-pending {
+  background: rgba(245, 158, 11, 0.22) !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .status-reprobado {
+  background: rgba(239, 68, 68, 0.22) !important;
+  color: #f87171 !important;
+}
+
+/* --- 6. FOOTER DE ESTADO MINIMALISTA (ESCRITORIO) --- */
+.desktop-footer-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 18px;
+  height: 28px;
+  background: var(--surface-container-low);
+  border-top: 1px solid var(--border-color);
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.desktop-footer-status-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-footer-status-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-footer-status .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  display: inline-block;
+}
+
+/* --- 7. MÓDULO MÓVIL ESTILO STITCH --- */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .desktop-footer-status {
+    display: none !important;
+  }
+
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 58px !important;
+    background: var(--bg-primary) !important;
+    border-top: 1px solid var(--border-color) !important;
+    z-index: 1000 !important;
+    align-items: center !important;
+    justify-content: space-around !important;
+    padding: 0 4px !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+  }
+
+  .mobile-nav-item {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 1 !important;
+    height: 100% !important;
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-secondary) !important;
+    cursor: pointer !important;
+    font-family: var(--font-sans) !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    gap: 2px !important;
+    transition: all 0.15s ease !important;
+    -webkit-tap-highlight-color: transparent !important;
+    padding: 4px 0 !important;
+  }
+
+  .mobile-nav-item svg {
+    stroke: var(--text-secondary) !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .mobile-nav-item.active {
+    color: var(--uat-crimson, #960200) !important;
+    font-weight: 700 !important;
+  }
+
+  [data-theme="dark"] .mobile-nav-item.active {
+    color: #ffa366 !important;
+  }
+
+  .mobile-nav-item.active svg {
+    stroke: var(--uat-crimson, #960200) !important;
+    transform: scale(1.1) !important;
+  }
+
+  [data-theme="dark"] .mobile-nav-item.active svg {
+    stroke: #ffa366 !important;
+  }
+
+  /* Ajustar scroll del contenido principal para no ser cubierto por la barra */
+  .main-content {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Tarjetas de Estudiante Táctiles en Móvil */
+  .student-card {
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.15s ease;
+  }
+
+  .student-card:active {
+    transform: scale(0.99);
+  }
+
+  .student-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .student-card-name {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 13.5px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+
+  .student-card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    align-items: center;
+    background: var(--surface-container-low);
+    padding: 8px;
+    border-radius: 8px;
+  }
+}

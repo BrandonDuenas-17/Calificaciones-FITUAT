@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.10.07.v58";
+      const CURRENT_APP_VERSION = "2026.10.08.v59";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=58">
+  <link rel="stylesheet" href="styles.css?v=59">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -71,6 +71,12 @@
       padding: 8px 16px !important;
       box-sizing: border-box !important;
       overflow: hidden !important;
+    }
+
+    @media (max-width: 768px) {
+      .main-content {
+        padding: 8px 8px calc(64px + env(safe-area-inset-bottom, 0px)) 8px !important;
+      }
     }
 
     .main-content.has-table-view {
@@ -330,6 +336,17 @@
   <main class="main-content" id="tabContentContainer">
     <!-- El contenido de las pestañas se renderiza aquí reactivamente -->
   </main>
+
+  <!-- Barra de Estado Inferior Minimalista (Escritorio - Estilo Stitch) -->
+  <footer class="desktop-footer-status" id="desktopFooterStatus">
+    <div class="desktop-footer-status-left">
+      <span class="status-dot"></span>
+      <span>CALIFICADOR BASE FIUAT • Autoguardado Activo • Escala 0 - 100</span>
+    </div>
+    <div class="desktop-footer-status-right" id="footerSessionIndicator">
+      <span>Conexión Institucional Activa</span>
+    </div>
+  </footer>
 
   <!-- Modal de Importación Masiva desde Excel / Teams -->
   <div class="modal-backdrop" id="bulkImportModal">
@@ -1077,14 +1094,34 @@
     </div>
   </div>
 
+  <!-- Barra de Navegación Táctil Inferior para Móviles (Estilo Stitch) -->
+  <nav class="mobile-bottom-nav" id="mobileBottomNav">
+    <button class="mobile-nav-item active" id="mobTabGradebook" onclick="App.switchTab('gradebook')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3zM3 9h18M9 21V9"/></svg>
+      <span>Calificador</span>
+    </button>
+    <button class="mobile-nav-item" id="mobTabAttendance" onclick="App.switchTab('attendance')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Asistencias</span>
+    </button>
+    <button class="mobile-nav-item" id="mobTabDirectory" onclick="App.switchTab('directory')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Directorio</span>
+    </button>
+    <button class="mobile-nav-item" id="mobTabConfig" onclick="App.switchTab('config')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Fórmulas</span>
+    </button>
+  </nav>
+
   <!-- Contenedor de Notificaciones Toast -->
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=58"></script>
-  <script src="sample_data.js?v=58"></script>
-  <script src="exporter.js?v=58"></script>
-  <script src="app.js?v=58"></script>
+  <script src="supabase_service.js?v=59"></script>
+  <script src="sample_data.js?v=59"></script>
+  <script src="exporter.js?v=59"></script>
+  <script src="app.js?v=59"></script>
 </body>
 </html>
