@@ -1438,7 +1438,6 @@ const App = {
           asistenciaCells += `
             <td class="col-number-input ${isSd ? 'cell-sin-derecho' : (isAsistPerdida ? 'cell-asist-loss' : '')}" style="min-width: 105px;">
               <div class="firmas-cell-content" style="justify-content: flex-end; gap: 4px;">
-                ${isAuto ? '<span title="Sincronizado automáticamente desde el Pase de Lista" style="font-size: 10px; cursor: help; opacity: 0.85;">🔒</span>' : ''}
                 ${faltasBadgeHtml}
                 <input type="number" inputmode="numeric" min="0" max="100" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''} ${isSd ? 'cell-sd-text' : (isAsistPerdida ? 'cell-sd-text' : '')}" style="width: 44px; text-align: right; font-weight: 600;"
                   value="${val}" placeholder="-" data-col="asistencia-${uKey}"
@@ -1477,7 +1476,6 @@ const App = {
                   onblur="App.handleCellBlur(this)"
                   oninput="App.updateParticipacion(${index}, '${uKey}', this.value)"
                   onkeydown="App.handleCellKeydown(event, this)" />
-                <span style="font-size: 11px; color: var(--uat-orange); cursor: default;" title="Participaciones en Unidad ${u}">⭐</span>
               </div>
             </td>
           `;
@@ -1655,7 +1653,7 @@ const App = {
     if (showPart) {
       for (let u = 1; u <= numUnits; u++) {
         participacionHeadersHtml += `
-          <th style="width: 85px;"><div class="th-content"><span class="th-icon">⭐</span> Part U${u} (${weights.participacion}%)</div></th>
+          <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Part U${u} (${weights.participacion}%)</div></th>
         `;
       }
     }
@@ -4884,7 +4882,7 @@ const App = {
                 <div class="part-stepper-control">
                   <button type="button" class="btn-part-step" onclick="App.adjustStudentSessionPart(${recIdx}, '${activeSession.id}', -1)" title="Restar participación" ${partCount <= 0 ? 'disabled' : ''}>−</button>
                   <span class="part-count-badge ${partCount > 0 ? 'has-parts' : ''}">
-                    ${partCount > 0 ? '⭐ ' + partCount : '0'}
+                    ${partCount > 0 ? partCount : '0'}
                   </span>
                   <button type="button" class="btn-part-step" onclick="App.adjustStudentSessionPart(${recIdx}, '${activeSession.id}', 1)" title="Sumar participación">+</button>
                 </div>
@@ -4952,7 +4950,7 @@ const App = {
                   <th style="width: 130px;"><div class="th-content"><span class="th-icon">Aa</span> Matrícula</div></th>
                   <th><div class="th-content"><span class="th-icon">Aa</span> Nombre del Alumno</div></th>
                   <th style="width: 220px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">📋</span> Estado de Hoy</div></th>
-                  <th style="width: 140px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">⭐</span> Participación</div></th>
+                  <th style="width: 140px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Participación</div></th>
                   <th style="width: 180px; text-align: right;"><div class="th-content" style="justify-content: flex-end;"><span class="th-icon">📊</span> Acumulado U${currentUnit}</div></th>
                 </tr>
               </thead>
@@ -5061,7 +5059,7 @@ const App = {
                 <th style="width: 80px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Retardos</div></th>
                 <th style="width: 80px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Justif.</div></th>
                 <th style="width: 90px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">%</span> % Asist</div></th>
-                <th style="width: 100px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">⭐</span> Participación</div></th>
+                <th style="width: 100px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">#</span> Participación</div></th>
                 <th style="width: 120px; text-align: center;"><div class="th-content" style="justify-content: center;"><span class="th-icon">🛡️</span> Derecho</div></th>
               </tr>
             </thead>
@@ -6164,7 +6162,7 @@ const App = {
             ` : ''}
             ${showPart ? `
             <div class="student-mobile-input-field">
-              <label>Participación ⭐</label>
+              <label>Participación</label>
               <input type="number" inputmode="numeric" min="0" max="999" class="mobile-grade-input ${isLocked ? 'cell-locked' : ''}" 
                 value="${pVal}" placeholder="-"
                 ${isLocked || (this.isSupervising && !this.supervisionEditMode) ? 'readonly' : ''}
