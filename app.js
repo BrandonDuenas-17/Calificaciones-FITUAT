@@ -1827,6 +1827,7 @@ const App = {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" class="search-input" placeholder="Buscar por matrícula o nombre..." 
               value="${this.searchTerm}" oninput="App.handleSearch(this.value)" />
+            <kbd class="mac-kbd-shortcut" title="Atajo rápido: ⌘K o Ctrl+K">⌘K</kbd>
           </div>
           <button type="button" class="btn-focus-toggle" onclick="App.toggleGradebookFocusMode()" title="Maximizar área de calificaciones (Inmovilizado estilo Excel)">
             <span id="btnFocusIcon">${this.isGradebookFocused ? '⤡' : '⤢'}</span>
@@ -8858,6 +8859,20 @@ const App = {
     // Ajuste dinámico de altura de tabla estilo Excel en redimensionamiento de ventana
     window.addEventListener("resize", () => {
       App.fitGradebookTableHeight();
+    });
+
+    // Atajo global macOS Spotlight Search (⌘K / Ctrl+K)
+    window.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        const searchInput = document.querySelector(".search-input") || 
+                            document.getElementById("studentSearch") || 
+                            document.getElementById("switchTeacherSearch");
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      }
     });
   }
 };

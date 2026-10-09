@@ -5829,3 +5829,357 @@ textarea.form-control {
     border-radius: 8px;
   }
 }
+
+/* ==========================================================================
+   21. MÓDULO MAC EXECUTIVE CLEAN DESIGN (APPLE HIG & SEQUOIA NATIVE LOOK)
+   ========================================================================== */
+
+/* 21.1 Window Chrome y Traffic Lights (🔴 🟡 🟢) */
+.mac-window-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 14px;
+  padding: 3px 7px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: inset 0 0.5px 1px rgba(255, 255, 255, 0.2);
+}
+
+.mac-dot {
+  width: 11.5px;
+  height: 11.5px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, filter 0.15s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.mac-dot:hover {
+  transform: scale(1.15);
+  filter: brightness(0.95);
+}
+
+.mac-dot:active {
+  transform: scale(0.90);
+}
+
+.mac-dot-close {
+  background: #ff5f56;
+  border: 0.5px solid rgba(224, 68, 62, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.mac-dot-minimize {
+  background: #ffbd2e;
+  border: 0.5px solid rgba(222, 161, 35, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.mac-dot-zoom {
+  background: #27c93f;
+  border: 0.5px solid rgba(26, 171, 41, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Glifos sutiles al pasar el cursor sobre la barra de control (comportamiento macOS) */
+.mac-window-controls:hover .mac-dot-close::after {
+  content: "×";
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(77, 0, 0, 0.7);
+  line-height: 1;
+}
+
+.mac-window-controls:hover .mac-dot-minimize::after {
+  content: "–";
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(90, 50, 0, 0.7);
+  line-height: 1;
+  margin-top: -1px;
+}
+
+.mac-window-controls:hover .mac-dot-zoom::after {
+  content: "+";
+  font-size: 9.5px;
+  font-weight: 800;
+  color: rgba(0, 60, 10, 0.7);
+  line-height: 1;
+}
+
+/* 21.2 Materiales Traslúcidos (Liquid Glass / Acrylic Header) */
+.notion-header {
+  background: rgba(11, 30, 59, 0.94) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme="dark"] .notion-header {
+  background: rgba(16, 20, 28, 0.92) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* 21.3 Controles Segmentados Estilo AppKit (Pestañas y Selectores Cápsula) */
+.nav-tabs {
+  background: var(--surface-container-low) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 6px 20px !important;
+  gap: 4px !important;
+  height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.nav-tab-btn {
+  border-radius: 8px !important;
+  border-bottom: none !important;
+  height: 32px !important;
+  padding: 0 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: none !important;
+}
+
+.nav-tab-btn:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .nav-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+
+.nav-tab-btn.active {
+  background: var(--surface-container-lowest) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.05) !important;
+  font-weight: 700 !important;
+}
+
+[data-theme="dark"] .nav-tab-btn.active {
+  background: var(--surface-container-high) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Cápsulas Segmentadas en Switchers de Materia / Semestre */
+.gradebook-select-pill {
+  border-radius: 8px !important;
+  background: var(--surface-container-low) !important;
+  border: 1px solid var(--border-color) !important;
+  padding: 3px 8px 3px 10px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+  transition: all 0.15s ease !important;
+}
+
+.gradebook-select-pill:hover {
+  border-color: rgba(0, 113, 227, 0.35) !important;
+  background: var(--surface-container-lowest) !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 21.4 Buscador Estilo Spotlight / Raycast con Atajo ⌘K */
+.search-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-container-low);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 3px 8px 3px 10px;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.search-input-wrap:focus-within {
+  background: var(--surface-container-lowest);
+  border-color: #0071e3 !important;
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.16), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.search-input-wrap .search-input {
+  border: none !important;
+  background: transparent !important;
+  padding: 5px 8px !important;
+  font-size: 13px !important;
+  font-family: var(--font-sans) !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: var(--text-primary);
+  min-width: 220px;
+}
+
+.mac-kbd-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-secondary);
+  user-select: none;
+  pointer-events: none;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  line-height: 1.1;
+  letter-spacing: 0.5px;
+}
+
+[data-theme="dark"] .mac-kbd-shortcut {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #a1a1a6;
+}
+
+/* 21.5 Botón Modo Enfoque Estilo Apple Toolbar */
+.btn-focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--surface-container-low);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.btn-focus-toggle:hover {
+  background: var(--surface-container-lowest);
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
+  color: #0071e3;
+}
+
+/* 21.6 Precisión Geometrica: Tipografía Tabular Apple Numbers */
+.notion-table-gradebook,
+.gradebook-input,
+.cell-input,
+.gradebook-calc-cell,
+.student-stat-pill,
+.student-card-grid,
+.final-eval-badge,
+.table-bottom-bar,
+.stepper-val,
+.summary-chip {
+  font-variant-numeric: tabular-nums !important;
+  -webkit-font-feature-settings: "tnum" 1 !important;
+  font-feature-settings: "tnum" 1 !important;
+}
+
+/* Inmovilización de Paneles con Sombra Sutil Estilo Apple Numbers */
+.notion-table th.col-sticky-2,
+.notion-table td.col-sticky-2 {
+  box-shadow: 3px 0 6px -2px rgba(0, 0, 0, 0.07) !important;
+}
+
+[data-theme="dark"] .notion-table th.col-sticky-2,
+[data-theme="dark"] .notion-table td.col-sticky-2 {
+  box-shadow: 3px 0 8px -2px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Hover Suave en Filas sin Parpadeo */
+.notion-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.notion-table tbody tr:hover td {
+  background-color: rgba(0, 113, 227, 0.03) !important;
+}
+
+[data-theme="dark"] .notion-table tbody tr:hover td {
+  background-color: rgba(255, 255, 255, 0.025) !important;
+}
+
+/* 21.7 Paleta de Insignias Pastel Ejecutiva */
+.status-aprobado {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  border: 1px solid rgba(22, 101, 52, 0.16) !important;
+  font-weight: 700 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 2px rgba(22, 101, 52, 0.06) !important;
+}
+
+.status-reprobado {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  border: 1px solid rgba(153, 27, 27, 0.16) !important;
+  font-weight: 700 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 2px rgba(153, 27, 27, 0.06) !important;
+}
+
+.status-pending {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid rgba(146, 64, 14, 0.16) !important;
+  font-weight: 700 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 2px rgba(146, 64, 14, 0.06) !important;
+}
+
+[data-theme="dark"] .status-aprobado {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #4ade80 !important;
+  border-color: rgba(74, 222, 128, 0.28) !important;
+}
+
+[data-theme="dark"] .status-reprobado {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.28) !important;
+}
+
+[data-theme="dark"] .status-pending {
+  background: rgba(245, 158, 11, 0.18) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(251, 191, 36, 0.28) !important;
+}
+
+/* Insignias de Faltas y Pérdida de Derecho Soft */
+.badge-faltas-sd {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid rgba(146, 64, 14, 0.2) !important;
+}
+
+.badge-faltas-loss {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  border: 1px solid rgba(153, 27, 27, 0.2) !important;
+}
+
+/* 21.8 Adaptabilidad Móvil */
+@media (max-width: 768px) {
+  .mac-window-controls {
+    display: none !important;
+  }
+  .mac-kbd-shortcut {
+    display: none !important;
+  }
+}
