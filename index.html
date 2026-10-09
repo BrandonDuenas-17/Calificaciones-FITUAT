@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.10.08.v60";
+      const CURRENT_APP_VERSION = "2026.10.08.v61";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=60">
+  <link rel="stylesheet" href="styles.css?v=61">
   <style id="freezePanesCriticalStyles">
     /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
     html, body {
@@ -474,9 +474,17 @@
           <!-- Meta de firmas por unidad -->
           <div>
             <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; display: block;">
-              Meta de firmas al 100% por cada unidad (50% de la calificación):
+              Meta de firmas al 100% por cada unidad:
             </label>
             <div id="manageCourseFirmasInputs" style="display: grid; gap: 10px; margin-bottom: 6px;"></div>
+          </div>
+
+          <!-- Meta de participaciones por unidad -->
+          <div id="manageCoursePartInputsWrapper" style="display: none; margin-top: 10px;">
+            <label style="font-size: 12px; font-weight: 700; color: var(--uat-orange); margin-bottom: 6px; display: block;">
+              Meta de participaciones al 100% por cada unidad:
+            </label>
+            <div id="manageCoursePartInputs" style="display: grid; gap: 10px; margin-bottom: 6px;"></div>
           </div>
         </div>
 
@@ -1119,9 +1127,9 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=60"></script>
-  <script src="sample_data.js?v=60"></script>
-  <script src="exporter.js?v=60"></script>
-  <script src="app.js?v=60"></script>
+  <script src="supabase_service.js?v=61"></script>
+  <script src="sample_data.js?v=61"></script>
+  <script src="exporter.js?v=61"></script>
+  <script src="app.js?v=61"></script>
 </body>
 </html>

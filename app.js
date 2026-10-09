@@ -1305,6 +1305,7 @@ const App = {
     const studentsMap = this.getStudentsMap();
     const stats = this.calculateCourseStats(course);
     const maxFirmasConfig = course.firmasMaxConfig || {};
+    const maxPartConfig = course.participacionMaxConfig || {};
     const isAuditReadOnly = this.isAdmin() && this.isSupervising && !this.supervisionEditMode;
 
     let records = course.records || [];
@@ -1465,17 +1466,26 @@ const App = {
           const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
           const isFieldReadOnly = isLocked || isAuditReadOnly;
           const val = rec.participacion ? (rec.participacion[uKey] ?? "") : "";
+          const maxP = maxPartConfig[uKey] || 5;
+          const pct = val !== "" && val !== null ? Math.min(100, Math.round((Number(val) / maxP) * 100)) : 0;
+          const dashOffset = 44 - (44 * pct) / 100;
+          const strokeColor = pct >= 100 ? 'var(--color-green)' : (pct >= 50 ? 'var(--color-orange)' : 'var(--border-color)');
 
           participacionCells += `
             <td class="col-number-input" style="min-width: 85px;">
-              <div class="firmas-cell-content" style="justify-content: flex-end; gap: 3px;">
-                <input type="number" inputmode="numeric" min="0" max="999" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" style="width: 40px; text-align: right; font-weight: 600;" 
+              <div class="firmas-cell-content" style="justify-content: flex-end; gap: 4px;">
+                <input type="number" inputmode="numeric" min="0" max="999" class="cell-input ${isLocked ? 'cell-locked' : ''} ${isAuditReadOnly ? 'cell-readonly-audit' : ''}" style="width: 44px; text-align: right; font-weight: 600;" 
                   value="${val}" placeholder="-" data-col="participacion-${uKey}"
                   ${isFieldReadOnly ? `readonly title="${isAuditReadOnly ? 'Modo Auditoría (Solo Lectura)' : 'Unidad bloqueada'}"` : ''}
                   onfocus="this.select()"
                   onblur="App.handleCellBlur(this)"
                   oninput="App.updateParticipacion(${index}, '${uKey}', this.value)"
                   onkeydown="App.handleCellKeydown(event, this)" />
+                <svg class="progress-ring" viewBox="0 0 20 20">
+                  <circle class="progress-ring-circle-bg" cx="10" cy="10" r="7"/>
+                  <circle id="ring-part-${index}-${uKey}" class="progress-ring-circle" cx="10" cy="10" r="7" 
+                    style="stroke-dasharray: 44; stroke-dashoffset: ${dashOffset}; stroke: ${strokeColor};"/>
+                </svg>
               </div>
             </td>
           `;
@@ -1652,8 +1662,17 @@ const App = {
     let participacionHeadersHtml = "";
     if (showPart) {
       for (let u = 1; u <= numUnits; u++) {
+        const uKey = `u${u}`;
+        const isLocked = !!(course.lockedUnits && course.lockedUnits[uKey]);
         participacionHeadersHtml += `
-          <th style="width: 85px;"><div class="th-content"><span class="th-icon">#</span> Part U${u} (${weights.participacion}%)</div></th>
+          <th style="width: 95px; cursor: pointer;" onclick="App.openMaxPartModal()" title="Haz clic para configurar la meta máxima de participaciones">
+            <div class="th-content" style="justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 3px;">
+                <span class="th-icon">#</span> Part U${u} (${weights.participacion}%)
+              </div>
+              <span class="unit-lock-btn ${isLocked ? 'locked' : ''}" onclick="event.stopPropagation(); App.toggleUnitLock('${uKey}')" title="${isLocked ? `Unidad ${u} bloqueada (Solo Lectura). Haz clic para desbloquear` : `Bloquear Unidad ${u} para congelar calificaciones`}">${isLocked ? '🔒' : '🔓'}</span>
+            </div>
+          </th>
         `;
       }
     }
@@ -1701,12 +1720,22 @@ const App = {
       }
     }
 
-    let footerAvgPartHtml = "";
+    let footerMaxPartHtml = "";
     if (showPart) {
       for (let u = 1; u <= numUnits; u++) {
         const uKey = `u${u}`;
-        footerAvgPartHtml += `
-          <td><span class="summary-chip"><span class="summary-label">AVG:</span> <span id="stat-avg-part-${uKey}" class="summary-value">${stats.avgParticipacion[uKey] || '0.0'}</span></span></td>
+        footerMaxPartHtml += `
+          <td>
+            <div class="summary-chip summary-chip-editable" title="Haz clic para editar la meta de participaciones de la Unidad ${u}">
+              <span class="summary-label">MAX:</span>
+              <input type="number" min="1" max="100" class="footer-max-firmas-input" 
+                id="footer-max-part-${uKey}" 
+                value="${maxPartConfig[uKey] || 5}" 
+                onfocus="this.select()"
+                onchange="App.updateMaxPartConfig('${uKey}', this.value)"
+                title="Haz clic para cambiar el máximo de participaciones de la Unidad ${u}" />
+            </div>
+          </td>
         `;
       }
     }
@@ -1859,8 +1888,8 @@ const App = {
               <!-- Promedio Asistencias (Opcional) -->
               ${footerAvgAsistHtml}
 
-              <!-- Promedio Participaciones (Opcional) -->
-              ${footerAvgPartHtml}
+              <!-- Metas de Participaciones con Edición Directa en Pie de Tabla -->
+              ${footerMaxPartHtml}
 
               <!-- Promedio Evaluaciones -->
               ${footerAvgEvalsHtml}
@@ -5702,6 +5731,26 @@ const App = {
       }
     }
 
+    // 2.2 Si se actualizó participación de una unidad, actualizar anillo SVG correspondiente
+    if (field === 'participacion' && uKey) {
+      const ring = document.getElementById(`ring-part-${recIdx}-${uKey}`);
+      if (ring) {
+        const maxPartConfig = course.participacionMaxConfig || {};
+        const maxP = maxPartConfig[uKey] || 5;
+        const numVal = val !== "" && val !== null ? Number(val) : null;
+        if (numVal !== null && maxP > 0) {
+          const pct = Math.min(100, Math.round((numVal / maxP) * 100));
+          const dashOffset = 44 - (44 * pct) / 100;
+          const strokeColor = pct >= 100 ? 'var(--color-green)' : (pct >= 50 ? 'var(--color-orange)' : 'var(--border-color)');
+          ring.style.strokeDashoffset = dashOffset;
+          ring.style.stroke = strokeColor;
+        } else {
+          ring.style.strokeDashoffset = 44;
+          ring.style.stroke = 'var(--border-color)';
+        }
+      }
+    }
+
     // 3. Actualizar los números y anillos de Evaluación calculada U1 a Un
     const numUnits = Number(course.unidadesCount) || 5;
     for (let u = 1; u <= numUnits; u++) {
@@ -6002,8 +6051,13 @@ const App = {
   // Configuración de Máximo de Firmas y Unidades Dinámicas (3, 4, 5 o más unidades)
   _tempManageUnitsCount: 5,
   _tempManageMaxFirmas: {},
+  _tempManageMaxPart: {},
 
   openMaxFirmasModal: function() {
+    this.openManageCourseModal();
+  },
+
+  openMaxPartModal: function() {
     this.openManageCourseModal();
   },
 
@@ -6028,6 +6082,17 @@ const App = {
     this.saveData();
     this.render();
     this.showToast(`Meta de ${uKey.toUpperCase()} actualizada a ${num} firmas`);
+  },
+
+  updateMaxPartConfig: function(uKey, val) {
+    const course = this.getActiveCourse();
+    if (!course) return;
+    if (!course.participacionMaxConfig) course.participacionMaxConfig = {};
+    const num = Math.max(1, Number(val) || 5);
+    course.participacionMaxConfig[uKey] = num;
+    this.saveData();
+    this.render();
+    this.showToast(`Meta de participaciones de ${uKey.toUpperCase()} actualizada a ${num}`);
   },
 
   // =========================================================================
@@ -6658,6 +6723,7 @@ const App = {
       periodo: periodo,
       unidadesCount: unidades,
       firmasMaxConfig: { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 },
+      participacionMaxConfig: { u1: 5, u2: 5, u3: 5, u4: 5, u5: 5 },
       records: []
     };
 
@@ -6687,11 +6753,15 @@ const App = {
 
     this._tempManageUnitsCount = Number(course.unidadesCount) || 5;
     this._tempManageMaxFirmas = { ...(course.firmasMaxConfig || {}) };
+    this._tempManageMaxPart = { ...(course.participacionMaxConfig || {}) };
     this._tempManageUnitDates = JSON.parse(JSON.stringify(course.unitDates || {}));
 
     for (let u = 1; u <= this._tempManageUnitsCount; u++) {
       if (!this._tempManageMaxFirmas[`u${u}`]) {
         this._tempManageMaxFirmas[`u${u}`] = 10;
+      }
+      if (!this._tempManageMaxPart[`u${u}`]) {
+        this._tempManageMaxPart[`u${u}`] = 5;
       }
     }
 
@@ -6794,6 +6864,8 @@ const App = {
         badge.textContent = `Suma: ${sum}% (Debe ser 100%)`;
       }
     }
+    const partWrapper = document.getElementById("manageCoursePartInputsWrapper");
+    if (partWrapper) partWrapper.style.display = inpP > 0 ? "block" : "none";
   },
 
   resetWeightsToDefault: function() {
@@ -6806,6 +6878,8 @@ const App = {
     if (inpA) inpA.value = 0;
     if (inpP) inpP.value = 0;
     this.onWeightsInputChange();
+    const partWrapper = document.getElementById("manageCoursePartInputsWrapper");
+    if (partWrapper) partWrapper.style.display = "none";
   },
 
   toggleManageLimiteFaltas: function(checked) {
@@ -6869,11 +6943,18 @@ const App = {
       if (inp) {
         this._tempManageMaxFirmas[`u${u}`] = Math.max(1, Number(inp.value) || 10);
       }
+      const inpP = document.getElementById(`manageModalMaxP_u${u}`);
+      if (inpP) {
+        this._tempManageMaxPart[`u${u}`] = Math.max(1, Number(inpP.value) || 5);
+      }
     }
 
     for (let u = 1; u <= num; u++) {
       if (!this._tempManageMaxFirmas[`u${u}`]) {
         this._tempManageMaxFirmas[`u${u}`] = 10;
+      }
+      if (!this._tempManageMaxPart[`u${u}`]) {
+        this._tempManageMaxPart[`u${u}`] = 5;
       }
     }
 
@@ -6908,28 +6989,56 @@ const App = {
     }
 
     const container = document.getElementById("manageCourseFirmasInputs");
-    if (!container) return;
-
-    let html = "";
-    for (let u = 1; u <= this._tempManageUnitsCount; u++) {
-      const uKey = `u${u}`;
-      const val = this._tempManageMaxFirmas[uKey] || 10;
-      html += `
-        <div>
-          <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U${u}</label>
-          <input type="number" min="1" max="100" id="manageModalMaxF_u${u}" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" value="${val}"
-            oninput="App._syncManageModalInputFirmas('${uKey}', this.value)" />
-        </div>
-      `;
+    if (container) {
+      let html = "";
+      for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+        const uKey = `u${u}`;
+        const val = this._tempManageMaxFirmas[uKey] || 10;
+        html += `
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U${u}</label>
+            <input type="number" min="1" max="100" id="manageModalMaxF_u${u}" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" value="${val}"
+              oninput="App._syncManageModalInputFirmas('${uKey}', this.value)" />
+          </div>
+        `;
+      }
+      const cols = Math.min(this._tempManageUnitsCount, 5);
+      container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      container.innerHTML = html;
     }
-    const cols = Math.min(this._tempManageUnitsCount, 5);
-    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    container.innerHTML = html;
+
+    const containerPart = document.getElementById("manageCoursePartInputs");
+    if (containerPart) {
+      let htmlP = "";
+      for (let u = 1; u <= this._tempManageUnitsCount; u++) {
+        const uKey = `u${u}`;
+        const valP = this._tempManageMaxPart[uKey] || 5;
+        htmlP += `
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--uat-orange); display: block; text-align: center; margin-bottom: 4px;">U${u}</label>
+            <input type="number" min="1" max="100" id="manageModalMaxP_u${u}" class="form-control" style="text-align: center; font-weight: 700; font-size: 14px;" value="${valP}"
+              oninput="App._syncManageModalInputPart('${uKey}', this.value)" />
+          </div>
+        `;
+      }
+      const cols = Math.min(this._tempManageUnitsCount, 5);
+      containerPart.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      containerPart.innerHTML = htmlP;
+    }
+
+    const inpP = Number(document.getElementById("manageWeightPart")?.value) || (course?.gradingWeights?.participacion ? Number(course.gradingWeights.participacion) : 0);
+    const partWrapper = document.getElementById("manageCoursePartInputsWrapper");
+    if (partWrapper) partWrapper.style.display = inpP > 0 ? "block" : "none";
   },
 
   _syncManageModalInputFirmas: function(uKey, val) {
     const num = Math.max(1, Number(val) || 10);
     this._tempManageMaxFirmas[uKey] = num;
+  },
+
+  _syncManageModalInputPart: function(uKey, val) {
+    const num = Math.max(1, Number(val) || 5);
+    this._tempManageMaxPart[uKey] = num;
   },
 
   renderManageCourseUnitDatesInputs: function() {
@@ -7100,6 +7209,10 @@ const App = {
     for (let u = 1; u <= newCount; u++) {
       course.firmasMaxConfig[`u${u}`] = this._tempManageMaxFirmas[`u${u}`] || 10;
     }
+    if (!course.participacionMaxConfig) course.participacionMaxConfig = {};
+    for (let u = 1; u <= newCount; u++) {
+      course.participacionMaxConfig[`u${u}`] = this._tempManageMaxPart[`u${u}`] || 5;
+    }
     course.unitDates = JSON.parse(JSON.stringify(this._tempManageUnitDates || {}));
 
     // Recoger Ponderaciones de Criterios (Firmas, Exámenes, Asistencia, Participación)
@@ -7153,6 +7266,7 @@ const App = {
     if (newCount < oldCount) {
       for (let u = newCount + 1; u <= 12; u++) {
         delete course.firmasMaxConfig[`u${u}`];
+        if (course.participacionMaxConfig) delete course.participacionMaxConfig[`u${u}`];
         if (course.unitDates) delete course.unitDates[`u${u}`];
       }
       if (course.lockedUnits) {
@@ -7275,15 +7389,20 @@ const App = {
 
     course.unidadesCount = newCount;
     if (!course.firmasMaxConfig) course.firmasMaxConfig = {};
+    if (!course.participacionMaxConfig) course.participacionMaxConfig = {};
     for (let u = 1; u <= newCount; u++) {
       if (!course.firmasMaxConfig[`u${u}`]) {
         course.firmasMaxConfig[`u${u}`] = 10;
+      }
+      if (!course.participacionMaxConfig[`u${u}`]) {
+        course.participacionMaxConfig[`u${u}`] = 5;
       }
     }
 
     if (newCount < oldCount) {
       for (let u = newCount + 1; u <= 12; u++) {
         delete course.firmasMaxConfig[`u${u}`];
+        if (course.participacionMaxConfig) delete course.participacionMaxConfig[`u${u}`];
       }
       if (course.lockedUnits) {
         for (let u = newCount + 1; u <= 12; u++) {
@@ -7300,6 +7419,11 @@ const App = {
           if (r.examenes) {
             for (let u = newCount + 1; u <= 12; u++) {
               delete r.examenes[`u${u}`];
+            }
+          }
+          if (r.participacion) {
+            for (let u = newCount + 1; u <= 12; u++) {
+              delete r.participacion[`u${u}`];
             }
           }
         });
@@ -7342,6 +7466,7 @@ const App = {
       periodo: course.periodo,
       unidadesCount: course.unidadesCount || 5,
       firmasMaxConfig: JSON.parse(JSON.stringify(course.firmasMaxConfig || {})),
+      participacionMaxConfig: JSON.parse(JSON.stringify(course.participacionMaxConfig || {})),
       gradingWeights: course.gradingWeights ? JSON.parse(JSON.stringify(course.gradingWeights)) : undefined,
       asistenciaConfig: course.asistenciaConfig ? JSON.parse(JSON.stringify(course.asistenciaConfig)) : undefined,
       records: [] // Nueva lista limpia para este grupo
