@@ -184,9 +184,14 @@ const App = {
     // Inicializar sincronización 100% en la nube con Supabase (PostgreSQL + Realtime)
     const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
     if (cloud) {
-      await cloud.init();
+      const isConnected = await cloud.init();
       this.updateCloudStatusBadge();
-      await this.loadDataFromCloud();
+      if (isConnected && cloud.isInitialized) {
+        await this.loadDataFromCloud();
+      } else {
+        console.warn("Supabase no disponible (pausado o sin conexión). Cargando catálogo de respaldo.");
+        this.loadFallbackData();
+      }
     } else {
       console.warn("Servicio en la nube no detectado. Cargando datos de respaldo.");
       this.loadFallbackData();
@@ -209,8 +214,30 @@ const App = {
             Cargando catálogo docente y calificaciones 100% en la nube...
           </div>
         </div>
+        <button type="button" onclick="App.bypassCloudWait()" style="margin-top: 6px; padding: 6px 16px; font-size: 12px; font-weight: 500; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">
+          Continuar en Modo Local
+        </button>
       </div>
     `;
+  },
+
+  bypassCloudWait: function() {
+    console.log("Usuario omitió espera de nube. Activando modo local.");
+    if (typeof SupabaseService !== "undefined") {
+      SupabaseService.isInitialized = false;
+      SupabaseService.status = "offline";
+    }
+    this.updateCloudStatusBadge();
+    this.loadFallbackData();
+    this.render();
+    this.showToast("Operando en Modo Local (Fuera de línea)", "info");
+  },
+
+  onCloudReconnected: async function() {
+    this.updateCloudStatusBadge();
+    this.showToast("🟢 Conexión con Supabase restablecida exitosamente", "success");
+    await this.loadDataFromCloud();
+    this.render();
   },
 
   sanitizeTeacher: function(t) {
@@ -236,13 +263,23 @@ const App = {
 
   loadDataFromCloud: async function() {
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-    if (!cloud) return;
+    if (!cloud || !cloud.isInitialized) {
+      this.loadFallbackData();
+      return;
+    }
 
     try {
       let cloudTeachers = await cloud.fetchTeachers();
 
-      // Si Supabase está vacío por primera vez, sembramos el catálogo inicial
-      if (!cloudTeachers || cloudTeachers.length === 0) {
+      // Si no devolvió un arreglo válido (error de red o timeout):
+      if (!Array.isArray(cloudTeachers)) {
+        console.warn("No se pudo obtener el catálogo desde la nube. Cargando datos de respaldo.");
+        this.loadFallbackData();
+        return;
+      }
+
+      // Si Supabase está verdaderamente vacío por primera vez, sembramos el catálogo inicial
+      if (cloudTeachers.length === 0) {
         console.log("Supabase vacío. Sembrando catálogo inicial en la nube...");
         const seeds = [];
         if (typeof INITIAL_ADMIN !== 'undefined') seeds.push(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
@@ -251,6 +288,7 @@ const App = {
         }
         await cloud.seedInitialDataIfEmpty(seeds);
         cloudTeachers = await cloud.fetchTeachers();
+        if (!Array.isArray(cloudTeachers)) cloudTeachers = [];
       }
 
       this.teachers = (cloudTeachers || []).map(t => this.sanitizeTeacher(t));
@@ -7861,6 +7899,10 @@ const App = {
             this.showLoginError(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - newAttempts}.`);
           }
         }
+        return;
+      } else if (res && (res.reason === "connection_error" || res.reason === "network_error")) {
+        restoreBtn();
+        this.showLoginError("No se pudo conectar con el servidor institucional en la nube (el proyecto de Supabase podría estar pausado por inactividad o sin conexión). Por favor reactiva el proyecto en Supabase o verifica tu conexión.");
         return;
       } else {
         restoreBtn();

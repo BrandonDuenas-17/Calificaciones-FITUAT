@@ -44,10 +44,22 @@ const SupabaseService = {
         }
       });
 
-      // Prueba rápida de conexión
-      const { data, error } = await this.client.from("teachers").select("id").limit(1);
-      if (error && error.code !== "PGRST116") {
-        console.warn("Aviso de conexión Supabase:", error.message);
+      // Prueba de conexión con límite estricto de 3.5 segundos (Fail-Fast)
+      const probePromise = this.client.from("teachers").select("id").limit(1);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Supabase connection timeout (3.5s)")), 3500)
+      );
+
+      const probeResult = await Promise.race([probePromise, timeoutPromise]).catch(err => ({
+        error: err,
+        data: null
+      }));
+
+      if (probeResult.error && probeResult.error.code !== "PGRST116") {
+        console.warn("Supabase no disponible o proyecto en pausa:", probeResult.error.message || probeResult.error);
+        this.isInitialized = false;
+        this.status = "offline";
+        return false;
       }
 
       this.isInitialized = true;
@@ -56,8 +68,7 @@ const SupabaseService = {
       // Monitoreo de conexión a internet
       window.addEventListener("online", () => {
         this.isOnline = true;
-        this.status = "connected";
-        this.notifyStatusChange();
+        this.checkConnection();
       });
 
       window.addEventListener("offline", () => {
@@ -69,6 +80,7 @@ const SupabaseService = {
       return true;
     } catch (err) {
       console.error("Error al inicializar Supabase Client:", err);
+      this.isInitialized = false;
       this.status = "error";
       return false;
     }
@@ -87,7 +99,7 @@ const SupabaseService = {
     try {
       const { data, error } = await this.client
         .from("teachers")
-        .select("id, nombre, usuario, correo, departamento, role, avatar, data, updated_at")
+        .select("id, nombre, usuario, correo, departamento, role, avatar, updated_at")
         .order("nombre", { ascending: true });
 
       if (error) {
@@ -149,7 +161,12 @@ const SupabaseService = {
           .or("id.eq.admin-coordinacion,role.eq.admin,usuario.eq.admin")
           .limit(1);
 
-        if (!adminErr && adminRows && adminRows.length > 0) {
+        if (adminErr) {
+          console.error("Error al consultar cuenta admin en Supabase:", adminErr);
+          return { success: false, reason: "connection_error", message: adminErr.message };
+        }
+
+        if (adminRows && adminRows.length > 0) {
           const adm = adminRows[0];
           const dbPass = (adm.password || "").trim();
           const expectedPass = dbPass || "admin";
@@ -199,8 +216,13 @@ const SupabaseService = {
             return { success: false, reason: "user_not_found" };
           }
         }
+        if (rpcError && rpcError.message && (rpcError.message.includes("Failed to fetch") || rpcError.message.includes("NetworkError") || rpcError.code === "PGRST301")) {
+          return { success: false, reason: "connection_error", message: rpcError.message };
+        }
       } catch (rpcEx) {
-        // Procedimiento aún no creado en Supabase, continuar con consulta directa de respaldo
+        if (rpcEx.message && (rpcEx.message.includes("Failed to fetch") || rpcEx.message.includes("NetworkError"))) {
+          return { success: false, reason: "connection_error", message: rpcEx.message };
+        }
       }
 
       // 2. Consulta filtrada de respaldo
@@ -210,7 +232,12 @@ const SupabaseService = {
         .or(`usuario.ilike.${term},correo.ilike.${term},id.eq.${term}`)
         .limit(1);
 
-      if (error || !data || data.length === 0) {
+      if (error) {
+        console.error("Error al consultar credenciales en Supabase:", error);
+        return { success: false, reason: "connection_error", message: error.message };
+      }
+
+      if (!data || data.length === 0) {
         return { success: false, reason: "user_not_found" };
       }
 
@@ -223,7 +250,7 @@ const SupabaseService = {
       return { success: true, teacherId: teacher.id, teacher: teacher };
     } catch (e) {
       console.error("Error al verificar credenciales:", e);
-      return { success: false, reason: "network_error" };
+      return { success: false, reason: "connection_error", message: e.message };
     }
   },
 
@@ -614,6 +641,32 @@ const SupabaseService = {
       SUPABASE_CONFIG.anonKey = cleanKey;
     }
     return this.init();
+  },
+
+  // Probar conectividad en segundo plano y reconectar dinámicamente si Supabase despierta
+  checkConnection: async function() {
+    if (!this.client) return false;
+    try {
+      const probePromise = this.client.from("teachers").select("id").limit(1);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout")), 3000)
+      );
+      const probeResult = await Promise.race([probePromise, timeoutPromise]).catch(err => ({ error: err }));
+      const isOk = !probeResult.error || (probeResult.error && probeResult.error.code === "PGRST116");
+      if (isOk) {
+        const wasOffline = !this.isInitialized || this.status !== "connected";
+        this.isInitialized = true;
+        this.status = "connected";
+        this.notifyStatusChange();
+        if (wasOffline && typeof App !== "undefined" && App.onCloudReconnected) {
+          App.onCloudReconnected();
+        }
+        return true;
+      }
+    } catch (e) {}
+    this.status = "offline";
+    this.notifyStatusChange();
+    return false;
   }
 };
 
