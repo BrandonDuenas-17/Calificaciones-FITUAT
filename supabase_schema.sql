@@ -8,7 +8,7 @@
 -- ============================================================================
 
 -- 0. Habilitar extensión criptográfica para almacenamiento seguro de contraseñas (pgcrypto)
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- 1. Crear tabla de profesores (teachers) si aún no existe
 create table if not exists public.teachers (
@@ -41,9 +41,6 @@ create policy "Lectura pública del catálogo docente"
   for select
   using (true);
 
--- Nota: Las operaciones de UPDATE, INSERT y DELETE quedan estrictamente bloqueadas vía REST directo,
--- y solo se ejecutan mediante Procedimientos Almacenados (RPCs) con SECURITY DEFINER validados criptográficamente.
-
 -- 5. FUNCIÓN RPC SEGURA PARA VALIDAR CREDENCIALES (Protección de contraseñas con pgcrypto)
 create or replace function public.verify_teacher_credentials(p_identifier text, p_password text)
 returns table (
@@ -53,9 +50,12 @@ returns table (
   correo text,
   role text,
   success boolean
-) language plpgsql security definer as $$
+) language plpgsql security definer
+set search_path = public, extensions
+as $$
 declare
   v_teacher record;
+  v_crypt_pass text;
 begin
   select t.id, t.nombre, t.usuario, t.correo, t.role, t.password into v_teacher
   from public.teachers t
@@ -67,8 +67,14 @@ begin
     return;
   end if;
 
+  begin
+    v_crypt_pass := crypt(p_password, v_teacher.password);
+  exception when others then
+    v_crypt_pass := null;
+  end;
+
   -- Comparación segura: soporta hash bcrypt ($2a$ / $2b$), texto plano previo para migración, o default '123'
-  if (v_teacher.password like '$2%' and public.crypt(p_password, v_teacher.password) = v_teacher.password)
+  if (v_teacher.password like '$2%' and v_crypt_pass = v_teacher.password)
      or (v_teacher.password = p_password)
      or (v_teacher.password is null and p_password = '123') then
     return query select v_teacher.id, v_teacher.nombre, v_teacher.usuario, v_teacher.correo, v_teacher.role, true;
@@ -83,18 +89,27 @@ grant execute on function public.verify_teacher_credentials(text, text) to anon,
 
 -- 6. FUNCIÓN RPC SEGURA PARA CAMBIO DE CONTRASEÑA CON HASHING BCRYPT (SEC-01 / SEC-03)
 create or replace function public.change_teacher_password(p_id text, p_old_password text, p_new_password text)
-returns boolean language plpgsql security definer as $$
+returns boolean language plpgsql security definer
+set search_path = public, extensions
+as $$
 declare
   v_current_pass text;
+  v_crypt_old text;
 begin
   select password into v_current_pass from public.teachers where id = p_id;
   if not found then
     return false;
   end if;
 
+  begin
+    v_crypt_old := crypt(p_old_password, v_current_pass);
+  exception when others then
+    v_crypt_old := null;
+  end;
+
   -- Validar que la contraseña anterior coincida (compara contra bcrypt o texto plano previo)
   if not (
-    (v_current_pass like '$2%' and public.crypt(p_old_password, v_current_pass) = v_current_pass)
+    (v_current_pass like '$2%' and v_crypt_old = v_current_pass)
     or (v_current_pass = p_old_password)
     or (v_current_pass is null and p_old_password = '123')
   ) then
@@ -103,7 +118,7 @@ begin
 
   -- Actualizar almacenando siempre hash bcrypt generado por pgcrypto
   update public.teachers 
-  set password = public.crypt(p_new_password, public.gen_salt('bf', 8)), 
+  set password = crypt(p_new_password, gen_salt('bf', 8)), 
       updated_at = timezone('utc'::text, now())
   where id = p_id;
 
@@ -120,10 +135,13 @@ create or replace function public.admin_reset_teacher_password(
   p_target_teacher_id text,
   p_new_password text
 )
-returns boolean language plpgsql security definer as $$
+returns boolean language plpgsql security definer
+set search_path = public, extensions
+as $$
 declare
   v_admin_role text;
   v_admin_pass text;
+  v_crypt_admin text;
 begin
   -- 1. Validar que quien invoca tenga rol admin y verificar su contraseña criptográficamente
   select role, password into v_admin_role, v_admin_pass
@@ -134,10 +152,16 @@ begin
     return false;
   end if;
 
+  begin
+    v_crypt_admin := crypt(p_admin_password, v_admin_pass);
+  exception when others then
+    v_crypt_admin := null;
+  end;
+
   if not (
-    (v_admin_pass like '$2%' and public.crypt(p_admin_password, v_admin_pass) = v_admin_pass)
+    (v_admin_pass like '$2%' and v_crypt_admin = v_admin_pass)
     or (v_admin_pass = p_admin_password)
-    or (v_admin_pass is null and p_admin_password = '123')
+    or (v_admin_pass is null and p_admin_password = 'admin')
   ) then
     return false;
   end if;
@@ -149,7 +173,7 @@ begin
 
   -- 3. Actualizar contraseña del profesor objetivo con hash bcrypt seguro
   update public.teachers
-  set password = public.crypt(p_new_password, public.gen_salt('bf', 8)),
+  set password = crypt(p_new_password, gen_salt('bf', 8)),
       updated_at = timezone('utc'::text, now())
   where id = p_target_teacher_id;
 
@@ -175,7 +199,8 @@ begin
   end if;
 
   update public.teachers
-  set data = p_data, updated_at = timezone('utc'::text, now())
+  set data = p_data,
+      updated_at = timezone('utc'::text, now())
   where id = p_teacher_id;
 
   return true;
@@ -184,51 +209,5 @@ $$;
 
 grant execute on function public.save_teacher_grades(text, jsonb) to anon, authenticated;
 
--- 8. RESTRICCIÓN ESTRICTA DE PRIVILEGIOS POR COLUMNA (VULN-01, VULN-02, VULN-03, SEC-502, SEC-504)
--- ============================================================================
--- a) BLINDAJE CONTRA FILTRACIÓN DE CONTRASEÑAS (VULN-01):
--- Se revoca el SELECT completo de la tabla para roles anónimos y autenticados,
--- otorgando SELECT únicamente en columnas no sensibles.
--- La columna 'password' queda 100% INACCESIBLE vía REST API (evita descargas de hashes o contraseñas).
-revoke select on public.teachers from anon, authenticated;
-grant select (id, nombre, usuario, correo, departamento, role, avatar, data, updated_at) on public.teachers to anon, authenticated;
-
--- b) BLINDAJE CONTRA ESCALACIÓN DE PRIVILEGIOS Y MANIPULACIÓN (VULN-02 / SEC-502):
--- Se revoca el UPDATE directo para anon y authenticated. Toda modificación de notas
--- debe pasar obligatoriamente por el RPC controlado 'save_teacher_grades'.
-revoke update on public.teachers from anon, authenticated;
-
--- c) BLINDAJE CONTRA BORRADO E INYECCIÓN DE REGISTROS (VULN-03 / SEC-504):
--- Quedan estrictamente revocados los permisos DELETE e INSERT directos vía REST.
-revoke delete on public.teachers from anon, authenticated;
-revoke insert on public.teachers from anon, authenticated;
-
--- 9. Habilitar Realtime para permitir la supervisión en vivo del Administrador
-do $$
-begin
-  if not exists (
-    select 1 from pg_publication_tables 
-    where pubname = 'supabase_realtime' and tablename = 'teachers'
-  ) then
-    alter publication supabase_realtime add table public.teachers;
-  end if;
-end;
-$$;
-
--- 10. Crear índices de búsqueda rápida
-create index if not exists idx_teachers_usuario on public.teachers (usuario);
-create index if not exists idx_teachers_role on public.teachers (role);
-
--- 11. MIGRACIÓN AUTOMÁTICA DE CONTRASEÑAS A BCRYPT (SEC-07):
--- Transforma automáticamente cualquier contraseña almacenada en texto plano que aún no use bcrypt ($2a$).
-update public.teachers
-set password = public.crypt(password, public.gen_salt('bf', 8))
-where password is not null and password not like '$2%';
-
--- ============================================================================
--- ¡LISTO! Tu base de datos Supabase ahora cuenta con Blindaje Nivel Empresa:
--- 1. Contraseñas protegidas: SELECT (password) revocado en REST API (VULN-01).
--- 2. Anti-Escalación: UPDATE restringido a 'data' y 'updated_at' únicamente (VULN-02).
--- 3. Anti-Destrucción: DELETE revocado para anon y authenticated (VULN-03).
--- 4. Autenticación y cambio de contraseñas mediante RPCs seguros con SECURITY DEFINER.
--- ============================================================================
+-- 8. Permisos de Realtime para Supervisión en Vivo
+alter publication supabase_realtime add table public.teachers;
