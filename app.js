@@ -8544,6 +8544,9 @@ const App = {
           raf = 0;
           previo = null;
           card.classList.remove('is-flipping');
+          if (meta % 360 === 0 && giroEl) {
+            giroEl.style.transform = '';
+          }
           return;
         }
         raf = requestAnimationFrame(paso);
@@ -8560,7 +8563,13 @@ const App = {
         card.setAttribute('aria-pressed', String(atras));
         if (frente) frente.setAttribute('aria-hidden', String(atras));
         if (dorso) dorso.setAttribute('aria-hidden', String(!atras));
-        if (reduce) { giro = meta; pinta(); return; }
+        if (reduce) {
+          giro = meta;
+          pinta();
+          card.classList.remove('is-flipping');
+          if (meta % 360 === 0 && giroEl) giroEl.style.transform = '';
+          return;
+        }
         arranca();
       }
 
