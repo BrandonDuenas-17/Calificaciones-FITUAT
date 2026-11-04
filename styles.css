@@ -2540,32 +2540,354 @@ textarea.form-control {
 
 .admin-teachers-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  gap: 22px;
   width: 100%;
 }
 
+/* =====================================================================
+   Moxen Volteo 3D - Tarjetas de Docentes en Cuenta Maestra
+   ===================================================================== */
 .admin-teacher-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: 405px;
+  perspective: 1400px;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.admin-teacher-card:focus-visible .vo-giro {
+  outline: 2px solid var(--uat-orange);
+  outline-offset: 4px;
+  border-radius: var(--radius-lg, 16px);
+}
+
+.admin-teacher-card .vo-sombra {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: -12px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.22);
+  filter: blur(14px);
+  will-change: transform, opacity;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.admin-teacher-card .vo-giro {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.admin-teacher-card .vo-canto {
+  position: absolute;
+  top: 1%;
+  bottom: 1%;
+  left: 50%;
+  width: 6px;
+  margin-left: -3px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--uat-blue-night, #0b192c), var(--uat-orange, #ff6b00));
+  transform: rotateY(90deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-teacher-card .vo-cara {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg, 16px);
+  padding: 18px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  width: 100%;
-  min-width: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
   box-sizing: border-box;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.admin-teacher-card:hover {
+.admin-teacher-card:hover .vo-cara {
   border-color: var(--uat-orange);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.admin-teacher-card .vo-cara::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.admin-teacher-card .vo-oscura::after {
+  opacity: var(--o, 0);
+}
+
+.admin-teacher-card .vo-frente {
+  transform: translateZ(2.5px);
+  z-index: 2;
+}
+
+.admin-teacher-card .vo-dorso {
+  transform: rotateY(180deg) translateZ(2.5px);
+  z-index: 1;
+  background: var(--bg-primary);
+}
+
+.admin-teacher-card .vo-brillo {
+  position: absolute;
+  top: -15%;
+  bottom: -15%;
+  left: 0;
+  width: 60%;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.22) 50%, transparent);
+  will-change: transform, opacity;
+}
+
+[data-theme="dark"] .admin-teacher-card .vo-brillo {
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.12) 50%, transparent);
+}
+
+/* Front Face Elements */
+.admin-card-badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 7px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.admin-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0 12px 0;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-color);
+}
+
+.admin-kpi-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.admin-kpi-val {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.admin-kpi-lbl {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.btn-flip-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--uat-blue-night, #0b192c);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-family: inherit;
+}
+
+[data-theme="dark"] .btn-flip-trigger {
+  color: #f1f5f9;
+}
+
+.btn-flip-trigger:hover {
+  background: var(--uat-orange-light);
+  color: var(--uat-orange-dark);
+  border-color: var(--uat-orange);
+}
+
+.btn-flip-trigger .vo-icon-spin {
+  font-size: 14px;
+  font-weight: 700;
+  transition: transform 0.3s ease;
+}
+
+.btn-flip-trigger:hover .vo-icon-spin {
+  transform: rotate(90deg);
+}
+
+/* Back Face Elements */
+.vo-dorso-header {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.vo-dorso-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--uat-orange);
+}
+
+.vo-dorso-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 3px;
+}
+
+.vo-dorso-courses-scroll {
+  flex: 1 1 auto;
+  max-height: 140px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-right: 4px;
+}
+
+.vo-dorso-courses-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.vo-dorso-courses-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.vo-course-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+}
+
+.vo-course-title {
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vo-course-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.vo-badge-aula {
+  background: rgba(11, 25, 44, 0.08);
+  color: var(--uat-blue-night, #0b192c);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .vo-badge-aula {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+}
+
+.vo-badge-dias {
+  color: var(--text-secondary);
+}
+
+.vo-empty-courses {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  padding: 6px 0;
+}
+
+.vo-more-courses {
+  font-size: 11px;
+  color: var(--uat-orange);
+  font-weight: 600;
+  text-align: right;
+  margin-top: 2px;
+}
+
+.vo-dorso-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.btn-flip-back {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  font-family: inherit;
+}
+
+.btn-flip-back:hover {
+  color: var(--uat-orange);
 }
 
 .admin-teacher-header {
@@ -3514,8 +3836,9 @@ textarea.form-control {
   }
 
   .admin-teacher-card {
-    padding: 14px 12px !important;
+    padding: 0 !important;
     width: 100% !important;
+    height: 420px !important;
   }
 
   .admin-section-title {

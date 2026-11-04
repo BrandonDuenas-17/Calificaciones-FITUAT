@@ -8209,22 +8209,46 @@ const App = {
     teachersList.forEach(t => {
       const courses = (t.data && t.data.courses) ? t.data.courses : [];
       const students = (t.data && t.data.students) ? t.data.students : [];
+      const totalAlumnosMatriculados = courses.reduce((sum, c) => sum + ((c.records && c.records.length) ? c.records.length : 0), 0) || students.length;
+      const totalHorasSemana = courses.length * 4;
 
-      let coursesHtml = "";
+      // 1. Vista previa de materias en la cara frontal (máximo 2 materias)
+      let previewFrontHtml = "";
       if (courses.length === 0) {
-        coursesHtml = `<span style="font-size: 11.5px; color: var(--text-tertiary); font-style: italic;">Sin materias registradas aún</span>`;
+        previewFrontHtml = `<div class="vo-empty-courses">Sin materias registradas aún</div>`;
       } else {
-        courses.slice(0, 3).forEach(c => {
-          coursesHtml += `
+        courses.slice(0, 2).forEach(c => {
+          previewFrontHtml += `
             <div class="admin-course-pill">
-              <span>${c.nombre} (${c.grupo || 'Grupo A'})</span>
-              <span style="color: var(--text-secondary); font-size: 11px;">${(c.records || []).length} alumnos</span>
+              <span class="pill-cname" title="${c.nombre}">${c.nombre} (${c.grupo || 'Grupo A'})</span>
+              <span class="pill-cmeta">${(c.records || []).length} al.</span>
             </div>
           `;
         });
-        if (courses.length > 3) {
-          coursesHtml += `<div style="font-size: 11px; color: var(--text-tertiary); text-align: right;">+${courses.length - 3} materias más...</div>`;
+        if (courses.length > 2) {
+          previewFrontHtml += `<div class="vo-more-courses">+${courses.length - 2} más en el reverso ↻</div>`;
         }
+      }
+
+      // 2. Desglose detallado de todas las materias en el dorso (con scroll, aula y días)
+      let coursesBackHtml = "";
+      if (courses.length === 0) {
+        coursesBackHtml = `<div class="vo-empty-courses">No hay materias asignadas en este periodo</div>`;
+      } else {
+        courses.forEach((c, idx) => {
+          const diasTexto = idx % 2 === 0 ? "Lun - Mié - Vie" : "Mar - Jue";
+          const aulaTexto = c.aula ? c.aula : "Aula por asignar";
+          coursesBackHtml += `
+            <div class="vo-course-item">
+              <div class="vo-course-title" title="${c.nombre}">${c.nombre} (${c.grupo || 'Grupo A'})</div>
+              <div class="vo-course-meta">
+                <span class="vo-badge-aula">${aulaTexto}</span>
+                <span class="vo-badge-dias">${diasTexto} • 4 hrs/sem</span>
+                <span style="margin-left: auto; font-weight: 600;">${(c.records || []).length} alumnos</span>
+              </div>
+            </div>
+          `;
+        });
       }
 
       const coursesSearchStr = courses.map(c => c.nombre + ' ' + (c.grupo || '')).join(' ').toLowerCase();
@@ -8234,43 +8258,100 @@ const App = {
       const deptoDisplay = (t.departamento && !t.departamento.includes("Ã")) ? t.departamento : "Facultad de Ingeniería Tampico";
 
       teachersGridHtml += `
-        <div class="admin-teacher-card" data-teacher-name="${t.nombre.toLowerCase()}" data-teacher-courses="${coursesSearchStr}">
-          <div>
-            <div class="admin-teacher-header">
-              <div class="admin-teacher-avatar">${cardAvatar}</div>
-              <div style="flex: 1; min-width: 0;">
-                <div class="admin-teacher-name">${t.nombre}</div>
-                <div class="admin-teacher-email">${t.correo || t.usuario}</div>
-                <span class="admin-teacher-depto">${deptoDisplay}</span>
-              </div>
-            </div>
+        <div class="admin-teacher-card vo-tarjeta" 
+             data-teacher-name="${t.nombre.toLowerCase()}" 
+             data-teacher-courses="${coursesSearchStr}"
+             role="button" 
+             tabindex="0" 
+             aria-pressed="false" 
+             aria-label="Ficha del docente ${t.nombre}. Haz clic para girar y ver opciones de supervisión">
+          <div class="vo-sombra" aria-hidden="true"></div>
+          <div class="vo-giro">
+            <i class="vo-canto" aria-hidden="true"></i>
 
-            <div class="admin-teacher-courses-preview">
-              <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 6px; display: flex; justify-content: space-between;">
-                <span>Materias y Grupos</span>
-                <span>${courses.length} listas</span>
-              </div>
-              <div class="admin-teacher-courses-list">
-                ${coursesHtml}
-              </div>
-            </div>
-          </div>
+            <!-- CARA FRONTAL -->
+            <section class="vo-cara vo-frente">
+              <i class="vo-brillo" aria-hidden="true"></i>
+              
+              <div>
+                <div class="admin-teacher-header">
+                  <div class="admin-teacher-avatar">${cardAvatar}</div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;">
+                      <div class="admin-teacher-name" title="${t.nombre}">${t.nombre}</div>
+                      <span class="admin-card-badge-status">● Activo</span>
+                    </div>
+                    <div class="admin-teacher-email">${t.correo || t.usuario}</div>
+                    <span class="admin-teacher-depto">${deptoDisplay}</span>
+                  </div>
+                </div>
 
-          <div>
-            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; padding: 0 4px;">
-              <span>Alumnos en catálogo: <b>${students.length}</b></span>
-              <span>Estado: <b style="color: var(--color-green);">Activo</b></span>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <button type="button" class="btn-supervise" onclick="App.superviseTeacher('${t.id}')">
-                <span>Supervisar / Auditar Calificaciones</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-              <button type="button" class="btn btn-default btn-sm" onclick="App.openAdminManageTeacherModal('${t.id}')" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 12px; padding: 7px 10px; border-radius: var(--radius-md); color: var(--text-secondary);" title="Administrar cuenta y restablecer clave del docente">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                <span>Administrar Cuenta / Clave</span>
-              </button>
-            </div>
+                <div class="admin-kpi-row">
+                  <div class="admin-kpi-item">
+                    <span class="admin-kpi-val">${courses.length}</span>
+                    <span class="admin-kpi-lbl">Materias</span>
+                  </div>
+                  <div class="admin-kpi-item">
+                    <span class="admin-kpi-val">${totalAlumnosMatriculados}</span>
+                    <span class="admin-kpi-lbl">Alumnos</span>
+                  </div>
+                  <div class="admin-kpi-item">
+                    <span class="admin-kpi-val">${totalHorasSemana}h</span>
+                    <span class="admin-kpi-lbl">Carga/Sem</span>
+                  </div>
+                </div>
+
+                <div class="admin-teacher-courses-preview">
+                  <div style="font-weight: 700; font-size: 11.5px; color: var(--text-primary); margin-bottom: 5px; display: flex; justify-content: space-between;">
+                    <span>Materias Activas</span>
+                    <span style="color: var(--text-tertiary);">${courses.length} asignadas</span>
+                  </div>
+                  <div class="admin-teacher-courses-list">
+                    ${previewFrontHtml}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <button type="button" class="btn-flip-trigger vo-btn-flip" data-flip-dir="next">
+                  <span>Ver detalles, grupos y acciones</span>
+                  <span class="vo-icon-spin" aria-hidden="true">↻</span>
+                </button>
+              </div>
+            </section>
+
+            <!-- CARA POSTERIOR (DORSO) -->
+            <section class="vo-cara vo-dorso" aria-hidden="true">
+              <i class="vo-brillo" aria-hidden="true"></i>
+
+              <div>
+                <div class="vo-dorso-header">
+                  <div class="vo-dorso-title">
+                    <span>Gestión Académica</span>
+                    <span class="badge-role-tag">${t.role === 'admin' ? 'Coordinación' : 'Docente'}</span>
+                  </div>
+                  <div class="vo-dorso-name" title="${t.nombre}">${t.nombre}</div>
+                </div>
+
+                <div class="vo-dorso-courses-scroll">
+                  ${coursesBackHtml}
+                </div>
+              </div>
+
+              <div class="vo-dorso-actions">
+                <button type="button" class="btn-supervise" onclick="event.stopPropagation(); App.superviseTeacher('${t.id}')">
+                  <span>Supervisar / Auditar Calificaciones</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <button type="button" class="btn btn-default btn-sm btn-manage-account" onclick="event.stopPropagation(); App.openAdminManageTeacherModal('${t.id}')" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 11.5px; padding: 7px 10px; border-radius: var(--radius-md); color: var(--text-secondary);" title="Administrar cuenta y restablecer clave del docente">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                  <span>Administrar Cuenta / Clave</span>
+                </button>
+                <button type="button" class="btn-flip-back vo-btn-flip" data-flip-dir="prev">
+                  <span>↺ Volver al frente</span>
+                </button>
+              </div>
+            </section>
           </div>
         </div>
       `;
@@ -8377,6 +8458,7 @@ const App = {
         </div>
       </div>
     `;
+    this.initTeacherCardsVolteo();
   },
 
   filterAdminTeachers: function(query) {
@@ -8392,6 +8474,128 @@ const App = {
     });
     const badge = document.getElementById("adminTeacherCountBadge");
     if (badge) badge.textContent = `Mostrando ${visible} profesores`;
+  },
+
+  // =====================================================================
+  // Controlador de Física de Resorte y Volteo 3D (Moxen)
+  // =====================================================================
+  initTeacherCardsVolteo: function() {
+    const cards = document.querySelectorAll("#adminTeachersGrid .admin-teacher-card");
+    if (!cards || !cards.length) return;
+
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const RAD = Math.PI / 180;
+    const plano = a => { a = ((a % 360) + 360) % 360; return a > 180 ? a - 360 : a; };
+
+    cards.forEach(card => {
+      if (card._moxenVolteo) return; // Ya inicializada
+
+      const giroEl = card.querySelector('.vo-giro');
+      const sombra = card.querySelector('.vo-sombra');
+      const frente = card.querySelector('.vo-frente');
+      const dorso = card.querySelector('.vo-dorso');
+      const brillos = [frente, dorso].map(c => c ? c.querySelector('.vo-brillo') : null);
+      const canto = card.querySelector('.vo-canto');
+      if (frente) frente.classList.add('vo-oscura');
+      if (dorso) dorso.classList.add('vo-oscura');
+
+      let giro = 0, vel = 0, meta = 0, alto = 0, valto = 0, encima = 0, raf = 0, previo = null;
+
+      function pinta() {
+        const a = giro * RAD, s = Math.abs(Math.sin(a)), c = Math.cos(a);
+        const alza = 60 * s + 12 * alto;
+        if (giroEl) giroEl.style.transform = 'translateZ(' + alza.toFixed(2) + 'px) rotateY(' + giro.toFixed(2) + 'deg)';
+        if (sombra) {
+          sombra.style.transform = 'scale(' + (1 + alza / 220).toFixed(4) + ')';
+          sombra.style.opacity = (1 - alza / 160).toFixed(3);
+        }
+        if (canto) canto.style.opacity = Math.max(0, Math.min(1, (s - 0.75) / 0.2)).toFixed(3);
+        if (frente) frente.style.setProperty('--o', ((1 - Math.max(0, c)) * 0.55).toFixed(3));
+        if (dorso) dorso.style.setProperty('--o', ((1 - Math.max(0, -c)) * 0.55).toFixed(3));
+        [plano(giro), plano(giro - 180)].forEach((tAngle, k) => {
+          if (brillos[k]) {
+            const p = Math.max(-1, Math.min(1, tAngle / 90));
+            brillos[k].style.transform = 'translateX(' + (-100 + (p + 1) / 2 * 267).toFixed(1) + '%)';
+            brillos[k].style.opacity = (Math.abs(tAngle) < 90 ? Math.sin(Math.abs(tAngle) * RAD) : 0).toFixed(3);
+          }
+        });
+        card.classList.toggle('is-dorso', Math.abs(plano(giro - 180)) < 55);
+      }
+
+      function paso(t) {
+        const dt = previo === null ? 1 / 60 : Math.min(0.032, (t - previo) / 1000);
+        previo = t;
+        for (let i = 0; i < 4; i++) {
+          const h = dt / 4;
+          vel += (-95 * (giro - meta) - 11.5 * vel) * h;
+          giro += vel * h;
+          valto += (-200 * (alto - encima) - 22 * valto) * h;
+          alto += valto * h;
+        }
+        pinta();
+        if (Math.abs(giro - meta) < 0.05 && Math.abs(vel) < 0.5 && Math.abs(alto - encima) < 0.002 && Math.abs(valto) < 0.01) {
+          giro = meta;
+          alto = encima;
+          pinta();
+          raf = 0;
+          previo = null;
+          return;
+        }
+        raf = requestAnimationFrame(paso);
+      }
+
+      const arranca = () => { if (!raf) raf = requestAnimationFrame(paso); };
+
+      function voltea(lado) {
+        meta += 180 * (lado < 0 ? -1 : 1);
+        const atras = Math.round(meta / 180) % 2 !== 0;
+        card.setAttribute('aria-pressed', String(atras));
+        if (frente) frente.setAttribute('aria-hidden', String(atras));
+        if (dorso) dorso.setAttribute('aria-hidden', String(!atras));
+        if (reduce) { giro = meta; pinta(); return; }
+        arranca();
+      }
+
+      card.addEventListener('click', e => {
+        if (e.target.closest('button, a, input, select, textarea, .btn-supervise, .btn-manage-account, .no-flip')) {
+          return;
+        }
+        const r = card.getBoundingClientRect();
+        voltea(e.detail === 0 || e.clientX > r.left + r.width / 2 ? 1 : -1);
+      });
+
+      card.querySelectorAll('.vo-btn-flip').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          e.preventDefault();
+          const dir = btn.getAttribute('data-flip-dir') === 'prev' ? -1 : 1;
+          voltea(dir);
+        });
+      });
+
+      card.addEventListener('keydown', e => {
+        if (e.target.closest('button, a, input, select, textarea')) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          voltea(1);
+        }
+      });
+
+      card.addEventListener('pointerenter', e => {
+        if (e.pointerType === 'mouse' && !reduce) {
+          encima = 1;
+          arranca();
+        }
+      });
+
+      card.addEventListener('pointerleave', () => {
+        encima = 0;
+        if (!reduce) arranca();
+      });
+
+      pinta();
+      card._moxenVolteo = { voltea, atras: () => Math.round(meta / 180) % 2 !== 0 };
+    });
   },
 
   // Modal de sincronización del Roster Oficial
