@@ -8477,16 +8477,17 @@ const App = {
   },
 
   // =====================================================================
-  // Controlador de Física de Resorte y Volteo 3D (Moxen)
+  // Controlador de Física de Resorte y Volteo 3D (Moxen Ultra-Optimizado)
   // =====================================================================
   initTeacherCardsVolteo: function() {
-    const cards = document.querySelectorAll("#adminTeachersGrid .admin-teacher-card");
-    if (!cards || !cards.length) return;
+    const grid = document.getElementById("adminTeachersGrid");
+    if (!grid) return;
 
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const RAD = Math.PI / 180;
     const plano = a => { a = ((a % 360) + 360) % 360; return a > 180 ? a - 360 : a; };
 
+    const cards = grid.querySelectorAll(".admin-teacher-card");
     cards.forEach(card => {
       if (card._moxenVolteo) return; // Ya inicializada
 
@@ -8499,26 +8500,28 @@ const App = {
       if (frente) frente.classList.add('vo-oscura');
       if (dorso) dorso.classList.add('vo-oscura');
 
-      let giro = 0, vel = 0, meta = 0, alto = 0, valto = 0, encima = 0, raf = 0, previo = null;
+      let giro = 0, vel = 0, meta = 0, raf = 0, previo = null;
 
       function pinta() {
         const a = giro * RAD, s = Math.abs(Math.sin(a)), c = Math.cos(a);
-        const alza = 60 * s + 12 * alto;
-        if (giroEl) giroEl.style.transform = 'translateZ(' + alza.toFixed(2) + 'px) rotateY(' + giro.toFixed(2) + 'deg)';
+        const alza = 50 * s;
+        if (giroEl) giroEl.style.transform = 'translateZ(' + alza.toFixed(1) + 'px) rotateY(' + giro.toFixed(1) + 'deg)';
         if (sombra) {
-          sombra.style.transform = 'scale(' + (1 + alza / 220).toFixed(4) + ')';
-          sombra.style.opacity = (1 - alza / 160).toFixed(3);
+          sombra.style.transform = 'scale(' + (1 + alza / 200).toFixed(3) + ')';
+          sombra.style.opacity = (0.85 - alza / 150).toFixed(2);
         }
-        if (canto) canto.style.opacity = Math.max(0, Math.min(1, (s - 0.75) / 0.2)).toFixed(3);
-        if (frente) frente.style.setProperty('--o', ((1 - Math.max(0, c)) * 0.55).toFixed(3));
-        if (dorso) dorso.style.setProperty('--o', ((1 - Math.max(0, -c)) * 0.55).toFixed(3));
-        [plano(giro), plano(giro - 180)].forEach((tAngle, k) => {
-          if (brillos[k]) {
-            const p = Math.max(-1, Math.min(1, tAngle / 90));
-            brillos[k].style.transform = 'translateX(' + (-100 + (p + 1) / 2 * 267).toFixed(1) + '%)';
-            brillos[k].style.opacity = (Math.abs(tAngle) < 90 ? Math.sin(Math.abs(tAngle) * RAD) : 0).toFixed(3);
-          }
-        });
+        if (canto) canto.style.opacity = Math.max(0, Math.min(1, (s - 0.75) / 0.2)).toFixed(2);
+        if (frente) frente.style.setProperty('--o', ((1 - Math.max(0, c)) * 0.5).toFixed(2));
+        if (dorso) dorso.style.setProperty('--o', ((1 - Math.max(0, -c)) * 0.5).toFixed(2));
+        if (brillos[0] || brillos[1]) {
+          [plano(giro), plano(giro - 180)].forEach((tAngle, k) => {
+            if (brillos[k]) {
+              const p = Math.max(-1, Math.min(1, tAngle / 90));
+              brillos[k].style.transform = 'translateX(' + (-100 + (p + 1) / 2 * 267).toFixed(1) + '%)';
+              brillos[k].style.opacity = (Math.abs(tAngle) < 90 ? Math.sin(Math.abs(tAngle) * RAD) : 0).toFixed(2);
+            }
+          });
+        }
         card.classList.toggle('is-dorso', Math.abs(plano(giro - 180)) < 55);
       }
 
@@ -8529,22 +8532,23 @@ const App = {
           const h = dt / 4;
           vel += (-95 * (giro - meta) - 11.5 * vel) * h;
           giro += vel * h;
-          valto += (-200 * (alto - encima) - 22 * valto) * h;
-          alto += valto * h;
         }
         pinta();
-        if (Math.abs(giro - meta) < 0.05 && Math.abs(vel) < 0.5 && Math.abs(alto - encima) < 0.002 && Math.abs(valto) < 0.01) {
+        if (Math.abs(giro - meta) < 0.05 && Math.abs(vel) < 0.5) {
           giro = meta;
-          alto = encima;
           pinta();
           raf = 0;
           previo = null;
+          card.classList.remove('is-flipping');
           return;
         }
         raf = requestAnimationFrame(paso);
       }
 
-      const arranca = () => { if (!raf) raf = requestAnimationFrame(paso); };
+      const arranca = () => {
+        card.classList.add('is-flipping');
+        if (!raf) raf = requestAnimationFrame(paso);
+      };
 
       function voltea(lado) {
         meta += 180 * (lado < 0 ? -1 : 1);
@@ -8581,24 +8585,12 @@ const App = {
         }
       });
 
-      card.addEventListener('pointerenter', e => {
-        if (e.pointerType === 'mouse' && !reduce) {
-          encima = 1;
-          arranca();
-        }
-      });
-
-      card.addEventListener('pointerleave', () => {
-        encima = 0;
-        if (!reduce) arranca();
-      });
-
-      pinta();
+      // Nota de alto rendimiento: Las 154 tarjetas quedan en reposo puro (0% CPU / 0 RAF en hover/scroll)
       card._moxenVolteo = { voltea, atras: () => Math.round(meta / 180) % 2 !== 0 };
     });
   },
 
-  // Modal de sincronización del Roster Oficial
+    // Modal de sincronización del Roster Oficial
   openSyncRosterModal: function() {
     if (!this.isAdmin()) {
       alert("Acceso restringido: Esta herramienta solo puede ser ejecutada por Coordinación Académica.");

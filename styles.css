@@ -2548,6 +2548,7 @@ textarea.form-control {
 /* =====================================================================
    Moxen Volteo 3D - Tarjetas de Docentes en Cuenta Maestra
    ===================================================================== */
+/* Optimización de Rendimiento Extremo: Virtualización del navegador para 154 tarjetas */
 .admin-teacher-card {
   position: relative;
   width: 100%;
@@ -2563,6 +2564,8 @@ textarea.form-control {
   box-shadow: none;
   overflow: visible;
   box-sizing: border-box;
+  content-visibility: auto;
+  contain-intrinsic-size: 330px 405px;
 }
 
 .admin-teacher-card:focus-visible .vo-giro {
@@ -2571,24 +2574,27 @@ textarea.form-control {
   border-radius: var(--radius-lg, 16px);
 }
 
+/* Sombra en el suelo optimizada con radial-gradient (cero blur costoso en GPU) */
 .admin-teacher-card .vo-sombra {
   position: absolute;
-  left: 6%;
-  right: 6%;
-  bottom: -12px;
-  height: 30px;
+  left: 8%;
+  right: 8%;
+  bottom: -10px;
+  height: 26px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.22);
-  filter: blur(14px);
-  will-change: transform, opacity;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.24) 0%, rgba(0, 0, 0, 0.06) 50%, transparent 75%);
   pointer-events: none;
   z-index: 1;
+  opacity: 0.85;
 }
 
 .admin-teacher-card .vo-giro {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
+}
+
+.admin-teacher-card.is-flipping .vo-giro {
   will-change: transform;
 }
 
@@ -2621,12 +2627,12 @@ textarea.form-control {
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   box-sizing: border-box;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .admin-teacher-card:hover .vo-cara {
   border-color: var(--uat-orange);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
 }
 
 .admin-teacher-card .vo-cara::after {
@@ -2663,7 +2669,6 @@ textarea.form-control {
   pointer-events: none;
   opacity: 0;
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.22) 50%, transparent);
-  will-change: transform, opacity;
 }
 
 [data-theme="dark"] .admin-teacher-card .vo-brillo {
