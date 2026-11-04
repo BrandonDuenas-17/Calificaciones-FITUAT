@@ -2546,11 +2546,12 @@ textarea.form-control {
   gap: 22px;
   width: 100%;
   contain: layout style;
+  transform: translateZ(0);
 }
 
 /* =====================================================================
    Moxen Volteo 3D - Tarjetas de Docentes en Cuenta Maestra
-   Arquitectura de Rendimiento Extremo: Virtualización C++ Nativa
+   Arquitectura de Rendimiento Extremo: GPU Compositing Puro
    ===================================================================== */
 .admin-teacher-card {
   position: relative;
@@ -2567,8 +2568,6 @@ textarea.form-control {
   overflow: visible;
   box-sizing: border-box;
   contain: layout style;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 405px;
 }
 
 /* 3D Perspective activo ÚNICAMENTE en la tarjeta que está girando (0% cálculo de matrices en scroll) */
@@ -2582,7 +2581,7 @@ textarea.form-control {
   border-radius: var(--radius-lg, 16px);
 }
 
-/* Sombra en el suelo optimizada con radial-gradient */
+/* Sombra en el suelo: solo se activa durante el giro físico para no consumir GPU en scroll */
 .admin-teacher-card .vo-sombra {
   position: absolute;
   left: 8%;
@@ -2594,9 +2593,11 @@ textarea.form-control {
   pointer-events: none;
   z-index: 1;
   opacity: 0.85;
+  display: none;
 }
 
 .admin-teacher-card.is-flipping .vo-sombra {
+  display: block;
   will-change: transform, opacity;
 }
 
@@ -2646,7 +2647,7 @@ textarea.form-control {
   border: 1px solid var(--border-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.12s ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -2654,7 +2655,6 @@ textarea.form-control {
 
 .admin-teacher-card:hover .vo-cara {
   border-color: var(--uat-orange);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
 
 /* Backface visibility activo solo durante el giro físico */

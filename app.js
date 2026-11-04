@@ -8253,8 +8253,8 @@ const App = {
 
       const coursesSearchStr = courses.map(c => c.nombre + ' ' + (c.grupo || '')).join(' ').toLowerCase();
       const cardAvatar = t.role === 'admin'
-        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
-        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
+        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" width="38" height="38" decoding="async" />`
+        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" width="38" height="38" decoding="async" />`;
       const deptoDisplay = (t.departamento && !t.departamento.includes("Ã")) ? t.departamento : "Facultad de Ingeniería Tampico";
 
       teachersGridHtml += `
@@ -8722,8 +8722,8 @@ const App = {
       const coursesCount = (t.data && t.data.courses) ? t.data.courses.length : 0;
       const studentsCount = (t.data && t.data.students) ? t.data.students.length : 0;
       const cardAvatar = t.role === 'admin'
-        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
-        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
+        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" width="38" height="38" decoding="async" />`
+        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" width="38" height="38" decoding="async" />`;
       const escId = this.escapeHtml(t.id);
       const escNombre = this.escapeHtml(t.nombre);
       const escUsuario = this.escapeHtml(t.usuario);
