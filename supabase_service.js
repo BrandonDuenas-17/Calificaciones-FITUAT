@@ -172,39 +172,7 @@ const SupabaseService = {
           const expectedPass = dbPass || "admin";
           const isDirectMatch = (cleanPass === expectedPass || password === adm.password);
 
-          let isHealedMatch = false;
-          // Mecanismo de resiliencia auto-sanadora: si la clave ingresada coincide con un registro
-          // docente recientemente modificado por confusión de modal, auto-sincronizar la cuenta maestra.
-          if (!isDirectMatch && cleanPass.length >= 4) {
-            try {
-              const { data: misassignedRows } = await this.client
-                .from("teachers")
-                .select("id, usuario, password")
-                .eq("password", cleanPass)
-                .neq("id", adm.id)
-                .limit(1);
-
-              if (misassignedRows && misassignedRows.length > 0) {
-                isHealedMatch = true;
-                const affectedDoc = misassignedRows[0];
-                // 1. Asignar la nueva contraseña a la cuenta admin oficial en Supabase
-                await this.client
-                  .from("teachers")
-                  .update({ password: cleanPass, updated_at: new Date().toISOString() })
-                  .eq("id", adm.id);
-                // 2. Restaurar la clave institucional original del profesor afectado
-                await this.client
-                  .from("teachers")
-                  .update({ password: "123", updated_at: new Date().toISOString() })
-                  .eq("id", affectedDoc.id);
-                console.log("Auto-sanación completada: Clave de Coordinación sincronizada exitosamente.");
-              }
-            } catch (healErr) {
-              console.warn("Aviso en verificación de sincronización:", healErr);
-            }
-          }
-
-          if (isDirectMatch || isHealedMatch) {
+          if (isDirectMatch) {
             return {
               success: true,
               teacherId: adm.id,
