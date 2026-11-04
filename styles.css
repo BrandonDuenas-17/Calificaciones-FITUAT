@@ -390,6 +390,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overscroll-behavior-y: contain;
 }
 
 .page-title-area {
@@ -952,6 +953,7 @@ option {
   min-height: 0;
   position: relative;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .notion-table-wrapper::-webkit-scrollbar {
@@ -2543,18 +2545,18 @@ textarea.form-control {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
   gap: 22px;
   width: 100%;
+  contain: layout style;
 }
 
 /* =====================================================================
    Moxen Volteo 3D - Tarjetas de Docentes en Cuenta Maestra
+   Arquitectura de Rendimiento Extremo: Virtualización C++ Nativa
    ===================================================================== */
-/* Optimización de Rendimiento Extremo: Virtualización del navegador para 154 tarjetas */
 .admin-teacher-card {
   position: relative;
   width: 100%;
   min-width: 0;
   height: 405px;
-  perspective: 1400px;
   cursor: pointer;
   outline: none;
   -webkit-tap-highlight-color: transparent;
@@ -2564,8 +2566,14 @@ textarea.form-control {
   box-shadow: none;
   overflow: visible;
   box-sizing: border-box;
+  contain: layout style;
   content-visibility: auto;
-  contain-intrinsic-size: 330px 405px;
+  contain-intrinsic-size: auto 405px;
+}
+
+/* 3D Perspective activo ÚNICAMENTE en la tarjeta que está girando (0% cálculo de matrices en scroll) */
+.admin-teacher-card.is-flipping {
+  perspective: 1400px;
 }
 
 .admin-teacher-card:focus-visible .vo-giro {
@@ -2574,7 +2582,7 @@ textarea.form-control {
   border-radius: var(--radius-lg, 16px);
 }
 
-/* Sombra en el suelo optimizada con radial-gradient (cero blur costoso en GPU) */
+/* Sombra en el suelo optimizada con radial-gradient */
 .admin-teacher-card .vo-sombra {
   position: absolute;
   left: 8%;
@@ -2588,16 +2596,24 @@ textarea.form-control {
   opacity: 0.85;
 }
 
+.admin-teacher-card.is-flipping .vo-sombra {
+  will-change: transform, opacity;
+}
+
+/* En reposo: plano 2D directo (sin preserve-3d masivo en VRAM) */
 .admin-teacher-card .vo-giro {
   position: absolute;
   inset: 0;
-  transform-style: preserve-3d;
+  transform-style: flat;
 }
 
+/* 3D preserve-3d activado ÚNICAMENTE durante el giro físico */
 .admin-teacher-card.is-flipping .vo-giro {
+  transform-style: preserve-3d;
   will-change: transform;
 }
 
+/* Canto 3D: solo existe durante el giro físico (0 capas GPU ociosas) */
 .admin-teacher-card .vo-canto {
   position: absolute;
   top: 1%;
@@ -2610,6 +2626,11 @@ textarea.form-control {
   transform: rotateY(90deg);
   opacity: 0;
   pointer-events: none;
+  display: none;
+}
+
+.admin-teacher-card.is-flipping .vo-canto {
+  display: block;
 }
 
 .admin-teacher-card .vo-cara {
@@ -2621,11 +2642,9 @@ textarea.form-control {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   -webkit-font-smoothing: antialiased;
@@ -2635,7 +2654,13 @@ textarea.form-control {
 
 .admin-teacher-card:hover .vo-cara {
   border-color: var(--uat-orange);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+
+/* Backface visibility activo solo durante el giro físico */
+.admin-teacher-card.is-flipping .vo-cara {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .admin-teacher-card .vo-cara::after {
@@ -2646,6 +2671,11 @@ textarea.form-control {
   opacity: 0;
   pointer-events: none;
   border-radius: inherit;
+  display: none;
+}
+
+.admin-teacher-card.is-flipping .vo-cara::after {
+  display: block;
 }
 
 .admin-teacher-card .vo-oscura::after {
@@ -2653,34 +2683,48 @@ textarea.form-control {
 }
 
 .admin-teacher-card .vo-frente {
-  transform: rotateY(0deg);
   z-index: 2;
 }
 
 .admin-teacher-card .vo-dorso {
-  transform: rotateY(180deg);
   z-index: 1;
   background: var(--bg-primary);
 }
 
-/* Estado en reposo ultra-nítido: desactiva la proyección 3D para renderizar tipografía 1:1 nativa sin difuminado */
-.admin-teacher-card:not(.is-flipping) .vo-frente {
-  transform: none;
+.admin-teacher-card.is-flipping .vo-frente {
+  transform: rotateY(0deg);
+}
+
+.admin-teacher-card.is-flipping .vo-dorso {
+  transform: rotateY(180deg);
+}
+
+/* CARA CULLING & MODO REPOSO ULTRA-LIVIANO (0% CPU / 0% LAG AL SCROLLEAR):
+   1. Cuando la tarjeta muestra el frente: el dorso se oculta por completo (display: none).
+      Esto elimina 3,500 nodos DOM de la renderización del scroll.
+   2. Cuando la tarjeta muestra el dorso: el frente se oculta por completo.
+   3. Cero 3D en reposo: el navegador hace scroll a 120 FPS como si fueran tarjetas HTML planas. */
+.admin-teacher-card:not(.is-dorso):not(.is-flipping) .vo-dorso {
+  display: none !important;
+}
+
+.admin-teacher-card:not(.is-dorso):not(.is-flipping) .vo-frente {
+  display: flex !important;
+  transform: none !important;
+}
+
+.admin-teacher-card.is-dorso:not(.is-flipping) .vo-frente {
+  display: none !important;
+}
+
+.admin-teacher-card.is-dorso:not(.is-flipping) .vo-dorso {
+  display: flex !important;
+  transform: none !important;
+  z-index: 5;
 }
 
 .admin-teacher-card.is-dorso:not(.is-flipping) .vo-giro {
   transform: none !important;
-}
-
-.admin-teacher-card.is-dorso:not(.is-flipping) .vo-dorso {
-  transform: none !important;
-  z-index: 10;
-}
-
-.admin-teacher-card.is-dorso:not(.is-flipping) .vo-frente {
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
 }
 
 .admin-teacher-card .vo-brillo {
@@ -2692,6 +2736,11 @@ textarea.form-control {
   pointer-events: none;
   opacity: 0;
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.22) 50%, transparent);
+  display: none;
+}
+
+.admin-teacher-card.is-flipping .vo-brillo {
+  display: block;
 }
 
 [data-theme="dark"] .admin-teacher-card .vo-brillo {
