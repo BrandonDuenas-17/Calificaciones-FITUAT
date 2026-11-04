@@ -92,14 +92,14 @@ const SupabaseService = {
     }
   },
 
-  // Obtener directorio público de profesores desde Supabase (sin contraseñas y sin calificaciones masivas - VULN-3.0-02)
+  // Obtener directorio oficial de profesores desde Supabase (incluye materias/alumnos para supervisión y omite contraseñas)
   fetchTeachers: async function() {
     if (!this.isInitialized || !this.client) return null;
 
     try {
       const { data, error } = await this.client
         .from("teachers")
-        .select("id, nombre, usuario, correo, departamento, role, avatar, updated_at")
+        .select("id, nombre, usuario, correo, departamento, role, avatar, data, updated_at")
         .order("nombre", { ascending: true });
 
       if (error) {
