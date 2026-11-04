@@ -8378,6 +8378,10 @@ const App = {
           </div>
 
           <div class="admin-header-actions">
+            <button class="btn btn-default" onclick="App.openChangePasswordModal()" style="display: inline-flex; align-items: center; gap: 7px; font-weight: 700; color: var(--uat-orange); border-color: rgba(224, 90, 43, 0.4); background: rgba(224, 90, 43, 0.05); padding: 8px 14px; border-radius: var(--radius-sm);" title="Cambiar la clave de acceso de la Cuenta Maestra de Coordinación">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <span>Mi Clave de Coordinación</span>
+            </button>
             <button class="btn btn-primary admin-btn-sync" onclick="App.openSyncRosterModal()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
               <span>Sincronizar Roster Oficial (153 Docentes)</span>
