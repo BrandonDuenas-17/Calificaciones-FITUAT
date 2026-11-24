@@ -130,7 +130,7 @@ declare
   v_now timestamptz := timezone('utc'::text, now());
 begin
   if v_term = '' or v_pass = '' then
-    return query select false, 'invalid_input', 0, null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
+    return query select false, 'invalid_input'::text, 0, null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
     return;
   end if;
 
@@ -142,7 +142,7 @@ begin
   if found and v_attempt.locked_until is not null and v_attempt.locked_until > v_now then
     return query select
       false,
-      'locked',
+      'locked'::text,
       ceil(extract(epoch from (v_attempt.locked_until - v_now)))::integer,
       null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
     return;
@@ -170,7 +170,7 @@ begin
   end if;
 
   if not found then
-    return query select false, 'user_not_found', 0, null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
+    return query select false, 'user_not_found'::text, 0, null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
     return;
   end if;
 
@@ -206,13 +206,13 @@ begin
       values (v_term, 0, v_now + interval '60 seconds')
       on conflict (identifier) do update
         set failed_count = 0, locked_until = v_now + interval '60 seconds';
-      return query select false, 'locked', 60, null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
+      return query select false, 'locked'::text, 60, null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
     else
       insert into public.login_attempts(identifier, failed_count, locked_until)
       values (v_term, v_new_attempts, null)
       on conflict (identifier) do update
         set failed_count = v_new_attempts, locked_until = null;
-      return query select false, 'wrong_password', (5 - v_new_attempts), null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
+      return query select false, 'wrong_password'::text, (5 - v_new_attempts), null::text, false, null::text, null::text, null::text, null::text, null::text, null::text, null::text;
     end if;
     return;
   end if;
@@ -353,12 +353,12 @@ begin
   limit 1;
 
   if not found then
-    return query select false, 'unauthorized', null::jsonb, null::timestamptz;
+    return query select false, 'unauthorized'::text, null::jsonb, null::timestamptz;
     return;
   end if;
 
   if v_sess.role <> 'admin' and v_sess.teacher_id <> p_teacher_id then
-    return query select false, 'forbidden', null::jsonb, null::timestamptz;
+    return query select false, 'forbidden'::text, null::jsonb, null::timestamptz;
     return;
   end if;
 
@@ -368,7 +368,7 @@ begin
   limit 1;
 
   if not found then
-    return query select false, 'not_found', null::jsonb, null::timestamptz;
+    return query select false, 'not_found'::text, null::jsonb, null::timestamptz;
     return;
   end if;
 
@@ -408,12 +408,12 @@ begin
   limit 1;
 
   if not found then
-    return query select false, false, 'unauthorized', null::timestamptz;
+    return query select false, false, 'unauthorized'::text, null::timestamptz;
     return;
   end if;
 
   if v_sess.role <> 'admin' and v_sess.teacher_id <> p_teacher_id then
-    return query select false, false, 'forbidden', null::timestamptz;
+    return query select false, false, 'forbidden'::text, null::timestamptz;
     return;
   end if;
 
@@ -423,7 +423,7 @@ begin
   for update;
 
   if not found then
-    return query select false, false, 'not_found', null::timestamptz;
+    return query select false, false, 'not_found'::text, null::timestamptz;
     return;
   end if;
 
@@ -431,7 +431,7 @@ begin
   if p_expected_updated_at is not null
      and v_curr_updated_at is not null
      and abs(extract(epoch from (v_curr_updated_at - p_expected_updated_at))) > 1 then
-    return query select false, true, 'conflict', v_curr_updated_at;
+    return query select false, true, 'conflict'::text, v_curr_updated_at;
     return;
   end if;
 
@@ -477,17 +477,17 @@ begin
   limit 1;
 
   if not found then
-    return query select false, 'unauthorized';
+    return query select false, 'unauthorized'::text;
     return;
   end if;
 
   if length(v_clean_new) < 6 then
-    return query select false, 'password_too_short';
+    return query select false, 'password_too_short'::text;
     return;
   end if;
 
   if v_clean_new = '123' then
-    return query select false, 'default_password_forbidden';
+    return query select false, 'default_password_forbidden'::text;
     return;
   end if;
 
@@ -496,7 +496,7 @@ begin
   where t.id = v_sess.teacher_id;
 
   if not found or v_current_pass is null or v_current_pass = '' then
-    return query select false, 'not_found';
+    return query select false, 'not_found'::text;
     return;
   end if;
 
@@ -517,7 +517,7 @@ begin
   end if;
 
   if not v_old_valid then
-    return query select false, 'wrong_password';
+    return query select false, 'wrong_password'::text;
     return;
   end if;
 
@@ -569,12 +569,12 @@ begin
   limit 1;
 
   if not found or v_sess.role <> 'admin' then
-    return query select false, 'forbidden';
+    return query select false, 'forbidden'::text;
     return;
   end if;
 
   if length(v_clean_new) < 3 then
-    return query select false, 'password_too_short';
+    return query select false, 'password_too_short'::text;
     return;
   end if;
 
@@ -583,7 +583,7 @@ begin
   where t.id = v_sess.teacher_id and t.role = 'admin';
 
   if not found or v_admin_pass is null or v_admin_pass = '' then
-    return query select false, 'admin_not_found';
+    return query select false, 'admin_not_found'::text;
     return;
   end if;
 
@@ -604,12 +604,12 @@ begin
   end if;
 
   if not v_admin_valid then
-    return query select false, 'wrong_admin_password';
+    return query select false, 'wrong_admin_password'::text;
     return;
   end if;
 
   if not exists (select 1 from public.teachers where id = p_target_teacher_id) then
-    return query select false, 'target_not_found';
+    return query select false, 'target_not_found'::text;
     return;
   end if;
 
@@ -660,12 +660,12 @@ begin
   limit 1;
 
   if not found or v_sess.role <> 'admin' then
-    return query select false, 'forbidden';
+    return query select false, 'forbidden'::text;
     return;
   end if;
 
   if trim(coalesce(p_id, '')) = '' or trim(coalesce(p_nombre, '')) = '' or v_clean_user = '' or length(v_clean_pass) < 4 then
-    return query select false, 'invalid_input';
+    return query select false, 'invalid_input'::text;
     return;
   end if;
 
@@ -675,7 +675,7 @@ begin
        or lower(t.usuario) = v_clean_user
        or (v_clean_email <> '' and lower(coalesce(t.correo, '')) = v_clean_email)
   ) then
-    return query select false, 'duplicate_teacher';
+    return query select false, 'duplicate_teacher'::text;
     return;
   end if;
 
@@ -742,24 +742,30 @@ begin
     coalesce(t.role, 'docente') as role,
     coalesce(t.avatar, '') as avatar,
     t.updated_at,
-    case when jsonb_typeof(t.data->'courses') = 'array' then jsonb_array_length(t.data->'courses') else 0 end::integer as courses_count,
-    case when jsonb_typeof(t.data->'students') = 'array' then jsonb_array_length(t.data->'students') else 0 end::integer as students_count,
-    coalesce((
-      select jsonb_agg(
-        jsonb_build_object(
-          'id', c->>'id',
-          'nombre', coalesce(c->>'nombre', ''),
-          'grupo', coalesce(c->>'grupo', 'Grupo A'),
-          'aula', coalesce(c->>'aula', ''),
-          'periodo', coalesce(c->>'periodo', ''),
-          'recordsCount', case when jsonb_typeof(c->'records') = 'array' then jsonb_array_length(c->'records') else 0 end
-        )
+    (case when jsonb_typeof(t.data->'courses') = 'array' then jsonb_array_length(t.data->'courses') else 0 end)::integer as courses_count,
+    (case when jsonb_typeof(t.data->'students') = 'array' then jsonb_array_length(t.data->'students') else 0 end)::integer as students_count,
+    coalesce(cp.preview, '[]'::jsonb) as courses_preview
+  from public.teachers t
+  left join lateral (
+    select jsonb_agg(
+      jsonb_build_object(
+        'id', coalesce(x.c->>'id', ''),
+        'nombre', coalesce(x.c->>'nombre', ''),
+        'grupo', coalesce(x.c->>'grupo', 'Grupo A'),
+        'aula', coalesce(x.c->>'aula', ''),
+        'periodo', coalesce(x.c->>'periodo', ''),
+        'recordsCount', x.rec_count
       )
+    ) as preview
+    from (
+      select
+        elem as c,
+        (case when jsonb_typeof(elem->'records') = 'array' then jsonb_array_length(elem->'records') else 0 end)::integer as rec_count
       from jsonb_array_elements(
         case when jsonb_typeof(t.data->'courses') = 'array' then t.data->'courses' else '[]'::jsonb end
-      ) as c
-    ), '[]'::jsonb) as courses_preview
-  from public.teachers t
+      ) as elem
+    ) as x
+  ) as cp on true
   order by t.nombre asc;
 end;
 $$;
