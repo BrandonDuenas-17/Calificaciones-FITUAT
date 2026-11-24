@@ -1,7 +1,17 @@
 // app.js - Lógica principal del Calificador estilo Notion con Base de Datos y Rollup
 
-// Variable interna protegida contra manipulaciones desde la consola de desarrollador (VULN-3.0-04)
+// Variable interna sellada contra manipulaciones desde la consola de desarrollador (SEC-505)
 let _currentSessionUser = null;
+let _allowSessionWrite = false;
+
+function _setAuthenticatedUser(val) {
+  _allowSessionWrite = true;
+  try {
+    _currentSessionUser = val ? Object.freeze(JSON.parse(JSON.stringify(val))) : null;
+  } finally {
+    _allowSessionWrite = false;
+  }
+}
 
 const App = {
   teachers: [],
@@ -13,37 +23,25 @@ const App = {
       _currentSessionUser = null;
       return;
     }
-    // SEC-505: Protección contra escalación de privilegios directa desde consola
-    if (val.role === 'admin' && (!_currentSessionUser || _currentSessionUser.role !== 'admin')) {
-      const activeId = sessionStorage.getItem("notion_active_teacher_id") || sessionStorage.getItem("calificaciones_active_teacher_id");
-      const token = sessionStorage.getItem("notion_session_token") || sessionStorage.getItem("fiuat_active_session_token");
-      const sig = sessionStorage.getItem("notion_session_signature");
-      const validSig = (activeId && token && typeof this.generateSessionSignature === "function") 
-        ? this.generateSessionSignature(activeId, token) 
-        : null;
-      const isValidAdminSession = (activeId && (activeId === "admin-coordinacion" || activeId.includes("admin")) && (!sig || sig === validSig))
-        || (token && token.includes("admin"))
-        || (activeId && activeId.includes("admin"))
-        || (val && (val.id === "admin-coordinacion" || val.role === "admin"));
-      if (!isValidAdminSession) {
-        console.warn("Intento de escalación de privilegios bloqueado por seguridad.");
-        return;
-      }
+    if (!_allowSessionWrite) {
+      console.warn("Intento de asignación directa a currentUser bloqueado por seguridad.");
+      return;
     }
     _currentSessionUser = Object.freeze(JSON.parse(JSON.stringify(val)));
   },
-  data: null, // Apunta a las calificaciones del docente activo
-  activeCourseId: "algebra-lineal-ga",
+  data: null, // Apunta a las calificaciones del docente activo o supervisado
+  _lastServerUpdatedAt: null, // Control de concurrencia optimista (updated_at de Supabase)
+  _isSaving: false,
+  mustChangePassword: false,
+  _mustChangePasswordModal: false,
+  activeCourseId: "",
   selectedSemester: null, // Semestre / Periodo escolar seleccionado (filtro de listas)
-  activeTab: "gradebook", // "admin_dashboard", "gradebook", "directory", "teams", "config"
+  activeTab: "gradebook", // "admin_dashboard", "gradebook", "attendance", "directory", "teams", "config"
   theme: "light",
   searchTerm: "",
-  loginTab: "login", // "login" o "register"
   isSupervising: false,
   supervisingTeacherId: null,
   supervisionEditMode: true,
-  failedLoginAttempts: 0,
-  lockoutUntil: 0,
   inactivityTimer: null,
   inactivityTimeoutMs: 20 * 60 * 1000, // 20 minutos de inactividad
   attendanceActiveUnit: 1,
@@ -54,6 +52,11 @@ const App = {
     return !!(_currentSessionUser && _currentSessionUser.role === 'admin' && Object.isFrozen(_currentSessionUser));
   },
 
+  getWorkingTeacherId: function() {
+    if (this.isSupervising && this.supervisingTeacherId) return this.supervisingTeacherId;
+    return this.currentUser ? this.currentUser.id : null;
+  },
+
   escapeHtml: function(str) {
     if (str === null || str === undefined) return "";
     return String(str)
@@ -62,68 +65,6 @@ const App = {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-  },
-
-  // Clave secreta criptográfica efímera por sesión del navegador (SEC-02)
-  _getSessionSecret: function() {
-    try {
-      let secret = sessionStorage.getItem("notion_ephemeral_sec_key");
-      if (!secret) {
-        const arr = new Uint8Array(32);
-        (window.crypto || window.msCrypto).getRandomValues(arr);
-        secret = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-        sessionStorage.setItem("notion_ephemeral_sec_key", secret);
-      }
-      return secret;
-    } catch (e) {
-      return "ephemeral_fallback_" + Math.random().toString(36).substr(2);
-    }
-  },
-
-  // Generador de firma criptográfica de sesión para evitar suplantación (SEC-02)
-  generateSessionSignature: function(teacherId, token) {
-    if (!teacherId || !token) return "";
-    const secret = this._getSessionSecret();
-    const str = teacherId + ":" + token + ":" + secret;
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return "sig_" + Math.abs(hash).toString(36) + "_" + str.length;
-  },
-
-  // Control persistente de fuerza bruta (SEC-09)
-  getRateLimitState: function() {
-    try {
-      const stored = localStorage.getItem("notion_login_ratelimit");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === "object") {
-          return {
-            failedAttempts: Number(parsed.failedAttempts) || 0,
-            lockoutUntil: Number(parsed.lockoutUntil) || 0
-          };
-        }
-      }
-    } catch (e) {}
-    return { failedAttempts: 0, lockoutUntil: 0 };
-  },
-
-  setRateLimitState: function(failedAttempts, lockoutUntil) {
-    try {
-      localStorage.setItem("notion_login_ratelimit", JSON.stringify({
-        failedAttempts: failedAttempts,
-        lockoutUntil: lockoutUntil
-      }));
-    } catch (e) {}
-  },
-
-  clearRateLimitState: function() {
-    try {
-      localStorage.removeItem("notion_login_ratelimit");
-    } catch (e) {}
   },
 
   startInactivityTimer: function() {
@@ -171,33 +112,40 @@ const App = {
     this.initTheme();
     this.setupEventListeners();
 
-    // Limpiar restos de almacenamiento local de versiones anteriores
+    // Limpiar restos heredados de versiones anteriores
     try {
       localStorage.removeItem("notion_teachers_db");
       localStorage.removeItem("notion_grades_data");
       localStorage.removeItem("notion_active_teacher_id");
+      localStorage.removeItem("notion_login_ratelimit");
+      localStorage.removeItem("supabase_url");
+      localStorage.removeItem("supabase_anon_key");
+      sessionStorage.removeItem("notion_active_teacher_id");
+      sessionStorage.removeItem("notion_session_token");
+      sessionStorage.removeItem("notion_session_signature");
+      sessionStorage.removeItem("notion_ephemeral_sec_key");
+      sessionStorage.removeItem("fiuat_active_session_token");
+      sessionStorage.removeItem("calificaciones_active_teacher_id");
     } catch (e) {}
 
-    // Mostrar estado de carga mientras se conecta a la nube
     this.renderLoadingState();
 
-    // Inicializar sincronización 100% en la nube con Supabase (PostgreSQL + Realtime)
-    const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
-    if (cloud) {
-      const isConnected = await cloud.init();
+    if (typeof SupabaseService !== "undefined") {
+      const isConnected = await SupabaseService.init();
       this.updateCloudStatusBadge();
-      if (isConnected && cloud.isInitialized) {
+      if (isConnected && SupabaseService.isInitialized) {
         await this.loadDataFromCloud();
       } else {
-        console.warn("Supabase no disponible (pausado o sin conexión). Cargando catálogo de respaldo.");
         this.loadFallbackData();
       }
     } else {
-      console.warn("Servicio en la nube no detectado. Cargando datos de respaldo.");
       this.loadFallbackData();
     }
 
     this.render();
+    if (this.currentUser && this.mustChangePassword) {
+      this.openChangePasswordModal(true);
+    }
   },
 
   renderLoadingState: function() {
@@ -211,26 +159,11 @@ const App = {
             Conectando con Supabase (PostgreSQL)
           </div>
           <div style="font-size: 13px; color: var(--text-tertiary);">
-            Cargando catálogo docente y calificaciones 100% en la nube...
+            Verificando conexión segura institucional...
           </div>
         </div>
-        <button type="button" onclick="App.bypassCloudWait()" style="margin-top: 6px; padding: 6px 16px; font-size: 12px; font-weight: 500; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">
-          Continuar en Modo Local
-        </button>
       </div>
     `;
-  },
-
-  bypassCloudWait: function() {
-    console.log("Usuario omitió espera de nube. Activando modo local.");
-    if (typeof SupabaseService !== "undefined") {
-      SupabaseService.isInitialized = false;
-      SupabaseService.status = "offline";
-    }
-    this.updateCloudStatusBadge();
-    this.loadFallbackData();
-    this.render();
-    this.showToast("Operando en Modo Local (Fuera de línea)", "info");
   },
 
   onCloudReconnected: async function() {
@@ -261,139 +194,97 @@ const App = {
     return clean.substring(0, 2).toUpperCase();
   },
 
+  // Validar sesión existente en servidor sin descargar datos antes del login (Zero-Leak)
   loadDataFromCloud: async function() {
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-    if (!cloud || !cloud.isInitialized) {
+    if (typeof SupabaseService === "undefined" || !SupabaseService.isInitialized) {
       this.loadFallbackData();
       return;
     }
 
     try {
-      let cloudTeachers = await cloud.fetchTeachers();
-
-      // Si no devolvió un arreglo válido (error de red o timeout):
-      if (!Array.isArray(cloudTeachers)) {
-        console.warn("No se pudo obtener el catálogo desde la nube. Cargando datos de respaldo.");
-        this.loadFallbackData();
+      const sessionInfo = await SupabaseService.validateSession();
+      if (!sessionInfo || !sessionInfo.teacher) {
+        _setAuthenticatedUser(null);
+        this.teachers = [];
+        this.data = null;
+        this._lastServerUpdatedAt = null;
+        this.mustChangePassword = false;
+        this.updateCloudStatusBadge();
         return;
       }
 
-      // Si Supabase está verdaderamente vacío por primera vez, sembramos el catálogo inicial
-      if (cloudTeachers.length === 0) {
-        console.log("Supabase vacío. Sembrando catálogo inicial en la nube...");
-        const seeds = [];
-        if (typeof INITIAL_ADMIN !== 'undefined') seeds.push(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
-        if (typeof INITIAL_TEACHERS !== 'undefined') {
-          INITIAL_TEACHERS.forEach(t => seeds.push(JSON.parse(JSON.stringify(t))));
-        }
-        await cloud.seedInitialDataIfEmpty(seeds);
-        cloudTeachers = await cloud.fetchTeachers();
-        if (!Array.isArray(cloudTeachers)) cloudTeachers = [];
-      }
-
-      this.teachers = (cloudTeachers || []).map(t => this.sanitizeTeacher(t));
-
-      // Asegurar que la cuenta maestra de Administración/Coordinación esté en la base de datos
-      if (typeof INITIAL_ADMIN !== 'undefined' && !this.teachers.some(t => t.id === INITIAL_ADMIN.id || t.role === 'admin')) {
-        const adminDoc = JSON.parse(JSON.stringify(INITIAL_ADMIN));
-        this.teachers.unshift(adminDoc);
-        await cloud.saveTeacher(adminDoc);
-      }
-
-      // 2. Cargar usuario/profesor activo desde la sesión con validación criptográfica (SEC-02)
-      const savedTeacherId = sessionStorage.getItem("notion_active_teacher_id");
-      const savedToken = sessionStorage.getItem("notion_session_token");
-      const savedSig = sessionStorage.getItem("notion_session_signature");
-      if (savedTeacherId && savedToken && savedSig) {
-        const expectedSig = this.generateSessionSignature(savedTeacherId, savedToken);
-        if (savedSig === expectedSig) {
-          const foundTeacher = this.teachers.find(t => t.id === savedTeacherId) || null;
-          this.currentUser = foundTeacher;
-        } else {
-          console.warn("Firma de sesión adulterada o inválida. Acceso revocado.");
-          sessionStorage.removeItem("notion_active_teacher_id");
-          sessionStorage.removeItem("notion_session_token");
-          sessionStorage.removeItem("notion_session_signature");
-          this.currentUser = null;
-        }
-      } else {
-        this.currentUser = null;
-      }
-
-      // 3. Enlazar datos de trabajo del profesor actual bajo demanda (VULN-3.0-02)
-      if (this.currentUser) {
-        if (this.currentUser.role === 'admin') {
-          this.data = null;
-          this.activeTab = "admin_dashboard";
-        } else {
-          if (cloud && cloud.fetchTeacherData) {
-            const fetchedData = await cloud.fetchTeacherData(this.currentUser.id);
-            if (fetchedData) {
-              this.data = fetchedData;
-              if (this.currentUser) {
-                this.currentUser = Object.assign({}, this.currentUser, { data: fetchedData });
-              }
-              if (Array.isArray(this.teachers)) {
-                const idx = this.teachers.findIndex(t => t.id === this.currentUser.id);
-                if (idx !== -1) this.teachers[idx].data = JSON.parse(JSON.stringify(fetchedData));
-              }
-            } else {
-              // Respaldo de resiliencia local en sessionStorage si hubo desconexión puntual
-              try {
-                const bufStr = sessionStorage.getItem("fiuat_active_grades_buffer_" + this.currentUser.id);
-                if (bufStr) {
-                  const bufObj = JSON.parse(bufStr);
-                  if (bufObj && bufObj.data) this.data = bufObj.data;
-                }
-              } catch(e) {}
-              if (!this.data) this.data = { courses: [], students: [] };
-            }
-          } else {
-            this.data = this.currentUser.data || { courses: [], students: [] };
-          }
-          if (this.data && this.data.courses) {
-            this.data.courses.forEach((c, idx) => {
-              if (!c.grupo) c.grupo = "Grupo " + String.fromCharCode(65 + (idx % 26));
-              if (!c.id) c.id = "curso-" + Date.now() + "-" + idx;
-            });
-            if (!this.data.courses.some(c => c.id === this.activeCourseId)) {
-              this.activeCourseId = this.data.courses[0] ? this.data.courses[0].id : "";
-            }
-          }
-        }
-        this.startInactivityTimer();
-      } else {
-        this.data = null;
-      }
-
+      await this._hydrateAuthenticatedSession(sessionInfo.teacher, !!sessionInfo.mustChangePassword);
       this.updateCloudStatusBadge();
     } catch (e) {
-      console.error("Error al cargar datos desde Firestore:", e);
+      console.error("Error al validar sesión en Supabase:", e);
       this.loadFallbackData();
     }
   },
 
-  loadFallbackData: function() {
-    this.teachers = (typeof INITIAL_TEACHERS !== 'undefined') ? JSON.parse(JSON.stringify(INITIAL_TEACHERS)) : [];
-    if (typeof INITIAL_ADMIN !== 'undefined' && !this.teachers.some(t => t.role === 'admin')) {
-      this.teachers.unshift(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
+  _hydrateAuthenticatedSession: async function(teacherObj, mustChangePassword) {
+    const cleanTeacher = this.sanitizeTeacher(Object.assign({}, teacherObj));
+    this.mustChangePassword = !!mustChangePassword;
+    this.isSupervising = false;
+    this.supervisingTeacherId = null;
+
+    if (cleanTeacher.role === "admin") {
+      _setAuthenticatedUser(cleanTeacher);
+      this.data = null;
+      this._lastServerUpdatedAt = null;
+      this.activeTab = "admin_dashboard";
+      const summary = await SupabaseService.fetchAdminTeachersSummary();
+      this.teachers = Array.isArray(summary) ? summary.map(t => this.sanitizeTeacher(t)) : [cleanTeacher];
+    } else {
+      const fetched = await SupabaseService.fetchTeacherData(cleanTeacher.id);
+      let teacherData = fetched ? fetched.data : null;
+      this._lastServerUpdatedAt = fetched ? fetched.updated_at : null;
+
+      if (!teacherData) {
+        try {
+          const bufStr = sessionStorage.getItem("fiuat_active_grades_buffer_" + cleanTeacher.id);
+          if (bufStr) {
+            const bufObj = JSON.parse(bufStr);
+            if (bufObj && bufObj.data) teacherData = bufObj.data;
+          }
+        } catch (e) {}
+      }
+      if (!teacherData) teacherData = { courses: [], students: [] };
+
+      if (Array.isArray(teacherData.courses)) {
+        teacherData.courses.forEach((c, idx) => {
+          if (!c.grupo) c.grupo = "Grupo " + String.fromCharCode(65 + (idx % 26));
+          if (!c.id) c.id = "curso-" + Date.now() + "-" + idx;
+        });
+      }
+
+      const activeTeacher = Object.assign({}, cleanTeacher, { data: teacherData });
+      _setAuthenticatedUser(activeTeacher);
+      this.teachers = [activeTeacher];
+      this.data = teacherData;
+
+      if (!this.data.courses || !this.data.courses.some(c => c.id === this.activeCourseId)) {
+        this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
+      }
+      this.activeTab = "gradebook";
     }
-    // SEC-503: Desactivar auto-login de admin en modo fallback/offline
-    this.currentUser = null;
-    this.data = null;
-    this.activeCourseId = null;
+
+    this.startInactivityTimer();
   },
 
-  syncWithFirebase: async function() {
-    await this.loadDataFromCloud();
-    this.render();
+  loadFallbackData: function() {
+    this.teachers = [];
+    _setAuthenticatedUser(null);
+    this.data = null;
+    this._lastServerUpdatedAt = null;
+    this.activeCourseId = null;
+    this.mustChangePassword = false;
   },
 
   updateCloudStatusBadge: function() {
     const container = document.getElementById("cloudStatusContainer");
     if (!container) return;
 
-    const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
+    const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : null;
 
     if (!cloud || !cloud.isInitialized) {
       container.innerHTML = `
@@ -450,64 +341,89 @@ const App = {
     }
   },
 
-  saveTeachers: function() {
-    // Obsoleto en arquitectura 100% Cloud: no se usa almacenamiento local
-  },
-
   saveTimer: null,
 
-  // Guardado directo e inmediato a Supabase (100% en la nube)
-  saveData: async function() {
+  // Guardado autenticado en Supabase con control de concurrencia optimista
+  saveData: async function(forceOverwrite = false) {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-    
-    let targetTeacherId = null;
-    if (this.isSupervising && this.supervisingTeacherId) {
-      if (!this.supervisionEditMode) {
-        console.warn("Modo Supervisión: Auditoría en Solo Lectura activa. Guardado omitido.");
-        return;
-      }
-      targetTeacherId = this.supervisingTeacherId;
-    } else if (this.currentUser) {
-      targetTeacherId = this.currentUser.id;
+
+    if (this.isSupervising && !this.supervisionEditMode) {
+      console.warn("Modo Supervisión: Auditoría en Solo Lectura activa. Guardado omitido.");
+      return false;
     }
 
-    if (targetTeacherId && this.data) {
-      // 1. Clon profundo fresco de los datos (sin mutar objetos congelados)
-      const clonedData = JSON.parse(JSON.stringify(this.data));
+    const targetTeacherId = this.getWorkingTeacherId();
+    if (!targetTeacherId || !this.data) return false;
 
-      // 2. Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
-      try {
-        sessionStorage.setItem("fiuat_active_grades_buffer_" + targetTeacherId, JSON.stringify({
-          data: clonedData,
-          timestamp: Date.now()
-        }));
-      } catch (e) {}
+    const clonedData = JSON.parse(JSON.stringify(this.data));
 
-      // 3. Sincronizar en memoria el arreglo maestro de profesores
-      if (Array.isArray(this.teachers)) {
-        const tIndex = this.teachers.findIndex(t => t.id === targetTeacherId);
-        if (tIndex !== -1) {
-          this.teachers[tIndex] = Object.assign({}, this.teachers[tIndex], { data: clonedData });
+    // Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
+    try {
+      sessionStorage.setItem("fiuat_active_grades_buffer_" + targetTeacherId, JSON.stringify({
+        data: clonedData,
+        timestamp: Date.now()
+      }));
+    } catch (e) {}
+
+    // Sincronizar en memoria el arreglo de profesores
+    if (Array.isArray(this.teachers)) {
+      const tIndex = this.teachers.findIndex(t => t.id === targetTeacherId);
+      if (tIndex !== -1) {
+        this.teachers[tIndex] = Object.assign({}, this.teachers[tIndex], { data: clonedData });
+      }
+    }
+
+    // Actualizar currentUser únicamente si no estamos supervisando a otro docente
+    if (!this.isSupervising && this.currentUser && this.currentUser.id === targetTeacherId) {
+      _setAuthenticatedUser(Object.assign({}, this.currentUser, { data: clonedData }));
+    }
+
+    if (typeof SupabaseService === "undefined" || !SupabaseService.isInitialized) {
+      return false;
+    }
+
+    this._isSaving = true;
+    try {
+      const res = await SupabaseService.saveTeacher(
+        { id: targetTeacherId, data: clonedData },
+        forceOverwrite ? null : this._lastServerUpdatedAt
+      );
+
+      if (res && res.ok) {
+        if (res.updated_at) this._lastServerUpdatedAt = res.updated_at;
+        return true;
+      }
+
+      if (res && res.conflict) {
+        const reloadCloud = confirm(
+          "⚠️ Conflicto de edición simultánea:\n\n" +
+          "Se guardaron cambios más recientes en Supabase desde otro dispositivo o sesión.\n\n" +
+          "• Aceptar: Recargar los datos más recientes de la nube (recomendado).\n" +
+          "• Cancelar: Mantener tus cambios actuales y sobrescribir la nube."
+        );
+        if (reloadCloud) {
+          const fresh = await SupabaseService.fetchTeacherData(targetTeacherId);
+          if (fresh && fresh.data) {
+            this.data = fresh.data;
+            this._lastServerUpdatedAt = fresh.updated_at;
+            this.render();
+            this.showToast("Datos actualizados desde la nube.", "info");
+          }
+          return false;
         }
+        return await this.saveData(true);
       }
 
-      // 4. Actualizar currentUser de forma segura a través de su setter (evitando Object.freeze silencioso)
-      if (!this.isSupervising && this.currentUser && this.currentUser.id === targetTeacherId) {
-        this.currentUser = Object.assign({}, this.currentUser, { data: clonedData });
+      if (res && res.reason === "unauthorized") {
+        alert("Tu sesión en el servidor ha expirado. Inicia sesión nuevamente para continuar guardando.");
+        await this.logout();
       }
-
-      // 5. Guardado garantizado en Supabase con payload fresco y no congelado
-      if (cloud) {
-        const payloadTeacher = {
-          id: targetTeacherId,
-          data: clonedData
-        };
-        await cloud.saveTeacher(payloadTeacher);
-      }
+      return false;
+    } finally {
+      this._isSaving = false;
     }
   },
 
@@ -542,15 +458,6 @@ const App = {
     }, 300);
   },
 
-  resetToDefault: function() {
-    if (confirm("¿Deseas restaurar los datos de ejemplo de las capturas de Notion?")) {
-      this.data = JSON.parse(JSON.stringify(INITIAL_DATA));
-      this.saveData();
-      this.render();
-      this.showToast("Datos de ejemplo cargados");
-    }
-  },
-
   clearCurrentCourseData: function() {
     const course = this.getActiveCourse();
     if (!course) return;
@@ -560,22 +467,6 @@ const App = {
       this.saveData();
       this.render();
       this.showToast(`Lista de ${course.nombre} vaciada.`);
-    } else if (confirmWord !== null) {
-      this.showToast("Operación cancelada: palabra de confirmación incorrecta.", "warning");
-    }
-  },
-
-  clearAllDataForNewSemester: function() {
-    const confirmWord = prompt("🚨 ADVERTENCIA CRÍTICA: Estás a punto de borrar TODOS los alumnos y calificaciones de TODAS tus materias para iniciar semestre.\n\nPara confirmar esta purga total en la nube, escribe exactamente 'BORRAR TODO':");
-    if (confirmWord === "BORRAR TODO") {
-      this.data.students = [];
-      this.data.courses.forEach(c => {
-        c.records = [];
-      });
-      this.saveData();
-      this.render();
-      this.showToast("Sistema preparado para tu nuevo semestre.");
-      this.openBulkImportModal();
     } else if (confirmWord !== null) {
       this.showToast("Operación cancelada: palabra de confirmación incorrecta.", "warning");
     }
@@ -606,16 +497,7 @@ const App = {
   },
 
   normalizePeriodo: function(p) {
-    if (!p || typeof p !== 'string' || !p.trim()) return "2026 - 3 OTOÑO";
-    const trimmed = p.trim();
-    const upper = trimmed.toUpperCase().replace(/\s+/g, " ");
-    if (upper === "2026-3" || upper === "2026-3 OTOÑO" || upper === "2026 - 3" || upper === "2026 - 3 OTOÑO") {
-      return "2026 - 3 OTOÑO";
-    }
-    if (upper === "2026-1" || upper === "2026-1 PRIMAVERA" || upper === "2026 - 1" || upper === "2026 - 1 PRIMAVERA") {
-      return "2026 - 1 PRIMAVERA";
-    }
-    return trimmed;
+    return MathEngine.normalizePeriodo(p);
   },
 
   getAvailableSemesters: function() {
@@ -796,283 +678,25 @@ const App = {
     return map;
   },
 
-  // MOTOR MATEMÁTICO: Fórmulas de cálculo con ponderaciones personalizadas y asistencia/participación opcionales
+  // Delegación al motor matemático (math_engine.js)
+  getAttendancePolicy: function(course) {
+    return MathEngine.getAttendancePolicy(course);
+  },
+
   calculateStudentGrades: function(record, course) {
-    const maxFirmasConfig = course.firmasMaxConfig || {};
-    const maxPartConfig = course.participacionMaxConfig || {};
-    const evalU = {};
-    const validUnitsForMean = [];
-    let evaluatedUnitsCount = 0;
-
-    // Ponderaciones de criterios por unidad (Default 100% retrocompatible: 50% firmas, 50% examen)
-    const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
-    const wFirmas = Number(weights.firmas) || 0;
-    const wExamen = Number(weights.examen) || 0;
-    const wAsist = Number(weights.asistencia) || 0;
-    const wPart = Number(weights.participacion) || 0;
-
-    // Configuración opcional de límite de faltas e inasistencias
-    const asistCfg = course.asistenciaConfig || {};
-    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
-      ? !!asistCfg.consecuenciaActiva
-      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
-    const ambitoLimite = asistCfg.ambitoLimite || "unidad"; // "unidad" o "semestre"
-    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
-    const pierdeAsistencia = consecuenciaActiva && (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esSinDerecho = consecuenciaActiva && (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esReprobarCero = consecuenciaActiva && (modoExceder === "reprobar_cero" || modoExceder === "ambas_cero");
-
-    const isSinDerechoU = {};
-    const asistenciaPerdidaU = {};
-    const faltasU = {};
-    let hasAnySinDerecho = false;
-
-    // Calcular faltas de todas las unidades previamente para el acumulado semestral
-    let totalFaltasSemestre = 0;
-    const totalUnitsCount = course.unidadesCount || 5;
-    for (let u = 1; u <= totalUnitsCount; u++) {
-      const uKey = `u${u}`;
-      const fNum = (record.faltas && record.faltas[uKey] !== undefined && record.faltas[uKey] !== "")
-        ? Number(record.faltas[uKey])
-        : 0;
-      faltasU[u] = fNum;
-      totalFaltasSemestre += fNum;
-    }
-    const excedeSemestre = limiteFaltasActivo && consecuenciaActiva && (ambitoLimite === "semestre") && (totalFaltasSemestre > maxFaltas);
-
-    // 1. Evaluación de cada Unidad (U1 a Un)
-    for (let u = 1; u <= totalUnitsCount; u++) {
-      const uKey = `u${u}`;
-      const firmas = (record.firmas && record.firmas[uKey] !== undefined && record.firmas[uKey] !== "") 
-        ? record.firmas[uKey] 
-        : null;
-      const examen = (record.examenes && record.examenes[uKey] !== undefined && record.examenes[uKey] !== "") 
-        ? record.examenes[uKey] 
-        : null;
-      const asist = (record.asistencia && record.asistencia[uKey] !== undefined && record.asistencia[uKey] !== "") 
-        ? record.asistencia[uKey] 
-        : null;
-      const part = (record.participacion && record.participacion[uKey] !== undefined && record.participacion[uKey] !== "") 
-        ? record.participacion[uKey] 
-        : null;
-      const faltas = faltasU[u];
-
-      const maxF = maxFirmasConfig[uKey] || 10;
-      const maxP = maxPartConfig[uKey] || 5;
-
-      const hasFirmas = firmas !== null;
-      const hasExamen = examen !== null;
-      const hasAsist = asist !== null && wAsist > 0;
-      const hasPart = part !== null && wPart > 0;
-
-      // Si al menos hay un criterio evaluado en la unidad
-      if (hasFirmas || hasExamen || hasAsist || hasPart) {
-        const excedeUnidad = limiteFaltasActivo && consecuenciaActiva && (ambitoLimite === "unidad") && (faltas > maxFaltas);
-        const estaSancionado = (ambitoLimite === "semestre") ? excedeSemestre : excedeUnidad;
-
-        let puntajeFirmas = 0;
-        if (hasFirmas && maxF > 0 && wFirmas > 0) {
-          puntajeFirmas = (Number(firmas) / maxF) * wFirmas;
-        }
-
-        let puntajeExamen = 0;
-        if (hasExamen && wExamen > 0) {
-          puntajeExamen = (Number(examen) / 100) * wExamen;
-        }
-
-        let puntajeAsist = 0;
-        if (hasAsist && wAsist > 0) {
-          if (estaSancionado && pierdeAsistencia) {
-            puntajeAsist = 0;
-            asistenciaPerdidaU[u] = true;
-          } else {
-            const numA = Math.min(100, Math.max(0, Number(asist)));
-            puntajeAsist = (numA / 100) * wAsist;
-            asistenciaPerdidaU[u] = false;
-          }
-        } else {
-          asistenciaPerdidaU[u] = false;
-        }
-
-        let puntajePart = 0;
-        if (hasPart && wPart > 0) {
-          const numP = Math.max(0, Number(part));
-          const pctP = maxP > 0 ? Math.min(1, numP / maxP) : 0;
-          puntajePart = pctP * wPart;
-        }
-
-        let totalU = Math.round((puntajeFirmas + puntajeExamen + puntajeAsist + puntajePart) * 10) / 10;
-        totalU = Math.min(100, Math.max(0, totalU));
-
-        // Regla opcional de Derecho a Examen por Faltas (SD)
-        if (estaSancionado && esSinDerecho) {
-          isSinDerechoU[u] = true;
-          hasAnySinDerecho = true;
-          if (esReprobarCero) {
-            totalU = 0;
-          }
-        } else {
-          isSinDerechoU[u] = false;
-        }
-
-        evalU[u] = totalU;
-        validUnitsForMean.push(totalU);
-        evaluatedUnitsCount++;
-      } else {
-        // Unidad pendiente / no evaluada aún en el semestre
-        evalU[u] = null;
-        isSinDerechoU[u] = false;
-        asistenciaPerdidaU[u] = false;
-      }
-    }
-
-    // 2. Proyecto Final y Puntos Extra
-    const hasProyecto = (record.proyecto !== null && record.proyecto !== undefined && record.proyecto !== "");
-    const proyecto = hasProyecto ? Number(record.proyecto) : null;
-    const puntosExtra = Number(record.puntosExtra) || 0;
-
-    const itemsToAverage = [...validUnitsForMean];
-    if (hasProyecto) {
-      itemsToAverage.push(proyecto);
-    }
-
-    const hasEvaluations = itemsToAverage.length > 0;
-    let promedio = 0;
-    let evalFinal = 0;
-
-    if (hasEvaluations) {
-      const suma = itemsToAverage.reduce((acc, v) => acc + v, 0);
-      promedio = suma / itemsToAverage.length;
-      const conPuntosExtra = promedio + (puntosExtra * 5);
-      const evalFinalRedondeada = Math.round(conPuntosExtra);
-      evalFinal = Math.min(100, Math.max(0, evalFinalRedondeada));
-    }
-
-    return {
-      evalU,
-      evalFinal,
-      promedioParcial: Math.round(promedio * 10) / 10,
-      hasEvaluations,
-      evaluatedUnitsCount,
-      isSinDerechoU,
-      asistenciaPerdidaU,
-      faltasU,
-      totalFaltasSemestre,
-      hasAnySinDerecho,
-      hasAnyAsistenciaPerdida: Object.values(asistenciaPerdidaU).some(Boolean),
-      weights,
-      asistenciaConfig: asistCfg
-    };
+    return MathEngine.calculateStudentGrades(record, course);
   },
 
-  // Helper para calcular total de faltas en todo el semestre para un alumno
   getStudentSemesterFaltas: function(record, course, currentUnitOverride, currentUnitFaltasVal) {
-    if (!record) return 0;
-    let total = 0;
-    const numUnits = Number(course?.unidadesCount) || 5;
-    for (let u = 1; u <= numUnits; u++) {
-      const uKey = `u${u}`;
-      if (currentUnitOverride && u === currentUnitOverride && currentUnitFaltasVal !== undefined) {
-        total += Number(currentUnitFaltasVal) || 0;
-      } else if (record.faltas && record.faltas[uKey] !== undefined && record.faltas[uKey] !== "") {
-        total += Number(record.faltas[uKey]) || 0;
-      }
-    }
-    return total;
+    return MathEngine.getStudentSemesterFaltas(record, course, currentUnitOverride, currentUnitFaltasVal);
   },
 
-  // Helper para texto legible de la acción al exceder límite
   getModoExcederLabel: function(modo) {
-    switch (modo) {
-      case "perder_asistencia": return "Sin Pts Asistencia";
-      case "alerta_sd": return "Alerta SD";
-      case "reprobar_cero": return "Estricto (Calif 0)";
-      case "ambas_alerta": return "SD + 0 Pts Asist";
-      case "ambas_cero": return "Calif 0 + 0 Pts Asist";
-      case "ninguna": return "Solo Informativo";
-      default: return "Solo Informativo";
-    }
+    return MathEngine.getModoExcederLabel(modo);
   },
 
-  // Cálculo de estadísticas de columna (MAX para firmas, AVERAGE para exámenes, asistencias, participaciones y evaluaciones)
   calculateCourseStats: function(course) {
-    const records = course.records || [];
-    const stats = {
-      maxFirmas: {},
-      avgFirmas: {},
-      avgExamenes: {},
-      avgAsistencia: {},
-      avgParticipacion: {},
-      avgEvaluaciones: {},
-      avgFinal: 0
-    };
-
-    const count = records.length;
-    if (count === 0) return stats;
-
-    const numUnits = Number(course.unidadesCount) || 5;
-
-    for (let u = 1; u <= numUnits; u++) {
-      const uKey = `u${u}`;
-      
-      // Firmas
-      const firmasVals = records
-        .map(r => r.firmas ? r.firmas[uKey] : null)
-        .filter(v => v !== null && v !== undefined && v !== "");
-      stats.maxFirmas[uKey] = firmasVals.length > 0 ? Math.max(...firmasVals.map(Number)) : 0;
-      stats.avgFirmas[uKey] = firmasVals.length > 0 ? (firmasVals.reduce((a, b) => a + Number(b), 0) / firmasVals.length).toFixed(1) : 0;
-
-      // Exámenes
-      const examenVals = records
-        .map(r => r.examenes ? r.examenes[uKey] : null)
-        .filter(v => v !== null && v !== undefined && v !== "");
-      stats.avgExamenes[uKey] = examenVals.length > 0 ? (examenVals.reduce((a, b) => a + Number(b), 0) / examenVals.length).toFixed(2) : "0.00";
-
-      // Asistencias (%)
-      const asistVals = records
-        .map(r => r.asistencia ? r.asistencia[uKey] : null)
-        .filter(v => v !== null && v !== undefined && v !== "");
-      stats.avgAsistencia[uKey] = asistVals.length > 0 ? Math.round(asistVals.reduce((a, b) => a + Number(b), 0) / asistVals.length) : 0;
-
-      // Participaciones
-      const partVals = records
-        .map(r => r.participacion ? r.participacion[uKey] : null)
-        .filter(v => v !== null && v !== undefined && v !== "");
-      stats.avgParticipacion[uKey] = partVals.length > 0 ? (partVals.reduce((a, b) => a + Number(b), 0) / partVals.length).toFixed(1) : 0;
-    }
-
-    // Evaluaciones
-    let sumFinal = 0;
-    let finalCount = 0;
-    const evalSums = {};
-    const evalCounts = {};
-    for (let u = 1; u <= numUnits; u++) {
-      evalSums[u] = 0;
-      evalCounts[u] = 0;
-    }
-
-    records.forEach(r => {
-      const c = this.calculateStudentGrades(r, course);
-      if (c.hasEvaluations) {
-        sumFinal += c.evalFinal;
-        finalCount++;
-      }
-      for (let u = 1; u <= numUnits; u++) {
-        if (c.evalU[u] !== null && c.evalU[u] !== undefined) {
-          evalSums[u] += c.evalU[u];
-          evalCounts[u]++;
-        }
-      }
-    });
-
-    stats.avgFinal = finalCount > 0 ? (sumFinal / finalCount).toFixed(1) : "0.0";
-    for (let u = 1; u <= numUnits; u++) {
-      stats.avgEvaluaciones[u] = evalCounts[u] > 0 ? (evalSums[u] / evalCounts[u]).toFixed(2) : "0.00";
-    }
-
-    return stats;
+    return MathEngine.calculateCourseStats(course);
   },
 
   // RENDERIZADO PRINCIPAL
@@ -1153,13 +777,17 @@ const App = {
       ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" />`
       : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" />`;
 
+    const escNombre = this.escapeHtml(t.nombre || "");
+    const escDepto = this.escapeHtml(t.departamento || "FIUAT");
+    const escCorreo = this.escapeHtml(t.correo || t.usuario || "");
+
     container.innerHTML = `
       <div class="teacher-profile-wrap">
         <button type="button" class="teacher-profile-btn" onclick="App.toggleTeacherDropdown(event)" title="Cuenta activa">
           <span class="teacher-avatar">${avatarImg}</span>
           <div class="teacher-info-mini">
-            <span class="teacher-name-mini">${t.nombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</span>
-            <span class="teacher-depto-mini">${t.departamento || 'FIUAT'}</span>
+            <span class="teacher-name-mini">${escNombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</span>
+            <span class="teacher-depto-mini">${escDepto}</span>
           </div>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
@@ -1167,9 +795,9 @@ const App = {
           <div class="teacher-dropdown-header">
             <div class="teacher-avatar-large">${avatarImg}</div>
             <div>
-              <div class="teacher-name-full">${t.nombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</div>
-              <div class="teacher-email-full">${t.correo || t.usuario}</div>
-              <span class="teacher-badge-depto">${t.departamento || 'FIUAT'}</span>
+              <div class="teacher-name-full">${escNombre} ${isAdmin ? '<span class="badge-role-admin">ADMIN</span>' : ''}</div>
+              <div class="teacher-email-full">${escCorreo}</div>
+              <span class="teacher-badge-depto">${escDepto}</span>
             </div>
           </div>
           <div style="padding: 10px 16px; font-size: 12px; color: var(--text-secondary); background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);">
@@ -1643,7 +1271,7 @@ const App = {
         selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
         coursesBySubject[subject].forEach(c => {
           const count = (c.records || []).length;
-          selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${this.escapeHtml(c.grupo || 'Grupo')} (${count} alumnos)</option>`;
+          selectHtml += `<option value="${this.escapeHtml(c.id)}" ${c.id === course.id ? 'selected' : ''}>${this.escapeHtml(c.grupo || 'Grupo')} (${count} alumnos)</option>`;
         });
         selectHtml += `</optgroup>`;
       });
@@ -1864,7 +1492,7 @@ const App = {
           <div class="search-input-wrap">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" class="search-input" placeholder="Buscar por matrícula o nombre..." 
-              value="${this.searchTerm}" oninput="App.handleSearch(this.value)" />
+              value="${this.escapeHtml(this.searchTerm)}" oninput="App.handleSearch(this.value)" />
           </div>
           <button type="button" class="btn-focus-toggle" onclick="App.toggleGradebookFocusMode()" title="Maximizar área de calificaciones (Inmovilizado estilo Excel)">
             <span id="btnFocusIcon">${this.isGradebookFocused ? '⤡' : '⤢'}</span>
@@ -2542,11 +2170,11 @@ const App = {
       if (lastDate) {
         const d = new Date(lastDate + 'T12:00:00');
         d.setDate(d.getDate() + 2);
-        defaultDate = d.toISOString().split('T')[0];
+        defaultDate = MathEngine.getLocalDateISO(d);
       }
     }
     if (!defaultDate) {
-      defaultDate = new Date().toISOString().split('T')[0];
+      defaultDate = MathEngine.getLocalDateISO();
     }
 
     const inputDate = prompt(`📅 Agregar Fecha de Clase para Unidad ${currentUnit}\n\nIngresa la fecha en formato AAAA-MM-DD:`, defaultDate);
@@ -2609,1396 +2237,6 @@ const App = {
     }
   },
 
-  openAttendanceCalendarModal: function() {
-    const modal = document.getElementById("attendanceCalendarModal");
-    if (!modal) return;
-    const startInp = document.getElementById("calendarStartDate");
-    if (startInp) {
-      startInp.value = new Date().toISOString().split('T')[0];
-    }
-    modal.classList.add("open");
-  },
-
-  closeAttendanceCalendarModal: function() {
-    const modal = document.getElementById("attendanceCalendarModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  submitGenerateAttendanceCalendar: function() {
-    const course = this.getActiveCourse();
-    if (!course) return;
-    const currentUnit = this.attendanceActiveUnit;
-
-    const startInp = document.getElementById("calendarStartDate");
-    const countInp = document.getElementById("calendarTotalClasses");
-    const markPInp = document.getElementById("calMarkAllPresent");
-
-    const startDateStr = startInp?.value;
-    const totalNeeded = Math.min(40, Math.max(1, Number(countInp?.value) || 8));
-    const markP = markPInp ? markPInp.checked : true;
-
-    if (!startDateStr) {
-      alert("Por favor selecciona una fecha de inicio.");
-      return;
-    }
-
-    const selectedDays = [];
-    if (document.getElementById("calDay1")?.checked) selectedDays.push(1); // Lun
-    if (document.getElementById("calDay2")?.checked) selectedDays.push(2); // Mar
-    if (document.getElementById("calDay3")?.checked) selectedDays.push(3); // Mié
-    if (document.getElementById("calDay4")?.checked) selectedDays.push(4); // Jue
-    if (document.getElementById("calDay5")?.checked) selectedDays.push(5); // Vie
-    if (document.getElementById("calDay6")?.checked) selectedDays.push(6); // Sáb
-
-    if (selectedDays.length === 0) {
-      alert("Selecciona al menos un día de la semana.");
-      return;
-    }
-
-    if (!course.attendanceSessions) course.attendanceSessions = [];
-    const existingCount = course.attendanceSessions.filter(s => s.unidad === currentUnit).length;
-
-    let currDate = new Date(startDateStr + 'T12:00:00');
-    let addedCount = 0;
-    let safetyCounter = 0;
-
-    while (addedCount < totalNeeded && safetyCounter < 150) {
-      safetyCounter++;
-      const dayOfWeek = currDate.getDay();
-      if (selectedDays.includes(dayOfWeek)) {
-        const yyyy = currDate.getFullYear();
-        const mm = String(currDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(currDate.getDate()).padStart(2, '0');
-        const dateFormatted = `${yyyy}-${mm}-${dd}`;
-
-        const newSession = {
-          id: 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7) + '_' + addedCount,
-          unidad: currentUnit,
-          fecha: dateFormatted,
-          tema: `Clase ${existingCount + addedCount + 1}`
-        };
-
-        course.attendanceSessions.push(newSession);
-        addedCount++;
-      }
-      currDate.setDate(currDate.getDate() + 1);
-    }
-
-    this.recalculateAttendanceForUnit(course, currentUnit);
-    this.debouncedSave();
-    this.closeAttendanceCalendarModal();
-    this.render();
-    this.showToast(`🎉 ¡Listo! Se generaron ${addedCount} fechas de clase para la Unidad ${currentUnit}`);
-  },
-
-  // =========================================================================
-  // MÓDULO INTELIGENTE DE IMPORTACIÓN DE ASISTENCIAS DESDE EXCEL (.XLSX / .CSV)
-  // =========================================================================
-
-  openExcelAttendanceImportModal: function() {
-    const modal = document.getElementById("excelAttendanceImportModal");
-    if (!modal) return;
-
-    const course = this.getActiveCourse();
-    if (!course) {
-      alert("Selecciona primero una materia para importar asistencias.");
-      return;
-    }
-
-    const currentUnit = this.attendanceActiveUnit || 1;
-    this._excelAttendanceState = {
-      file: null,
-      workbook: null,
-      sheets: [],
-      selectedSheet: null,
-      targetUnit: currentUnit,
-      mode: 'multi_unit',
-      unitRanges: {},
-      rawRows: [],
-      headerRowIndex: -1,
-      detectedColumns: null,
-      matches: []
-    };
-
-    const modeSelect = document.getElementById("excelImportModeSelect");
-    if (modeSelect) modeSelect.value = "multi_unit";
-
-    const targetUnitContainer = document.getElementById("excelImportTargetUnitContainer");
-    if (targetUnitContainer) targetUnitContainer.style.display = "none";
-
-    const delimContainer = document.getElementById("excelImportUnitDelimitationContainer");
-    if (delimContainer) delimContainer.style.display = "none";
-
-    const unitSelect = document.getElementById("excelImportTargetUnit");
-    if (unitSelect) {
-      const numU = Number(course.unidadesCount) || 5;
-      let opts = "";
-      for (let u = 1; u <= numU; u++) {
-        opts += `<option value="${u}" ${u === currentUnit ? 'selected' : ''}>Unidad ${u}</option>`;
-      }
-      unitSelect.innerHTML = opts;
-    }
-
-    const fileInp = document.getElementById("excelAttendanceFileInput");
-    if (fileInp) fileInp.value = "";
-
-    const dropzoneContent = document.getElementById("excelImportDropzoneContent");
-    if (dropzoneContent) {
-      dropzoneContent.innerHTML = `
-        <div style="font-size: 38px; margin-bottom: 8px;">📂</div>
-        <p style="font-weight: 700; color: var(--uat-blue-night); margin-bottom: 4px; font-size: 14px;">
-          Arrastra tu archivo Excel aquí o haz clic para seleccionarlo
-        </p>
-        <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
-          Soporta <b>.xlsx, .xls y .csv</b> • Detección automática de totales o fechas con marcas (P/F/R/J)
-        </p>
-      `;
-    }
-
-    const optContainer = document.getElementById("excelImportOptionsContainer");
-    if (optContainer) optContainer.style.display = "none";
-    const banner = document.getElementById("excelImportStatusBanner");
-    if (banner) banner.style.display = "none";
-    const previewContainer = document.getElementById("excelImportPreviewContainer");
-    if (previewContainer) previewContainer.style.display = "none";
-    const btnApply = document.getElementById("btnApplyExcelAttendance");
-    if (btnApply) {
-      btnApply.disabled = true;
-      btnApply.innerHTML = `⚡ Aplicar a Unidad ${currentUnit}`;
-    }
-    const summaryEl = document.getElementById("excelImportFooterSummary");
-    if (summaryEl) summaryEl.textContent = "";
-
-    modal.classList.add("open");
-  },
-
-  closeExcelAttendanceImportModal: function() {
-    const modal = document.getElementById("excelAttendanceImportModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  handleExcelDragOver: function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    const dropzone = document.getElementById("excelImportDropzone");
-    if (dropzone) dropzone.classList.add("dragover");
-  },
-
-  handleExcelDragLeave: function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    const dropzone = document.getElementById("excelImportDropzone");
-    if (dropzone) dropzone.classList.remove("dragover");
-  },
-
-  handleExcelDrop: function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    const dropzone = document.getElementById("excelImportDropzone");
-    if (dropzone) dropzone.classList.remove("dragover");
-    const files = e.dataTransfer && e.dataTransfer.files;
-    if (files && files.length > 0) {
-      this.processAttendanceExcelFile(files[0]);
-    }
-  },
-
-  handleAttendanceExcelFileSelected: function(e) {
-    const files = e.target && e.target.files;
-    if (files && files.length > 0) {
-      this.processAttendanceExcelFile(files[0]);
-    }
-  },
-
-  onExcelImportModeChanged: function(mode) {
-    if (!this._excelAttendanceState) return;
-    this._excelAttendanceState.mode = mode;
-    const targetUnitContainer = document.getElementById("excelImportTargetUnitContainer");
-    const delimContainer = document.getElementById("excelImportUnitDelimitationContainer");
-    const dateColumns = (this._excelAttendanceState.detectedColumns && this._excelAttendanceState.detectedColumns.dateColumns)
-      ? this._excelAttendanceState.detectedColumns.dateColumns
-      : [];
-
-    if (mode === "single_unit") {
-      if (targetUnitContainer) targetUnitContainer.style.display = "block";
-      if (delimContainer) delimContainer.style.display = "none";
-    } else {
-      if (targetUnitContainer) targetUnitContainer.style.display = "none";
-      if (delimContainer) {
-        delimContainer.style.display = (dateColumns.length > 0) ? "block" : "none";
-        this.renderExcelUnitRangesInputs();
-      }
-    }
-    this.analyzeCurrentExcelSheet();
-  },
-
-  autoDistributeExcelDatesEvenly: function() {
-    const state = this._excelAttendanceState;
-    if (!state || !state.detectedColumns) return;
-    const dateColumns = state.detectedColumns.dateColumns || [];
-    if (dateColumns.length === 0) return;
-
-    const course = this.getActiveCourse();
-    const numUnits = Math.max(1, Number(course ? course.unidadesCount : 3) || 3);
-    const totalDates = dateColumns.length;
-
-    const baseCount = Math.floor(totalDates / numUnits);
-    const remainder = totalDates % numUnits;
-
-    state.unitRanges = {};
-    let currStart = 0;
-    for (let u = 1; u <= numUnits; u++) {
-      const count = baseCount + (u <= remainder ? 1 : 0);
-      const startIdx = currStart;
-      const endIdx = Math.min(totalDates - 1, currStart + Math.max(0, count - 1));
-      state.unitRanges[u] = {
-        startIdx: startIdx,
-        endIdx: endIdx
-      };
-      currStart += count;
-    }
-
-    this.renderExcelUnitRangesInputs();
-    this.analyzeCurrentExcelSheet();
-  },
-
-  renderExcelUnitRangesInputs: function() {
-    const state = this._excelAttendanceState;
-    if (!state || !state.detectedColumns) return;
-    const dateColumns = state.detectedColumns.dateColumns || [];
-    const container = document.getElementById("excelImportUnitRangesRows");
-    const totalBadge = document.getElementById("excelImportDatesTotalBadge");
-    if (!container) return;
-
-    if (totalBadge) {
-      totalBadge.textContent = `(${dateColumns.length} fechas detectadas)`;
-    }
-
-    if (dateColumns.length === 0) {
-      container.innerHTML = `<span style="font-size: 11.5px; color: var(--text-tertiary);">No se detectaron columnas con formato de fecha en esta hoja.</span>`;
-      return;
-    }
-
-    const course = this.getActiveCourse();
-    const numUnits = Math.max(1, Number(course ? course.unidadesCount : 3) || 3);
-
-    if (!state.unitRanges || Object.keys(state.unitRanges).length === 0) {
-      let matchedAny = false;
-      const cDates = (course && course.unitDates) ? course.unitDates : {};
-      const newRanges = {};
-
-      for (let u = 1; u <= numUnits; u++) {
-        const uCfg = cDates[`u${u}`];
-        if (uCfg && uCfg.inicio && uCfg.fin) {
-          let sIdx = -1;
-          let eIdx = -1;
-          dateColumns.forEach((dc, idx) => {
-            if (dc.label >= uCfg.inicio && dc.label <= uCfg.fin) {
-              if (sIdx === -1) sIdx = idx;
-              eIdx = idx;
-            }
-          });
-          if (sIdx !== -1 && eIdx !== -1) {
-            newRanges[u] = { startIdx: sIdx, endIdx: eIdx };
-            matchedAny = true;
-          }
-        }
-      }
-
-      if (matchedAny) {
-        state.unitRanges = newRanges;
-      } else {
-        const baseCount = Math.floor(dateColumns.length / numUnits);
-        const remainder = dateColumns.length % numUnits;
-        let cStart = 0;
-        state.unitRanges = {};
-        for (let u = 1; u <= numUnits; u++) {
-          const count = baseCount + (u <= remainder ? 1 : 0);
-          state.unitRanges[u] = {
-            startIdx: cStart,
-            endIdx: Math.min(dateColumns.length - 1, cStart + Math.max(0, count - 1))
-          };
-          cStart += count;
-        }
-      }
-    }
-
-    let html = "";
-    for (let u = 1; u <= numUnits; u++) {
-      const range = state.unitRanges[u] || { startIdx: 0, endIdx: 0 };
-      const count = Math.max(0, range.endIdx - range.startIdx + 1);
-
-      const startOptions = dateColumns.map((dc, idx) =>
-        `<option value="${idx}" ${idx === range.startIdx ? 'selected' : ''}>${this.escapeHtml(dc.label)} (Col ${dc.colIdx + 1})</option>`
-      ).join('');
-
-      const endOptions = dateColumns.map((dc, idx) =>
-        `<option value="${idx}" ${idx === range.endIdx ? 'selected' : ''}>${this.escapeHtml(dc.label)} (Col ${dc.colIdx + 1})</option>`
-      ).join('');
-
-      html += `
-        <div class="excel-range-unit-card">
-          <div style="font-weight: 800; font-size: 12.5px; color: var(--uat-blue-night);">
-            Unidad ${u}:
-          </div>
-          <div style="display: flex; align-items: center; gap: 4px;">
-            <span style="font-size: 11px; color: var(--text-tertiary); font-weight: 600;">Desde:</span>
-            <select class="form-control" style="font-size: 11.5px; padding: 3px 6px; height: 28px;" onchange="App.onExcelUnitRangeChanged(${u}, true, this.value)">
-              ${startOptions}
-            </select>
-          </div>
-          <div style="display: flex; align-items: center; gap: 4px;">
-            <span style="font-size: 11px; color: var(--text-tertiary); font-weight: 600;">Hasta:</span>
-            <select class="form-control" style="font-size: 11.5px; padding: 3px 6px; height: 28px;" onchange="App.onExcelUnitRangeChanged(${u}, false, this.value)">
-              ${endOptions}
-            </select>
-          </div>
-          <div>
-            <span id="excelUnitRangeBadge_${u}" class="status-badge status-aprobado" style="font-size: 11px; font-weight: 700;">
-              ${count} fechas
-            </span>
-          </div>
-        </div>
-      `;
-    }
-
-    container.innerHTML = html;
-  },
-
-  onExcelUnitRangeChanged: function(unitIdx, isStart, val) {
-    const state = this._excelAttendanceState;
-    if (!state || !state.unitRanges) return;
-    const numVal = parseInt(val, 10) || 0;
-    if (!state.unitRanges[unitIdx]) {
-      state.unitRanges[unitIdx] = { startIdx: 0, endIdx: 0 };
-    }
-    if (isStart) {
-      state.unitRanges[unitIdx].startIdx = numVal;
-      if (state.unitRanges[unitIdx].endIdx < numVal) {
-        state.unitRanges[unitIdx].endIdx = numVal;
-      }
-    } else {
-      state.unitRanges[unitIdx].endIdx = numVal;
-      if (state.unitRanges[unitIdx].startIdx > numVal) {
-        state.unitRanges[unitIdx].startIdx = numVal;
-      }
-    }
-    this.renderExcelUnitRangesInputs();
-    this.analyzeCurrentExcelSheet();
-  },
-
-  onExcelImportUnitChanged: function(val) {
-    if (!this._excelAttendanceState) return;
-    this._excelAttendanceState.targetUnit = Number(val) || 1;
-    if (this._excelAttendanceState.workbook && this._excelAttendanceState.sheets && this._excelAttendanceState.sheets.length > 1) {
-      const bestForUnit = this.detectBestAttendanceSheet(this._excelAttendanceState.workbook, this._excelAttendanceState.targetUnit);
-      if (bestForUnit && bestForUnit !== this._excelAttendanceState.selectedSheet) {
-        const cleanBest = this._cleanMatchText(bestForUnit);
-        if (cleanBest.includes(`u${this._excelAttendanceState.targetUnit}`) || cleanBest.includes(`unidad ${this._excelAttendanceState.targetUnit}`) || cleanBest.includes(`parcial ${this._excelAttendanceState.targetUnit}`)) {
-          this._excelAttendanceState.selectedSheet = bestForUnit;
-          this._excelAttendanceState.autoDetectedSheet = bestForUnit;
-          const sheetSelect = document.getElementById("excelImportSheetSelect");
-          if (sheetSelect) sheetSelect.value = bestForUnit;
-          const autoBadge = document.getElementById("excelImportSheetAutoBadge");
-          if (autoBadge) autoBadge.textContent = "🎯 Auto-detectada para U" + this._excelAttendanceState.targetUnit;
-        }
-      }
-    }
-    this.analyzeCurrentExcelSheet();
-    const btnApply = document.getElementById("btnApplyExcelAttendance");
-    if (btnApply) {
-      const matchCount = (this._excelAttendanceState.matches || []).filter(m => m.status === 'ok').length;
-      btnApply.innerHTML = `⚡ Aplicar Asistencias a Unidad ${this._excelAttendanceState.targetUnit} (${matchCount} alumnos)`;
-    }
-    const summaryFooter = document.getElementById("excelImportFooterSummary");
-    if (summaryFooter && this._excelAttendanceState.matches) {
-      const matchCount = this._excelAttendanceState.matches.filter(m => m.status === 'ok').length;
-      summaryFooter.textContent = `${matchCount} registros listos para sincronizar a la Unidad ${this._excelAttendanceState.targetUnit}.`;
-    }
-  },
-
-  onExcelImportSheetChanged: function(val) {
-    if (!this._excelAttendanceState || !this._excelAttendanceState.workbook) return;
-    this._excelAttendanceState.selectedSheet = val;
-    const autoBadge = document.getElementById("excelImportSheetAutoBadge");
-    if (autoBadge) {
-      autoBadge.textContent = (val === this._excelAttendanceState.autoDetectedSheet)
-        ? "🎯 Auto-detectada"
-        : "✏️ Manual";
-    }
-    this.analyzeCurrentExcelSheet();
-  },
-
-  detectBestAttendanceSheet: function(workbook, targetUnit) {
-    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) return null;
-    if (workbook.SheetNames.length === 1) return workbook.SheetNames[0];
-
-    const course = this.getActiveCourse();
-    const records = (course && course.records) ? course.records : [];
-    const targetUnitNum = parseInt(targetUnit, 10) || 1;
-
-    // Palabras clave de la materia activa
-    const courseTokens = course && (course.nombre || course.name) ? this._getNameTokens(course.nombre || course.name) : [];
-    const groupClean = course && (course.grupo || course.group) ? this._cleanMatchText(course.grupo || course.group) : "";
-
-    let bestSheet = workbook.SheetNames[0];
-    let highestScore = -999;
-
-    workbook.SheetNames.forEach(sheetName => {
-      let score = 0;
-      const cleanName = this._cleanMatchText(sheetName);
-
-      // 1. Puntuación por nombre de la materia o grupo en la pestaña
-      if (courseTokens.length > 0) {
-        let matchingTokens = 0;
-        courseTokens.forEach(t => {
-          if (cleanName.includes(t)) matchingTokens++;
-        });
-        if (matchingTokens > 0) {
-          score += matchingTokens * 35; // Preferencia si la hoja lleva el nombre de esta materia
-        }
-      }
-      if (groupClean && cleanName.includes(groupClean)) {
-        score += 30; // Preferencia si lleva el grupo (ej. "A", "GPO 1", etc.)
-      }
-
-      // 2. Puntuación por términos de asistencia y unidad
-      if (/asistenc|asist|lista|falta|inasist|pase/.test(cleanName)) score += 50;
-      if (cleanName.includes(`u${targetUnitNum}`) || cleanName.includes(`unidad ${targetUnitNum}`) || cleanName.includes(`parcial ${targetUnitNum}`)) score += 30;
-      if (/calif|evalua|examen|tarea|ponder|rubric|acredita/.test(cleanName) && !/asist/.test(cleanName)) score -= 25;
-
-      // 3. Muestreo de contenido de la hoja buscando alumnos de ESTA materia
-      try {
-        const worksheet = workbook.Sheets[sheetName];
-        if (worksheet) {
-          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false });
-          if (Array.isArray(rows) && rows.length > 0) {
-            let foundAttendanceHeader = false;
-            let matchedStudentCount = 0;
-            const sampleRows = rows.slice(0, 40);
-
-            sampleRows.forEach(row => {
-              if (!Array.isArray(row)) return;
-              const rowStr = row.map(c => this._cleanMatchText(String(c))).join(' ');
-              if (/falta|inasist|asist|asistencia|asistencias|pase lista|retardo/.test(rowStr)) {
-                foundAttendanceHeader = true;
-              }
-
-              row.forEach(cell => {
-                const cellStr = String(cell).trim().replace(/[^0-9a-zA-Z]/g, "").toLowerCase();
-                if (!cellStr) return;
-                // Coincidencia con matrículas del grupo de la materia activa
-                if (records.some(r => String(r.matricula || "").replace(/[^0-9a-zA-Z]/g, "").toLowerCase() === cellStr)) {
-                  matchedStudentCount++;
-                }
-              });
-            });
-
-            if (foundAttendanceHeader) score += 30;
-            score += Math.min(matchedStudentCount * 8, 80); // Fuerte preferencia a las matrículas reales del grupo
-          }
-        }
-      } catch (e) {
-        // Ignorar error al inspeccionar hoja
-      }
-
-      if (score > highestScore) {
-        highestScore = score;
-        bestSheet = sheetName;
-      }
-    });
-
-    return bestSheet;
-  },
-
-  processAttendanceExcelFile: function(file) {
-    if (!file) return;
-    if (typeof XLSX === "undefined") {
-      alert("Error: La librería de lectura de Excel (SheetJS) no está disponible en este momento.");
-      return;
-    }
-
-    const state = this._excelAttendanceState;
-    if (!state) return;
-    state.file = file;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
-          alert("El archivo no contiene hojas legibles.");
-          return;
-        }
-
-        state.workbook = workbook;
-        state.sheets = workbook.SheetNames;
-        const bestSheet = this.detectBestAttendanceSheet(workbook, state.targetUnit);
-        state.selectedSheet = bestSheet || workbook.SheetNames[0];
-        state.autoDetectedSheet = bestSheet;
-
-        const dropzoneContent = document.getElementById("excelImportDropzoneContent");
-        if (dropzoneContent) {
-          dropzoneContent.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;">
-              <span style="font-size: 30px;">📗</span>
-              <div style="text-align: left;">
-                <b style="font-size: 14px; color: var(--uat-blue-night);">${this.escapeHtml(file.name)}</b>
-                <div style="font-size: 11.5px; color: var(--text-tertiary);">${(file.size / 1024).toFixed(1)} KB • ${workbook.SheetNames.length} hoja(s) encontrada(s)</div>
-              </div>
-              <button type="button" class="btn btn-xs btn-default" onclick="event.stopPropagation(); document.getElementById('excelAttendanceFileInput').click();" style="font-size: 11px; margin-left: 6px;">Cambiar archivo</button>
-            </div>
-          `;
-        }
-
-        const optContainer = document.getElementById("excelImportOptionsContainer");
-        if (optContainer) optContainer.style.display = "block";
-
-        const sheetContainer = document.getElementById("excelImportSheetSelectorContainer");
-        const sheetSelect = document.getElementById("excelImportSheetSelect");
-        const autoBadge = document.getElementById("excelImportSheetAutoBadge");
-        if (sheetContainer && sheetSelect) {
-          if (workbook.SheetNames.length > 1) {
-            sheetContainer.style.display = "block";
-            sheetSelect.innerHTML = workbook.SheetNames.map(s => {
-              const isAuto = s === state.autoDetectedSheet;
-              return `<option value="${this.escapeHtml(s)}" ${s === state.selectedSheet ? 'selected' : ''}>${this.escapeHtml(s)}${isAuto ? ' 🎯 (Detectada automáticamente)' : ''}</option>`;
-            }).join('');
-            if (autoBadge) {
-              autoBadge.textContent = state.autoDetectedSheet ? "🎯 Auto-detectada" : "";
-            }
-          } else {
-            sheetContainer.style.display = "none";
-          }
-        }
-
-        this.analyzeCurrentExcelSheet();
-      } catch (err) {
-        console.error("Error al procesar el archivo Excel:", err);
-        alert("No se pudo procesar el archivo Excel. Asegúrate de que sea un archivo .xlsx, .xls o .csv válido.\nError: " + (err.message || err));
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  },
-
-  _cleanMatchText: function(str) {
-    if (!str) return "";
-    return String(str)
-      .toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  },
-
-  _getNameTokens: function(str) {
-    const clean = this._cleanMatchText(str);
-    if (!clean) return [];
-    const stopWords = new Set(["de", "del", "la", "las", "los", "y", "san"]);
-    return clean.split(" ").filter(w => w.length > 1 && !stopWords.has(w));
-  },
-
-  analyzeCurrentExcelSheet: function() {
-    const state = this._excelAttendanceState;
-    if (!state || !state.workbook || !state.selectedSheet) return;
-
-    const sheet = state.workbook.Sheets[state.selectedSheet];
-    if (!sheet) return;
-
-    const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-    state.rawRows = rawRows;
-
-    if (!rawRows || rawRows.length === 0) {
-      const banner = document.getElementById("excelImportStatusBanner");
-      if (banner) {
-        banner.style.display = "block";
-        banner.style.background = "rgba(239, 68, 68, 0.1)";
-        banner.style.color = "var(--color-red)";
-        banner.innerHTML = "⚠️ La hoja seleccionada está vacía.";
-      }
-      return;
-    }
-
-    let headerRowIdx = -1;
-    let maxHeaderScore = -1;
-
-    for (let r = 0; r < Math.min(25, rawRows.length); r++) {
-      const row = rawRows[r] || [];
-      let score = 0;
-      let hasMat = false;
-      let hasNom = false;
-      let isMetadataOrLegend = false;
-
-      row.forEach(cell => {
-        const str = String(cell || "").trim();
-        if (!str) return;
-        const txt = this._cleanMatchText(str);
-        if (!txt) return;
-
-        // Descartar si es un bloque de leyenda, título o metadatos de la materia
-        if (str.length > 45 || /^materia\s*:|^periodo\s*:|^leyenda\s*:|^lista de asistencia/i.test(str)) {
-          isMetadataOrLegend = true;
-          return;
-        }
-
-        if (/matr|clave|control|cuenta|id|no\s*cuenta/.test(txt) && !/grupo|materia|prof/.test(txt)) {
-          score += 25;
-          hasMat = true;
-        }
-        if (/nom|alum|estud/.test(txt) && !/docente|profesor|materia/.test(txt)) {
-          score += 25;
-          hasNom = true;
-        }
-        if (/asis|presente/.test(txt)) score += 5;
-        if (/falt|inasist|ausenc/.test(txt)) score += 5;
-        if (/ret|retard/.test(txt)) score += 3;
-        if (/just|justif/.test(txt)) score += 3;
-        if (/%\s*asis|pct|porcentaje/.test(txt)) score += 4;
-        if (/^u\d|unidad/.test(txt)) score += 3;
-        if (/\d{1,2}[/-]\d{1,2}|clase|sesion/.test(txt)) score += 3;
-      });
-
-      if (hasMat && hasNom && !isMetadataOrLegend) {
-        score += 60;
-      } else if (isMetadataOrLegend) {
-        score = -10;
-      }
-
-      if (score > maxHeaderScore) {
-        maxHeaderScore = score;
-        headerRowIdx = r;
-      }
-    }
-
-    if (headerRowIdx === -1) headerRowIdx = 0;
-    state.headerRowIndex = headerRowIdx;
-
-    const headers = rawRows[headerRowIdx] || [];
-    const nextRow = rawRows[headerRowIdx + 1] || [];
-
-    let colMatricula = -1;
-    let colNombre = -1;
-    let colFaltas = -1;
-    let colAsist = -1;
-    let colPct = -1;
-    let colRetardos = -1;
-    let colJustif = -1;
-    const dateColumns = [];
-
-    const monthMap = {
-      "agosto": "08", "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12",
-      "enero": "01", "febrero": "02", "marzo": "03", "abril": "04", "mayo": "05", "junio": "06", "julio": "07"
-    };
-
-    headers.forEach((cell, cIdx) => {
-      const hText = this._cleanMatchText(cell);
-      if (!hText) return;
-
-      if (colMatricula === -1 && /matr|clave|control|cuenta|id|no\s*cuenta/.test(hText) && !/grupo|materia|prof/.test(hText)) {
-        colMatricula = cIdx;
-      } else if (colNombre === -1 && /nom|alum|estud/.test(hText) && !/docente|profesor|materia/.test(hText)) {
-        colNombre = cIdx;
-      } else if (colPct === -1 && (/^pct|%\s*asis|porcentaje/.test(hText) || hText === "% asis" || hText === "asis")) {
-        colPct = cIdx;
-      } else if (colFaltas === -1 && (/total\s*f|falt|inasist|ausenc/.test(hText) || hText === "falt") && !/fecha|dia/.test(hText)) {
-        colFaltas = cIdx;
-      } else if (colAsist === -1 && (/total\s*a|total\s*p|asis|presentes?/.test(hText) || hText === "asis") && !/fecha|dia/.test(hText)) {
-        colAsist = cIdx;
-      } else if (colRetardos === -1 && (/ret|retard/.test(hText) || hText === "ret")) {
-        colRetardos = cIdx;
-      } else if (colJustif === -1 && (/just|justif/.test(hText) || hText === "just")) {
-        colJustif = cIdx;
-      }
-    });
-
-    // 1. Método Estándar: Detección de fechas directas en la fila de encabezados
-    headers.forEach((cell, cIdx) => {
-      if (cIdx === colMatricula || cIdx === colNombre || cIdx === colFaltas || cIdx === colAsist || cIdx === colPct || cIdx === colRetardos || cIdx === colJustif) return;
-      const hText = this._cleanMatchText(cell);
-      if (/\d{1,2}[/-]\d{1,2}|\d{1,2}-[a-z]{3}|clase\s*\d+|sesi[oó]n\s*\d+|dia\s*\d+/.test(hText) || (typeof cell === 'number' && cell > 44000)) {
-        let label = String(cell).trim();
-        if (typeof cell === 'number' && cell > 44000) {
-          try {
-            const d = new Date(Math.round((cell - 25569) * 86400 * 1000));
-            label = d.toISOString().slice(0, 10);
-          } catch(e) {}
-        }
-        dateColumns.push({ colIdx: cIdx, label: label });
-      }
-    });
-
-    // 2. Método Institucional UAT: Mes en fila superior y día numérico en la fila siguiente
-    if (dateColumns.length === 0 && nextRow && nextRow.length > 0) {
-      let activeMonth = "";
-      const maxCol = Math.max(headers.length, nextRow.length);
-      for (let c = 0; c < maxCol; c++) {
-        if (c === colMatricula || c === colNombre || c === colFaltas || c === colAsist || c === colPct || c === colRetardos || c === colJustif) continue;
-
-        const hVal = String(headers[c] || "").trim().toLowerCase();
-        for (const mKey of Object.keys(monthMap)) {
-          if (hVal.includes(mKey)) {
-            activeMonth = mKey;
-            break;
-          }
-        }
-
-        const nextCellVal = String(nextRow[c] || "").trim();
-        if (/^\d{1,2}$/.test(nextCellVal)) {
-          const dayNum = parseInt(nextCellVal, 10);
-          if (dayNum >= 1 && dayNum <= 31) {
-            const mCode = monthMap[activeMonth] || "";
-            const dStr = String(dayNum).padStart(2, "0");
-            let label = mCode ? `2026-${mCode}-${dStr}` : `Día ${dStr}`;
-            dateColumns.push({ colIdx: c, label: label });
-          }
-        }
-      }
-    }
-
-    const sampleRows = rawRows.slice(headerRowIdx + 1, headerRowIdx + 40);
-
-    // Fallback matricula y nombre
-    if (colMatricula === -1) {
-      for (let c = 0; c < 15; c++) {
-        let numericIds = 0;
-        sampleRows.forEach(r => {
-          const v = String(r[c] || "").trim();
-          if (/^\d{7,11}$/.test(v)) numericIds++;
-        });
-        if (numericIds >= Math.min(3, sampleRows.length)) {
-          colMatricula = c;
-          break;
-        }
-      }
-    }
-
-    if (colNombre === -1) {
-      for (let c = 0; c < 15; c++) {
-        if (c === colMatricula) continue;
-        let nameLike = 0;
-        sampleRows.forEach(r => {
-          const v = String(r[c] || "").trim();
-          if (v.length > 5 && v.includes(" ") && !/\d{5}/.test(v) && !/^(lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)$/i.test(v)) nameLike++;
-        });
-        if (nameLike >= Math.min(3, sampleRows.length)) {
-          colNombre = c;
-          break;
-        }
-      }
-    }
-
-    // Fallback: Si todavía no hay dateColumns, buscar columnas con marcas de asistencia
-    if (dateColumns.length === 0) {
-      const maxCol = Math.max(headers.length, (rawRows[headerRowIdx + 3] || []).length);
-      for (let c = 0; c < maxCol; c++) {
-        if (c === colMatricula || c === colNombre || c === colFaltas || c === colAsist || c === colPct || c === colRetardos || c === colJustif) continue;
-        let attendanceMarks = 0;
-        sampleRows.forEach(r => {
-          const val = String(r[c] || "").trim().toUpperCase();
-          if (/^[AFPRJ10✓✗]$/.test(val)) attendanceMarks++;
-        });
-        if (attendanceMarks >= 2) {
-          const hName = String(headers[c] || `Clase ${dateColumns.length + 1}`).trim();
-          dateColumns.push({ colIdx: c, label: hName });
-        }
-      }
-    }
-
-    state.detectedColumns = {
-      colMatricula,
-      colNombre,
-      colFaltas,
-      colAsist,
-      colPct,
-      colRetardos,
-      colJustif,
-      dateColumns
-    };
-
-    const course = this.getActiveCourse();
-    const records = (course && course.records) ? course.records : [];
-    const studentsMap = this.getStudentsMap();
-    const numUnits = Math.max(1, Number(course ? course.unidadesCount : 3) || 3);
-
-    const modeContainer = document.getElementById("excelImportModeContainer");
-    const targetUnitContainer = document.getElementById("excelImportTargetUnitContainer");
-    const delimContainer = document.getElementById("excelImportUnitDelimitationContainer");
-
-    if (dateColumns.length > 0) {
-      if (modeContainer) modeContainer.style.display = "block";
-      if (!state.unitRanges || Object.keys(state.unitRanges).length === 0) {
-        this.autoDistributeExcelDatesEvenly();
-      }
-      if (state.mode === "multi_unit") {
-        if (targetUnitContainer) targetUnitContainer.style.display = "none";
-        if (delimContainer) {
-          delimContainer.style.display = "block";
-          this.renderExcelUnitRangesInputs();
-        }
-      } else {
-        if (targetUnitContainer) targetUnitContainer.style.display = "block";
-        if (delimContainer) delimContainer.style.display = "none";
-      }
-    } else {
-      state.mode = "single_unit";
-      if (modeContainer) modeContainer.style.display = "none";
-      if (targetUnitContainer) targetUnitContainer.style.display = "block";
-      if (delimContainer) delimContainer.style.display = "none";
-    }
-
-    const excelRowsData = [];
-    for (let r = headerRowIdx + 1; r < rawRows.length; r++) {
-      const row = rawRows[r];
-      if (!row || row.length === 0) continue;
-
-      const rawMat = colMatricula !== -1 ? String(row[colMatricula] || "").trim() : "";
-      const cleanMat = rawMat.replace(/[^0-9a-zA-Z]/g, "").toLowerCase();
-      const rawName = colNombre !== -1 ? String(row[colNombre] || "").trim() : "";
-      const nameTokens = this._getNameTokens(rawName);
-
-      // Descartar filas de sub-encabezados (números de día o días de la semana)
-      if (rawName && /^(lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)$/i.test(rawName)) continue;
-      if (!cleanMat && nameTokens.length < 2) continue;
-
-      excelRowsData.push({
-        rowIdx: r,
-        row: row,
-        rawMat: rawMat,
-        cleanMat: cleanMat,
-        rawName: rawName,
-        nameTokens: nameTokens,
-        used: false
-      });
-    }
-
-    const matches = [];
-    let matchCount = 0;
-
-    records.forEach((rec, recIdx) => {
-      const student = studentsMap[rec.matricula] || { nombre: "Alumno sin nombre" };
-      const sysCleanMat = String(rec.matricula || "").replace(/[^0-9a-zA-Z]/g, "").toLowerCase();
-      const sysNameTokens = this._getNameTokens(student.nombre);
-
-      let bestMatch = null;
-      let matchType = "none";
-      let matchLabel = "";
-
-      if (sysCleanMat) {
-        const foundByMat = excelRowsData.find(item => item.cleanMat === sysCleanMat);
-        if (foundByMat) {
-          bestMatch = foundByMat;
-          matchType = "matricula";
-          matchLabel = `Matrícula (${foundByMat.rawMat})`;
-        }
-      }
-
-      if (!bestMatch && sysNameTokens.length > 0) {
-        let bestTokenScore = 0;
-        let bestCandidate = null;
-
-        excelRowsData.forEach(item => {
-          if (item.nameTokens.length === 0) return;
-          let common = 0;
-          sysNameTokens.forEach(t1 => {
-            if (item.nameTokens.some(t2 => t1 === t2 || (t1.length > 3 && t2.startsWith(t1)) || (t2.length > 3 && t1.startsWith(t2)))) {
-              common++;
-            }
-          });
-
-          const totalUnique = new Set([...sysNameTokens, ...item.nameTokens]).size;
-          const similarity = common / Math.max(1, totalUnique);
-
-          if ((common >= 2 && similarity >= 0.5) || similarity >= 0.7) {
-            if (common > bestTokenScore) {
-              bestTokenScore = common;
-              bestCandidate = item;
-            }
-          }
-        });
-
-        if (bestCandidate) {
-          bestMatch = bestCandidate;
-          matchType = "nombre";
-          matchLabel = `Nombre (${bestCandidate.rawName})`;
-        }
-      }
-
-      if (bestMatch) {
-        matchCount++;
-        const row = bestMatch.row;
-        let detectedF = 0;
-        let detectedPct = 100;
-        const sessionsData = {};
-        const unitStats = {};
-
-        if (dateColumns.length > 0) {
-          let pCnt = 0, fCnt = 0, rCnt = 0, jCnt = 0;
-          dateColumns.forEach((col, dIdx) => {
-            const rawVal = String(row[col.colIdx] || "").trim().toUpperCase();
-            let mark = "";
-            if (rawVal === "A" || rawVal === "P" || rawVal === "1" || rawVal === "✓") {
-              mark = "P";
-              pCnt++;
-            } else if (rawVal === "F" || rawVal === "0" || rawVal === "✗") {
-              mark = "F";
-              fCnt++;
-            } else if (rawVal === "R") {
-              mark = "R";
-              rCnt++;
-            } else if (rawVal === "J") {
-              mark = "J";
-              jCnt++;
-            }
-            sessionsData[`date_${dIdx}`] = { mark: mark, label: col.label };
-          });
-
-          const totalClases = pCnt + fCnt + rCnt + jCnt;
-          detectedF = fCnt + Math.floor(rCnt / 2);
-          detectedPct = totalClases > 0 ? Math.round(((pCnt + (rCnt * 0.5) + jCnt) / totalClases) * 100) : 100;
-
-          // Si el alumno no tuvo marcas de clase individuales pero el Excel tiene columnas de totales (ASIS/FALT)
-          if (totalClases === 0 && (colFaltas !== -1 || colPct !== -1 || colAsist !== -1)) {
-            if (colFaltas !== -1) {
-              const parsedF = Number(String(row[colFaltas]).replace(/[^0-9]/g, ''));
-              detectedF = !isNaN(parsedF) ? parsedF : 0;
-            }
-            if (colPct !== -1) {
-              let parsedPct = Number(String(row[colPct]).replace(/[^0-9.]/g, ''));
-              if (parsedPct <= 1 && parsedPct > 0) parsedPct = Math.round(parsedPct * 100);
-              detectedPct = !isNaN(parsedPct) ? Math.min(100, Math.max(0, parsedPct)) : 100;
-            } else if (colAsist !== -1) {
-              const parsedA = Number(String(row[colAsist]).replace(/[^0-9]/g, ''));
-              if (!isNaN(parsedA)) {
-                const totalEst = parsedA + detectedF;
-                detectedPct = totalEst > 0 ? Math.round((parsedA / totalEst) * 100) : 100;
-              }
-            }
-          }
-
-          // Estadísticas independientes por unidad según delimitación
-          for (let u = 1; u <= numUnits; u++) {
-            const range = (state.unitRanges && state.unitRanges[u]) ? state.unitRanges[u] : { startIdx: -1, endIdx: -1 };
-            let uP = 0, uF = 0, uR = 0, uJ = 0;
-            if (range.startIdx !== -1 && range.endIdx !== -1 && range.startIdx <= range.endIdx) {
-              for (let d = range.startIdx; d <= range.endIdx; d++) {
-                if (d < dateColumns.length) {
-                  const m = sessionsData[`date_${d}`] ? sessionsData[`date_${d}`].mark : "";
-                  if (m === "P") uP++;
-                  else if (m === "F") uF++;
-                  else if (m === "R") uR++;
-                  else if (m === "J") uJ++;
-                }
-              }
-            }
-            const uTot = uP + uF + uR + uJ;
-            const uFaltas = uF + Math.floor(uR / 2);
-            const uPct = uTot > 0 ? Math.min(100, Math.max(0, Math.round(((uP + (uR * 0.5) + uJ) / uTot) * 100))) : 100;
-            unitStats[u] = { faltas: uFaltas, pct: uPct, totalClases: uTot };
-          }
-        } else {
-          if (colFaltas !== -1) {
-            const parsedF = Number(String(row[colFaltas]).replace(/[^0-9]/g, ''));
-            detectedF = !isNaN(parsedF) ? parsedF : 0;
-          }
-          if (colPct !== -1) {
-            let parsedPct = Number(String(row[colPct]).replace(/[^0-9.]/g, ''));
-            if (parsedPct <= 1 && parsedPct > 0) parsedPct = Math.round(parsedPct * 100);
-            detectedPct = !isNaN(parsedPct) ? Math.min(100, Math.max(0, parsedPct)) : 100;
-          } else if (colAsist !== -1) {
-            const parsedA = Number(String(row[colAsist]).replace(/[^0-9]/g, ''));
-            if (!isNaN(parsedA)) {
-              const totalEst = parsedA + detectedF;
-              detectedPct = totalEst > 0 ? Math.round((parsedA / totalEst) * 100) : 100;
-            }
-          } else {
-            detectedPct = Math.max(0, 100 - (detectedF * 10));
-          }
-        }
-
-        matches.push({
-          recIndex: recIdx,
-          matricula: rec.matricula,
-          nombre: student.nombre,
-          matchType: matchType,
-          matchLabel: matchLabel,
-          faltas: detectedF,
-          asistenciaPct: detectedPct,
-          unitStats: unitStats,
-          sessionsData: sessionsData,
-          status: "ok"
-        });
-      } else {
-        const uKey = `u${state.targetUnit || 1}`;
-        const currF = (rec.faltas && rec.faltas[uKey] !== undefined) ? rec.faltas[uKey] : "-";
-        const currA = (rec.asistencia && rec.asistencia[uKey] !== undefined) ? rec.asistencia[uKey] : "-";
-        const emptyUnitStats = {};
-        for (let u = 1; u <= numUnits; u++) {
-          emptyUnitStats[u] = {
-            faltas: (rec.faltas && rec.faltas[`u${u}`] !== undefined) ? Number(rec.faltas[`u${u}`]) : 0,
-            pct: (rec.asistencia && rec.asistencia[`u${u}`] !== undefined) ? Number(rec.asistencia[`u${u}`]) : 100,
-            totalClases: 0
-          };
-        }
-        matches.push({
-          recIndex: recIdx,
-          matricula: rec.matricula,
-          nombre: student.nombre,
-          matchType: "none",
-          matchLabel: "No localizado en Excel",
-          faltas: currF,
-          asistenciaPct: currA,
-          unitStats: emptyUnitStats,
-          sessionsData: {},
-          status: "missing"
-        });
-      }
-    });
-
-    state.matches = matches;
-
-    const banner = document.getElementById("excelImportStatusBanner");
-    if (banner) {
-      banner.style.display = "block";
-      const totalAlumnos = records.length;
-      const pctMatch = totalAlumnos > 0 ? Math.round((matchCount / totalAlumnos) * 100) : 0;
-
-      let colDiag = [];
-      if (colMatricula !== -1) colDiag.push(`Matrícula (Col ${headers[colMatricula] || colMatricula + 1})`);
-      if (colNombre !== -1) colDiag.push(`Nombre (Col ${headers[colNombre] || colNombre + 1})`);
-      if (dateColumns.length > 0) colDiag.push(`${dateColumns.length} Fechas de Clase`);
-      if (colFaltas !== -1) colDiag.push(`Totales de Faltas`);
-      if (colPct !== -1 || colAsist !== -1) colDiag.push(`% de Asistencia`);
-
-      let sheetInfoHtml = '';
-      if (state.sheets && state.sheets.length > 1) {
-        const isAuto = state.selectedSheet === state.autoDetectedSheet;
-        sheetInfoHtml = ` • <b>Hoja:</b> "${this.escapeHtml(state.selectedSheet)}"${isAuto ? ' 🎯 (Detección automática)' : ''}`;
-      }
-
-      banner.style.background = matchCount > 0 ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)";
-      banner.style.border = matchCount > 0 ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)";
-      banner.style.color = matchCount > 0 ? "var(--color-green)" : "var(--color-red)";
-      banner.innerHTML = `
-        <div style="font-weight: 700; margin-bottom: 2px;">
-          ${matchCount > 0 ? `✅ Se detectaron ${matchCount} de ${totalAlumnos} alumnos (${pctMatch}% de coincidencia)` : `⚠️ No se detectaron coincidencias con los alumnos de este grupo`}
-        </div>
-        <div style="font-size: 11px; color: var(--text-secondary); opacity: 0.9;">
-          <b>Estructura reconocida:</b> ${colDiag.length > 0 ? colDiag.join(" • ") : "Formato libre"}${sheetInfoHtml}.
-        </div>
-      `;
-    }
-
-    const dateOptRow = document.getElementById("excelImportDatesOptionRow");
-    if (dateOptRow) {
-      dateOptRow.style.display = dateColumns.length > 0 ? "block" : "none";
-    }
-
-    const isMultiUnit = (state.mode === "multi_unit" && dateColumns.length > 0);
-    const previewContainer = document.getElementById("excelImportPreviewContainer");
-    const previewTbody = document.getElementById("excelImportPreviewTbody");
-    const matchBadge = document.getElementById("excelImportMatchCountBadge");
-
-    if (previewContainer && previewTbody) {
-      previewContainer.style.display = "block";
-      if (matchBadge) {
-        matchBadge.textContent = `${matchCount} / ${records.length} Vinculados`;
-        matchBadge.className = matchCount > 0 ? "status-badge status-aprobado" : "status-badge status-reprobado";
-      }
-
-      const previewThead = previewContainer.querySelector("table thead");
-      if (previewThead) {
-        previewThead.innerHTML = `
-          <tr style="background: var(--bg-hover); position: sticky; top: 0; z-index: 2;">
-            <th style="padding: 6px 8px; width: 34px; text-align: center;">#</th>
-            <th style="padding: 6px 8px;">Alumno en la Materia</th>
-            <th style="padding: 6px 8px; width: 130px;">Vinculado Por</th>
-            <th style="padding: 6px 8px; width: ${isMultiUnit ? '140px' : '70px'}; text-align: center;">${isMultiUnit ? 'Faltas / Unidad' : 'Faltas'}</th>
-            <th style="padding: 6px 8px; width: ${isMultiUnit ? '160px' : '80px'}; text-align: center;">${isMultiUnit ? '% Asist. / Unidad' : '% Asist.'}</th>
-            <th style="padding: 6px 8px; width: 95px; text-align: center;">Estado</th>
-          </tr>
-        `;
-      }
-
-      let rowsHtml = "";
-      matches.forEach((item, idx) => {
-        let badgeHtml = "";
-        if (item.matchType === "matricula") {
-          badgeHtml = `<span class="badge-match-mat" title="Coincidencia exacta por Matrícula">✓ Matrícula</span>`;
-        } else if (item.matchType === "nombre") {
-          badgeHtml = `<span class="badge-match-nom" title="Coincidencia inteligente por Nombre">✓ Nombre</span>`;
-        } else {
-          badgeHtml = `<span class="badge-match-none" title="No encontrado en el Excel, se preservarán sus datos actuales">Sin cambios</span>`;
-        }
-
-        const isOk = item.status === "ok";
-        let faltasCell = "";
-        let pctCell = "";
-
-        if (isMultiUnit) {
-          const fArr = [];
-          const pArr = [];
-          for (let u = 1; u <= numUnits; u++) {
-            const st = item.unitStats && item.unitStats[u];
-            const fVal = st ? st.faltas : 0;
-            const pVal = st ? st.pct : 100;
-            fArr.push(`U${u}: <b style="${fVal > 0 ? 'color: var(--color-red);' : ''}">${fVal}</b>`);
-            pArr.push(`U${u}: <b style="color: var(--uat-orange);">${pVal}%</b>`);
-          }
-          faltasCell = `<div style="font-size: 11px;">${fArr.join(" • ")}</div>`;
-          pctCell = `<div style="font-size: 11px;">${pArr.join(" • ")}</div>`;
-        } else {
-          faltasCell = `<span style="font-weight: 700; ${isOk && item.faltas > 0 ? 'color: var(--color-red);' : ''}">${item.faltas !== undefined ? item.faltas : '-'}</span>`;
-          pctCell = `<span style="font-weight: 700; ${isOk ? 'color: var(--uat-orange);' : ''}">${item.asistenciaPct !== undefined ? item.asistenciaPct + '%' : '-'}</span>`;
-        }
-
-        rowsHtml += `
-          <tr style="${!isOk ? 'opacity: 0.6; background: rgba(0,0,0,0.015);' : ''}">
-            <td style="text-align: center; color: var(--text-tertiary);">${idx + 1}</td>
-            <td>
-              <div style="font-weight: 600; color: var(--uat-blue-night);">${this.escapeHtml(item.nombre)}</div>
-              <div style="font-size: 10.5px; font-family: monospace; color: var(--text-secondary);">${this.escapeHtml(item.matricula)}</div>
-            </td>
-            <td style="font-size: 11px; color: var(--text-secondary);">
-              ${this.escapeHtml(item.matchLabel)}
-            </td>
-            <td style="text-align: center;">
-              ${faltasCell}
-            </td>
-            <td style="text-align: center;">
-              ${pctCell}
-            </td>
-            <td style="text-align: center;">
-              ${badgeHtml}
-            </td>
-          </tr>
-        `;
-      });
-      previewTbody.innerHTML = rowsHtml;
-    }
-
-    const btnApply = document.getElementById("btnApplyExcelAttendance");
-    if (btnApply) {
-      btnApply.disabled = matchCount === 0;
-      if (isMultiUnit) {
-        btnApply.innerHTML = `⚡ Aplicar Asistencias a las ${numUnits} Unidades (${matchCount} alumnos)`;
-      } else {
-        btnApply.innerHTML = `⚡ Aplicar Asistencias a Unidad ${state.targetUnit || 1} (${matchCount} alumnos)`;
-      }
-    }
-
-    const summaryFooter = document.getElementById("excelImportFooterSummary");
-    if (summaryFooter) {
-      if (isMultiUnit) {
-        summaryFooter.textContent = matchCount > 0
-          ? `${matchCount} alumnos listos para sincronizar a las ${numUnits} unidades.`
-          : "Revisa que el archivo contenga nombres o matrículas de este grupo.";
-      } else {
-        summaryFooter.textContent = matchCount > 0
-          ? `${matchCount} alumnos listos para sincronizar a la Unidad ${state.targetUnit || 1}.`
-          : "Revisa que el archivo contenga nombres o matrículas de este grupo.";
-      }
-    }
-  },
-
-  applyExcelAttendanceImport: function() {
-    const state = this._excelAttendanceState;
-    if (!state || !state.matches || state.matches.length === 0) return;
-
-    const course = this.getActiveCourse();
-    if (!course) return;
-
-    const numUnits = Math.max(1, Number(course.unidadesCount) || 3);
-    const syncSessions = document.getElementById("excelImportSyncSessionsCheckbox")?.checked;
-    const dateColumns = state.detectedColumns ? state.detectedColumns.dateColumns : [];
-    const isMultiUnit = (state.mode === "multi_unit" && dateColumns.length > 0);
-
-    let appliedCount = 0;
-
-    if (isMultiUnit) {
-      if (!course.attendanceSessions) course.attendanceSessions = [];
-
-      // Mapear cada columna de fecha a su unidad según state.unitRanges
-      const dateToUnitMap = {};
-      for (let u = 1; u <= numUnits; u++) {
-        const range = (state.unitRanges && state.unitRanges[u]) ? state.unitRanges[u] : { startIdx: -1, endIdx: -1 };
-        if (range.startIdx !== -1 && range.endIdx !== -1 && range.startIdx <= range.endIdx) {
-          for (let d = range.startIdx; d <= range.endIdx; d++) {
-            if (d < dateColumns.length) {
-              dateToUnitMap[d] = u;
-            }
-          }
-        }
-      }
-
-      // Si syncSessions está activo, crear o reutilizar las sesiones para cada unidad
-      if (syncSessions) {
-        const createdSessionIds = [];
-        dateColumns.forEach((dCol, dIdx) => {
-          const assignedUnit = dateToUnitMap[dIdx] || 1;
-          let fechaStr = new Date().toISOString().slice(0, 10);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
-
-          // Buscar sesión existente por fecha exacta o por tema/etiqueta
-          let existingSess = course.attendanceSessions.find(s => s.fecha === fechaStr || s.tema === dCol.label);
-          if (!existingSess) {
-            const sessId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + dIdx;
-            existingSess = {
-              id: sessId,
-              unidad: assignedUnit,
-              fecha: fechaStr,
-              tema: dCol.label
-            };
-            course.attendanceSessions.push(existingSess);
-          } else {
-            existingSess.unidad = assignedUnit;
-            if (!existingSess.fecha) existingSess.fecha = fechaStr;
-          }
-          createdSessionIds.push({ dIdx: dIdx, id: existingSess.id, unit: assignedUnit, fecha: fechaStr });
-        });
-
-        // Remover sesiones fantasma sin marcas que no están en el Excel (ej. viernes inhábil)
-        const excelDates = new Set(createdSessionIds.map(cs => cs.fecha));
-        course.attendanceSessions = course.attendanceSessions.filter(s => {
-          if (excelDates.has(s.fecha)) return true;
-          return (course.records || []).some(r => r.attendanceDays && r.attendanceDays[s.id]);
-        });
-
-        // Deduplicar sesiones
-        this.deduplicateCourseAttendanceSessions(course);
-
-        // Guardar marcas P, F, R, J de cada alumno
-        state.matches.forEach(item => {
-          if (item.status !== "ok") return;
-          const rec = course.records[item.recIndex];
-          if (!rec) return;
-          if (!rec.attendanceDays) rec.attendanceDays = {};
-
-          createdSessionIds.forEach(sessInfo => {
-            const sessKey = `date_${sessInfo.dIdx}`;
-            const sData = (item.sessionsData && item.sessionsData[sessKey]);
-            const markVal = sData ? sData.mark : "";
-            if (markVal) {
-              rec.attendanceDays[sessInfo.id] = markVal;
-            } else {
-              delete rec.attendanceDays[sessInfo.id];
-            }
-          });
-        });
-      }
-
-      // Asignar faltas y porcentajes calculados para cada una de las unidades
-      state.matches.forEach(item => {
-        if (item.status !== "ok") return;
-        const rec = course.records[item.recIndex];
-        if (!rec) return;
-
-        if (!rec.faltas) rec.faltas = {};
-        if (!rec.asistencia) rec.asistencia = {};
-        if (!rec.asistenciaAuto) rec.asistenciaAuto = {};
-
-        for (let u = 1; u <= numUnits; u++) {
-          const uKey = `u${u}`;
-          const uStats = (item.unitStats && item.unitStats[u]) ? item.unitStats[u] : null;
-          if (uStats) {
-            rec.faltas[uKey] = uStats.faltas;
-            rec.asistencia[uKey] = uStats.pct;
-            rec.asistenciaAuto[uKey] = true;
-          }
-        }
-        appliedCount++;
-      });
-
-      // Recalcular métricas de cada unidad
-      for (let u = 1; u <= numUnits; u++) {
-        this.recalculateAttendanceForUnit(course, u);
-      }
-
-      this.saveData();
-      this.closeExcelAttendanceImportModal();
-      this.render();
-      this.showToast(`🎉 ¡Asistencias y porcentajes calculados y asignados exitosamente a las ${numUnits} unidades para ${appliedCount} alumnos!`);
-      return;
-    }
-
-    // Modo Unidad Única (single_unit)
-    const targetUnit = state.targetUnit || 1;
-    const uKey = `u${targetUnit}`;
-
-    if (syncSessions && dateColumns.length > 0) {
-      if (!course.attendanceSessions) course.attendanceSessions = [];
-
-      const createdSessionIds = [];
-      dateColumns.forEach((dCol, dIdx) => {
-        let fechaStr = new Date().toISOString().slice(0, 10);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dCol.label)) fechaStr = dCol.label;
-
-        let existingSess = course.attendanceSessions.find(s => s.fecha === fechaStr || s.tema === dCol.label);
-        if (!existingSess) {
-          const sessId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + dIdx;
-          existingSess = {
-            id: sessId,
-            unidad: targetUnit,
-            fecha: fechaStr,
-            tema: dCol.label
-          };
-          course.attendanceSessions.push(existingSess);
-        } else {
-          existingSess.unidad = targetUnit;
-          if (!existingSess.fecha) existingSess.fecha = fechaStr;
-        }
-        createdSessionIds.push({ dIdx: dIdx, id: existingSess.id, fecha: fechaStr });
-      });
-
-      const excelDates = new Set(createdSessionIds.map(cs => cs.fecha));
-      course.attendanceSessions = course.attendanceSessions.filter(s => {
-        if (s.unidad !== targetUnit) return true;
-        if (excelDates.has(s.fecha)) return true;
-        return (course.records || []).some(r => r.attendanceDays && r.attendanceDays[s.id]);
-      });
-
-      this.deduplicateCourseAttendanceSessions(course);
-
-      state.matches.forEach(item => {
-        if (item.status !== "ok") return;
-        const rec = course.records[item.recIndex];
-        if (!rec) return;
-
-        if (!rec.attendanceDays) rec.attendanceDays = {};
-        createdSessionIds.forEach(sessInfo => {
-          const sessKey = `date_${sessInfo.dIdx}`;
-          const sData = (item.sessionsData && item.sessionsData[sessKey]);
-          const markVal = sData ? sData.mark : "";
-          if (markVal) {
-            rec.attendanceDays[sessInfo.id] = markVal;
-          } else {
-            delete rec.attendanceDays[sessInfo.id];
-          }
-        });
-      });
-    }
-
-    state.matches.forEach(item => {
-      if (item.status !== "ok") return;
-      const rec = course.records[item.recIndex];
-      if (!rec) return;
-
-      if (!rec.faltas) rec.faltas = {};
-      if (!rec.asistencia) rec.asistencia = {};
-      if (!rec.asistenciaAuto) rec.asistenciaAuto = {};
-
-      rec.faltas[uKey] = item.faltas;
-      rec.asistencia[uKey] = item.asistenciaPct;
-      rec.asistenciaAuto[uKey] = true;
-      appliedCount++;
-    });
-
-    this.recalculateAttendanceForUnit(course, targetUnit);
-    this.saveData();
-    this.closeExcelAttendanceImportModal();
-    this.render();
-    this.showToast(`📥 ¡Éxito! Se actualizaron las faltas y asistencias de ${appliedCount} alumnos en la Unidad ${targetUnit}.`);
-  },
-
   deleteAttendanceSession: function(sessionId) {
     const course = this.getActiveCourse();
     if (!course || !course.attendanceSessions) return;
@@ -4049,19 +2287,6 @@ const App = {
     this.showToast("⚡ Todos los alumnos marcados como Presentes (P)");
   },
 
-  markAllPresentLatest: function() {
-    const course = this.getActiveCourse();
-    if (!course) return;
-    const currentUnit = this.attendanceActiveUnit;
-    const unitSessions = (course.attendanceSessions || []).filter(s => s.unidad === currentUnit);
-    if (unitSessions.length === 0) {
-      this.showToast("No hay fechas registradas en esta unidad.", "warning");
-      return;
-    }
-    const latest = unitSessions[unitSessions.length - 1];
-    this.markAllPresent(latest.id);
-  },
-
   exportAttendanceToExcel: function() {
     const course = this.getActiveCourse();
     if (!course) return;
@@ -4071,21 +2296,6 @@ const App = {
   },
 
   // Interacción Reactiva en Celda de la Sábana
-  cycleAttendanceStatus: function(recIndex, sessionId) {
-    const course = this.getActiveCourse();
-    if (!course || !course.records || !course.records[recIndex]) return;
-    const rec = course.records[recIndex];
-    const curr = (rec.attendanceDays && rec.attendanceDays[sessionId]) || '';
-    let next = 'P';
-    if (!curr || curr === '') next = 'P';
-    else if (curr === 'P') next = 'F';
-    else if (curr === 'F') next = 'R';
-    else if (curr === 'R') next = 'J';
-    else if (curr === 'J') next = '';
-
-    this.setAttendanceStatusDirect(recIndex, sessionId, next);
-  },
-
   setAttendanceStatusDirect: function(recIndex, sessionId, newStatus) {
     const course = this.getActiveCourse();
     if (!course || !course.records || !course.records[recIndex]) return;
@@ -4146,21 +2356,12 @@ const App = {
     const elStatus = document.getElementById(`row-status-${recIndex}`);
 
     if (elP) elP.textContent = p;
-    const asistCfg = course.asistenciaConfig || {};
-    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
-      ? !!asistCfg.consecuenciaActiva
-      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
-    const ambitoLimite = asistCfg.ambitoLimite || "unidad";
-    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
-    const isSemestre = (ambitoLimite === "semestre");
+    const policy = MathEngine.getAttendancePolicy(course);
+    const { limiteFaltasActivo, consecuenciaActiva, maxFaltas, modoExceder, isSemestre, pierdeAsistencia: pierdeAsist, esSinDerecho: esSd } = policy;
 
     const semFaltas = this.getStudentSemesterFaltas(rec, course, currentUnit, effectiveFaltas);
     const faltasEvaluadas = isSemestre ? semFaltas : effectiveFaltas;
     const isExceeded = limiteFaltasActivo && consecuenciaActiva && (faltasEvaluadas > maxFaltas);
-    const pierdeAsist = consecuenciaActiva && (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esSd = consecuenciaActiva && (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
 
     if (elF) {
       if (isSemestre) {
@@ -4311,10 +2512,6 @@ const App = {
       inputEl.value = '';
       this.setAttendanceStatusDirect(recIndex, sessionId, '');
     }
-  },
-
-  handleAttendanceKeydown: function(event, recIndex, sessionId) {
-    this.handleAttendanceInputKeydown(event, recIndex, sessionId);
   },
 
   setStudentSessionStatus: function(recIndex, sessionId, status) {
@@ -4549,17 +2746,9 @@ const App = {
     const wAsist = Number(weights.asistencia) || 0;
     const wPart = Number(weights.participacion) || 0;
 
-    const asistCfg = course.asistenciaConfig || {};
-    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
-      ? !!asistCfg.consecuenciaActiva
-      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
-    const ambitoLimite = asistCfg.ambitoLimite || "unidad";
-    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
-    const isSemestre = (ambitoLimite === "semestre");
-    const pierdeAsist = consecuenciaActiva && (modoExceder === "perder_asistencia" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
-    const esSd = consecuenciaActiva && (modoExceder === "alerta_sd" || modoExceder === "reprobar_cero" || modoExceder === "ambas_alerta" || modoExceder === "ambas_cero");
+    const policy = MathEngine.getAttendancePolicy(course);
+    const asistCfg = policy.raw;
+    const { limiteFaltasActivo, consecuenciaActiva, ambitoLimite, maxFaltas, modoExceder, isSemestre, pierdeAsistencia: pierdeAsist, esSinDerecho: esSd } = policy;
 
     // Modo activo (por defecto: 'sabana' para cuadrícula completa estilo Notion/Excel)
     if (!this.attendanceMode) {
@@ -4584,7 +2773,7 @@ const App = {
         selectHtml += `<optgroup label="${this.escapeHtml(subject)}">`;
         coursesBySubject[subject].forEach(c => {
           const count = (c.records || []).length;
-          selectHtml += `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${this.escapeHtml(c.grupo || 'Grupo')} (${count} alumnos)</option>`;
+          selectHtml += `<option value="${this.escapeHtml(c.id)}" ${c.id === course.id ? 'selected' : ''}>${this.escapeHtml(c.grupo || 'Grupo')} (${count} alumnos)</option>`;
         });
         selectHtml += `</optgroup>`;
       });
@@ -4898,21 +3087,21 @@ const App = {
       } else {
         let countP = 0, countF = 0, countR = 0, countJ = 0;
         records.forEach(r => {
-          const st = (r.attendanceDays && r.attendanceDays[activeSession.id]) || 'P';
+          const st = (r.attendanceDays && r.attendanceDays[activeSession.id]) || '';
           if (st === 'P') countP++;
           else if (st === 'F') countF++;
           else if (st === 'R') countR++;
           else if (st === 'J') countJ++;
         });
 
-        const totalMarked = records.length;
+        const totalMarked = countP + countF + countR + countJ;
         const effectivePres = countP + (countR * 0.5) + countJ;
-        const classPct = totalMarked > 0 ? Math.round((effectivePres / totalMarked) * 100) : 0;
+        const classPct = totalMarked > 0 ? Math.round((effectivePres / totalMarked) * 100) : 100;
 
         let studentsRowsHtml = "";
         records.forEach((rec, recIdx) => {
           const student = studentsMap[rec.matricula] || { nombre: "Alumno no registrado en Base Maestra" };
-          const status = (rec.attendanceDays && rec.attendanceDays[activeSession.id]) || 'P';
+          const status = (rec.attendanceDays && rec.attendanceDays[activeSession.id]) || '';
           const partCount = (rec.participationDays && Number(rec.participationDays[activeSession.id])) || 0;
 
           const unitFaltas = (rec.faltas && rec.faltas[uKey] !== undefined) ? Number(rec.faltas[uKey]) : 0;
@@ -5481,6 +3670,17 @@ const App = {
     const numUnits = Number(course.unidadesCount) || 5;
     const unitIndices = Array.from({ length: numUnits }, (_, i) => i + 1);
     const unitListStr = unitIndices.map(u => `U${u}`).join(', ');
+    const weights = course.gradingWeights || { firmas: 50, examen: 50, asistencia: 0, participacion: 0 };
+    const wF = Number(weights.firmas) || 0;
+    const wE = Number(weights.examen) || 0;
+    const wA = Number(weights.asistencia) || 0;
+    const wP = Number(weights.participacion) || 0;
+    const formulaTerms = [];
+    if (wF > 0) formulaTerms.push(`((Firmas U<sub>x</sub> / MAX_Firmas U<sub>x</sub>) * ${wF})`);
+    if (wE > 0) formulaTerms.push(`((Examen U<sub>x</sub> / 100) * ${wE})`);
+    if (wA > 0) formulaTerms.push(`((Asistencia% U<sub>x</sub> / 100) * ${wA})`);
+    if (wP > 0) formulaTerms.push(`(min(1, Part U<sub>x</sub> / MAX_Part U<sub>x</sub>) * ${wP})`);
+    const unitFormulaHtml = formulaTerms.length > 0 ? formulaTerms.join(" + ") : "Sin criterios activos";
 
     container.innerHTML = `
       <div class="page-title-area">
@@ -5495,7 +3695,7 @@ const App = {
       <div style="max-width: 750px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;">
         <h3 style="font-size: 15px; margin-bottom: 14px;">Máximo de Firmas por Unidad (${this.escapeHtml(course.nombre)})</h3>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
-          Define la cantidad máxima de firmas para la escala del 50% en cada una de las <b>${numUnits} unidades</b> de esta materia:
+          Define la cantidad máxima de firmas para la escala del <b>${wF}%</b> en cada una de las <b>${numUnits} unidades</b> de esta materia:
         </p>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 20px;">
           ${unitIndices.map(u => `
@@ -5509,11 +3709,11 @@ const App = {
 
         <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 24px 0;" />
 
-        <h3 style="font-size: 15px; margin-bottom: 12px;">Fórmulas Matemáticas Activas (${numUnits} Unidades)</h3>
+        <h3 style="font-size: 15px; margin-bottom: 12px;">Fórmulas Matemáticas Activas (${numUnits} Unidades • Suma ${wF + wE + wA + wP}%)</h3>
         
         <div style="background: var(--bg-secondary); padding: 14px; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 12.5px; margin-bottom: 14px; line-height: 1.6;">
           <b style="color: var(--accent-color);">// Evaluación por Unidad:</b><br />
-          ((Firmas U<sub>x</sub> / MAX_Firmas U<sub>x</sub>) * 50) + (Examen U<sub>x</sub> * 0.5)
+          ${unitFormulaHtml}
         </div>
 
         <div style="background: var(--bg-secondary); padding: 14px; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6;">
@@ -6099,18 +4299,6 @@ const App = {
     this.openManageCourseModal();
   },
 
-  closeMaxFirmasModal: function() {
-    this.closeManageCourseModal();
-  },
-
-  saveMaxFirmasModal: function() {
-    return this.submitEditCourse();
-  },
-
-  changeModalUnitsCount: function(delta) {
-    return this.changeManageModalUnitsCount(delta);
-  },
-
   updateMaxFirmasConfig: function(uKey, val) {
     const course = this.getActiveCourse();
     if (!course) return;
@@ -6562,7 +4750,7 @@ const App = {
   // Copia de seguridad JSON
   downloadBackup: async function() {
     const jsonStr = JSON.stringify(this.data, null, 2);
-    const filename = `Respaldo_Calificaciones_${new Date().toISOString().slice(0,10)}.json`;
+    const filename = `Respaldo_Calificaciones_${MathEngine.getLocalDateISO()}.json`;
     await Exporter.saveFileSafe(
       jsonStr, 
       filename, 
@@ -6572,8 +4760,67 @@ const App = {
     );
   },
 
+  // Sanitizador puro de respaldos (preserva asistencias, sesiones, ponderaciones, límites y fechas)
+  sanitizeBackupPayload: function(parsed) {
+    if (!parsed || !Array.isArray(parsed.students) || !Array.isArray(parsed.courses)) {
+      return null;
+    }
+
+    const cloneObj = (obj, fallback = {}) => (obj && typeof obj === 'object' && !Array.isArray(obj))
+      ? JSON.parse(JSON.stringify(obj))
+      : fallback;
+
+    const cleanStudents = parsed.students.filter(s => s && typeof s === 'object').map(s => ({
+      matricula: String(s.matricula || '').trim(),
+      nombre: String(s.nombre || '').trim(),
+      carrera: String(s.carrera || 'Ingeniería').trim()
+    }));
+
+    const cleanCourses = parsed.courses.filter(c => c && typeof c === 'object').map(c => ({
+      id: String(c.id || ('c-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5))),
+      nombre: String(c.nombre || 'Materia').trim(),
+      grupo: String(c.grupo || 'Grupo A').trim(),
+      periodo: String(c.periodo || '2026 - 3 OTOÑO').trim(),
+      aula: c.aula ? String(c.aula).trim() : undefined,
+      unidadesCount: Number(c.unidadesCount) || 5,
+      lockedUnits: cloneObj(c.lockedUnits, {}),
+      firmasMaxConfig: cloneObj(c.firmasMaxConfig, { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 }),
+      participacionMaxConfig: cloneObj(c.participacionMaxConfig, { u1: 5, u2: 5, u3: 5, u4: 5, u5: 5 }),
+      gradingWeights: c.gradingWeights && typeof c.gradingWeights === 'object' ? cloneObj(c.gradingWeights) : undefined,
+      asistenciaConfig: c.asistenciaConfig && typeof c.asistenciaConfig === 'object' ? cloneObj(c.asistenciaConfig) : undefined,
+      asistenciaTotalClasses: c.asistenciaTotalClasses && typeof c.asistenciaTotalClasses === 'object' ? cloneObj(c.asistenciaTotalClasses) : undefined,
+      unitDates: c.unitDates && typeof c.unitDates === 'object' ? cloneObj(c.unitDates) : undefined,
+      attendanceSessions: Array.isArray(c.attendanceSessions)
+        ? c.attendanceSessions.filter(s => s && typeof s === 'object').map(s => ({
+            id: String(s.id || ('sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5))),
+            unidad: Number(s.unidad) || 1,
+            fecha: String(s.fecha || '').trim(),
+            tema: String(s.tema || '').trim(),
+            ...(s.isAltasBajas ? { isAltasBajas: true } : {}),
+            ...(s.isLimiteBaja ? { isLimiteBaja: true } : {})
+          }))
+        : [],
+      _attendanceBlankCleared: !!c._attendanceBlankCleared,
+      records: Array.isArray(c.records) ? c.records.filter(r => r && typeof r === 'object').map(r => ({
+        matricula: String(r.matricula || '').trim(),
+        firmas: cloneObj(r.firmas, {}),
+        examenes: cloneObj(r.examenes, {}),
+        asistencia: cloneObj(r.asistencia, {}),
+        faltas: cloneObj(r.faltas, {}),
+        participacion: cloneObj(r.participacion, {}),
+        asistenciaAuto: cloneObj(r.asistenciaAuto, {}),
+        attendanceDays: cloneObj(r.attendanceDays, {}),
+        participationDays: cloneObj(r.participationDays, {}),
+        proyecto: r.proyecto !== null && r.proyecto !== undefined && r.proyecto !== "" ? Number(r.proyecto) : null,
+        puntosExtra: Number(r.puntosExtra) || 0
+      })) : []
+    }));
+
+    return { students: cleanStudents, courses: cleanCourses };
+  },
+
   restoreBackup: function(fileInput) {
-    if (this.isSupervising) {
+    if (this.isSupervising && !this.supervisionEditMode) {
       this.showToast("⚠️ Modo Supervisión: No puedes sobreescribir datos en modo solo lectura.", "warning");
       fileInput.value = "";
       return;
@@ -6585,43 +4832,19 @@ const App = {
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result);
-        if (parsed && Array.isArray(parsed.students) && Array.isArray(parsed.courses)) {
-          // Sanitizar y validar estructura mínima de alumnos
-          const cleanStudents = parsed.students.filter(s => s && typeof s === 'object').map(s => ({
-            matricula: String(s.matricula || '').trim(),
-            nombre: String(s.nombre || '').trim(),
-            carrera: String(s.carrera || 'Ingeniería').trim()
-          }));
-
-          // Sanitizar y validar cursos y sus registros de notas
-          const cleanCourses = parsed.courses.filter(c => c && typeof c === 'object').map(c => ({
-            id: String(c.id || ('c-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5))),
-            nombre: String(c.nombre || 'Materia').trim(),
-            grupo: String(c.grupo || 'Grupo A').trim(),
-            periodo: String(c.periodo || '2026-1').trim(),
-            unidadesCount: Number(c.unidadesCount) || 5,
-            lockedUnits: (c.lockedUnits && typeof c.lockedUnits === 'object') ? c.lockedUnits : {},
-            firmasMaxConfig: (c.firmasMaxConfig && typeof c.firmasMaxConfig === 'object') ? c.firmasMaxConfig : { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 },
-            records: Array.isArray(c.records) ? c.records.filter(r => r && typeof r === 'object').map(r => ({
-              matricula: String(r.matricula || '').trim(),
-              firmas: (r.firmas && typeof r.firmas === 'object') ? r.firmas : {},
-              examenes: (r.examenes && typeof r.examenes === 'object') ? r.examenes : {},
-              proyecto: r.proyecto !== null && r.proyecto !== undefined && r.proyecto !== "" ? Number(r.proyecto) : null,
-              puntosExtra: Number(r.puntosExtra) || 0
-            })) : []
-          }));
-
-          if (cleanCourses.length === 0) {
+        const sanitized = this.sanitizeBackupPayload(parsed);
+        if (sanitized) {
+          if (sanitized.courses.length === 0) {
             alert("El archivo de respaldo no contiene cursos válidos.");
             return;
           }
 
-          if (confirm(`¿Deseas restaurar este respaldo con ${cleanCourses.length} materias y ${cleanStudents.length} alumnos registrados? Todos los registros actuales de este docente serán reemplazados.`)) {
-            this.data = { students: cleanStudents, courses: cleanCourses };
-            this.activeCourseId = cleanCourses[0].id;
+          if (confirm(`¿Deseas restaurar este respaldo con ${sanitized.courses.length} materias y ${sanitized.students.length} alumnos registrados? Todos los registros actuales de este docente serán reemplazados.`)) {
+            this.data = sanitized;
+            this.activeCourseId = sanitized.courses[0].id;
             this.saveData();
             this.render();
-            this.showToast("Respaldo restaurado y sanitizado exitosamente.");
+            this.showToast("Respaldo restaurado completamente (incluyendo asistencias y configuración).");
           }
         } else {
           alert("El archivo no tiene el formato de respaldo correcto (debe contener listas de 'students' y 'courses').");
@@ -6641,10 +4864,10 @@ const App = {
 
     const toast = document.createElement("div");
     toast.className = "toast";
-    toast.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-      <span>${msg}</span>
-    `;
+    toast.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const span = document.createElement("span");
+    span.textContent = String(msg ?? "");
+    toast.appendChild(span);
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -6674,12 +4897,14 @@ const App = {
     toast.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--uat-orange)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span style="font-size: 13px; font-weight: 500;">${msg}</span>
+        <span class="toast-undo-msg" style="font-size: 13px; font-weight: 500;"></span>
       </div>
       <button type="button" class="btn-undo-action" style="background: var(--uat-orange); color: #ffffff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 700; cursor: pointer; transition: transform 0.1s ease; font-family: inherit; flex-shrink: 0;">
         Deshacer
       </button>
     `;
+    const msgEl = toast.querySelector(".toast-undo-msg");
+    if (msgEl) msgEl.textContent = String(msg ?? "");
 
     const undoBtn = toast.querySelector(".btn-undo-action");
     let undone = false;
@@ -6783,11 +5008,9 @@ const App = {
     const inputNombre = document.getElementById("editCourseNombre");
     const inputGrupo = document.getElementById("editCourseGrupo");
     const inputPeriodo = document.getElementById("editCoursePeriodo");
-    if (inputPeriodo) inputPeriodo.value = course.periodo || this.getSelectedSemester() || "2026 - 3 OTOÑO";
-
     if (inputNombre) inputNombre.value = course.nombre;
     if (inputGrupo) inputGrupo.value = course.grupo || "Grupo A";
-    if (inputPeriodo) inputPeriodo.value = course.periodo || "2026-1";
+    if (inputPeriodo) inputPeriodo.value = course.periodo || this.getSelectedSemester() || "2026 - 3 OTOÑO";
 
     this._tempManageUnitsCount = Number(course.unidadesCount) || 5;
     this._tempManageMaxFirmas = { ...(course.firmasMaxConfig || {}) };
@@ -6827,8 +5050,9 @@ const App = {
     this.onWeightsInputChange();
 
     // Inicializar controles de Regla de Límite de Faltas
-    const asistCfg = course.asistenciaConfig || {};
-    const isLimiteActivo = !!asistCfg.limiteFaltasActivo;
+    const policy = MathEngine.getAttendancePolicy(course);
+    const asistCfg = policy.raw;
+    const isLimiteActivo = policy.limiteFaltasActivo;
     const toggleLimite = document.getElementById("manageToggleLimiteFaltas");
     const containerLimite = document.getElementById("manageLimiteFaltasContainer");
 
@@ -6840,11 +5064,8 @@ const App = {
     const selModo = document.getElementById("manageModoExcederSelect");
     const toggleConsecuencia = document.getElementById("manageToggleConsecuencia");
     const containerConsecuencia = document.getElementById("manageConsecuenciaContainer");
-    const ambitoVal = asistCfg.ambitoLimite || "unidad";
-
-    const isConsecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
-      ? !!asistCfg.consecuenciaActiva
-      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
+    const ambitoVal = policy.ambitoLimite;
+    const isConsecuenciaActiva = policy.consecuenciaActiva;
 
     if (toggleConsecuencia) toggleConsecuencia.checked = isConsecuenciaActiva;
     if (containerConsecuencia) containerConsecuencia.style.display = isConsecuenciaActiva ? "block" : "none";
@@ -7007,8 +5228,6 @@ const App = {
     if (countInput && document.activeElement !== countInput) {
       countInput.value = this._tempManageUnitsCount;
     }
-    const countDisplay = document.getElementById("manageModalUnitsCountDisplay");
-    if (countDisplay) countDisplay.textContent = this._tempManageUnitsCount;
 
     const btnRemove = document.getElementById("btnRemoveUnitManageModal");
     const btnAdd = document.getElementById("btnAddUnitManageModal");
@@ -7348,18 +5567,21 @@ const App = {
       });
     }
 
-    // Sincronizar explícitamente en memoria todas las capas activas antes de persistir
-    if (this.currentUser) {
+    // Sincronizar en memoria sobre el docente objetivo (sin contaminar al admin en modo supervisión)
+    const targetId = this.getWorkingTeacherId();
+    if (targetId) {
       const clonedData = JSON.parse(JSON.stringify(this.data));
-      this.currentUser = Object.assign({}, this.currentUser, { data: clonedData });
+      if (!this.isSupervising && this.currentUser && this.currentUser.id === targetId) {
+        _setAuthenticatedUser(Object.assign({}, this.currentUser, { data: clonedData }));
+      }
       if (Array.isArray(this.teachers)) {
-        const tIdx = this.teachers.findIndex(t => t.id === this.currentUser.id);
+        const tIdx = this.teachers.findIndex(t => t.id === targetId);
         if (tIdx !== -1) {
           this.teachers[tIdx] = Object.assign({}, this.teachers[tIdx], { data: clonedData });
         }
       }
       try {
-        sessionStorage.setItem("fiuat_active_grades_buffer_" + this.currentUser.id, JSON.stringify({
+        sessionStorage.setItem("fiuat_active_grades_buffer_" + targetId, JSON.stringify({
           data: clonedData,
           timestamp: Date.now()
         }));
@@ -7383,11 +5605,12 @@ const App = {
     try {
       await this.saveData();
 
-      // Verificación activa contra Supabase (Write-Through Confirmation)
-      if (cloud && cloud.fetchTeacherData && this.currentUser) {
-        const cloudVerify = await cloud.fetchTeacherData(this.currentUser.id);
-        if (cloudVerify && Array.isArray(cloudVerify.courses)) {
-          const vCourse = cloudVerify.courses.find(c => c.id === course.id);
+      // Verificación activa contra Supabase sobre el docente objetivo
+      if (cloud && cloud.fetchTeacherData && targetId) {
+        const cloudVerify = await cloud.fetchTeacherData(targetId);
+        const verifyData = cloudVerify ? cloudVerify.data : null;
+        if (verifyData && Array.isArray(verifyData.courses)) {
+          const vCourse = verifyData.courses.find(c => c.id === course.id);
           if (vCourse && Number(vCourse.unidadesCount) === newCount) {
             console.log(`✓ Verificación exitosa en Supabase: ${course.nombre} confirmada con ${newCount} unidades.`);
           }
@@ -7474,11 +5697,13 @@ const App = {
     await this.saveData();
 
     const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
-    if (cloud && cloud.fetchTeacherData && this.currentUser) {
+    const targetId = this.getWorkingTeacherId();
+    if (cloud && cloud.fetchTeacherData && targetId) {
       try {
-        const cloudVerify = await cloud.fetchTeacherData(this.currentUser.id);
-        if (cloudVerify && Array.isArray(cloudVerify.courses)) {
-          const vCourse = cloudVerify.courses.find(c => c.id === course.id);
+        const cloudVerify = await cloud.fetchTeacherData(targetId);
+        const verifyData = cloudVerify ? cloudVerify.data : null;
+        if (verifyData && Array.isArray(verifyData.courses)) {
+          const vCourse = verifyData.courses.find(c => c.id === course.id);
           if (vCourse && Number(vCourse.unidadesCount) === newCount) {
             console.log(`✓ Verificación exitosa en Supabase: ${course.nombre} confirmada con ${newCount} unidades.`);
           }
@@ -7571,82 +5796,45 @@ const App = {
             </p>
           </div>
 
-          <div class="login-tabs">
-            <button class="login-tab-btn ${this.loginTab === 'login' ? 'active' : ''}" onclick="App.switchLoginTab('login')">
-              Iniciar Sesión
-            </button>
-            <button class="login-tab-btn ${this.loginTab === 'register' ? 'active' : ''}" onclick="App.switchLoginTab('register')">
-              Registrar Nuevo Docente
-            </button>
-          </div>
-
           <div class="login-body">
             <div id="loginErrorMessage" style="display: none; padding: 10px 12px; margin-bottom: 14px; border-radius: 6px; background: rgba(229, 57, 53, 0.08); border: 1px solid rgba(229, 57, 53, 0.3); color: #d32f2f; font-size: 13px; font-weight: 600; text-align: center;"></div>
-            ${this.loginTab === 'login' ? `
-              <form onsubmit="event.preventDefault(); App.handleLoginFormSubmit();">
-                <div class="login-form-group">
-                  <label class="login-label">Usuario o Correo Institucional:</label>
-                  <div class="login-input-wrap">
-                    <span class="login-input-icon">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </span>
-                    <input type="text" id="loginIdentifier" class="login-input" placeholder="ej. admin o correo@docentes.uat.edu.mx" autocomplete="username" required />
-                  </div>
+            <form onsubmit="event.preventDefault(); App.handleLoginFormSubmit();">
+              <div class="login-form-group">
+                <label class="login-label">Usuario o Correo Institucional:</label>
+                <div class="login-input-wrap">
+                  <span class="login-input-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </span>
+                  <input type="text" id="loginIdentifier" class="login-input" placeholder="ej. tu_usuario o correo@docentes.uat.edu.mx" autocomplete="username" required />
                 </div>
+              </div>
 
-                <div class="login-form-group">
-                  <label class="login-label">Contraseña:</label>
-                  <div class="login-input-wrap">
-                    <span class="login-input-icon">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                    </span>
-                    <input type="password" id="loginPassword" class="login-input" placeholder="Contraseña de acceso" autocomplete="current-password" required />
-                  </div>
+              <div class="login-form-group">
+                <label class="login-label">Contraseña:</label>
+                <div class="login-input-wrap">
+                  <span class="login-input-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </span>
+                  <input type="password" id="loginPassword" class="login-input" placeholder="Contraseña de acceso" autocomplete="current-password" required />
                 </div>
+              </div>
 
-                <button type="submit" class="btn-login-submit" id="btnLoginSubmit">
-                  <span>Acceder a mis Listas</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              <button type="submit" class="btn-login-submit" id="btnLoginSubmit">
+                <span>Acceder a mis Listas</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+
+              <!-- Acceso Directo para Coordinación / Cuenta Maestra -->
+              <div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color); text-align: center;">
+                <button type="button" class="btn btn-default btn-sm" onclick="App.loginAsAdminDirectly()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; color: var(--uat-orange); border-color: rgba(224, 90, 43, 0.4); background: rgba(224, 90, 43, 0.05); padding: 9px 12px; border-radius: 6px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                  <span>🔑 Seleccionar Cuenta Maestra (Coordinación)</span>
                 </button>
-
-                <!-- Acceso Directo Instantáneo para Coordinación / Cuenta Maestra -->
-                <div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color); text-align: center;">
-                  <button type="button" class="btn btn-default btn-sm" onclick="App.loginAsAdminDirectly()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; color: var(--uat-orange); border-color: rgba(224, 90, 43, 0.4); background: rgba(224, 90, 43, 0.05); padding: 9px 12px; border-radius: 6px;">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                    <span>🔑 Seleccionar Cuenta Maestra (Coordinación)</span>
-                  </button>
-                </div>
-              </form>
-            ` : `
-              <form onsubmit="event.preventDefault(); App.handleRegisterFormSubmit();">
-                <div class="login-form-group">
-                  <label class="login-label">Nombre Completo con Título:</label>
-                  <input type="text" id="regNombre" class="login-input" style="padding-left: 14px;" placeholder="Ej. Ing. Carlos Pérez Rivera" required />
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                  <div class="login-form-group">
-                    <label class="login-label">Usuario:</label>
-                    <input type="text" id="regUsuario" class="login-input" style="padding-left: 14px;" placeholder="Ej. cperez" required />
-                  </div>
-                  <div class="login-form-group">
-                    <label class="login-label">Contraseña:</label>
-                    <input type="password" id="regPassword" class="login-input" style="padding-left: 14px;" placeholder="Contraseña de acceso" required />
-                  </div>
-                </div>
-                <div class="login-form-group">
-                  <label class="login-label">Correo Institucional:</label>
-                  <input type="email" id="regCorreo" class="login-input" style="padding-left: 14px;" placeholder="cperez@docentes.uat.edu.mx" required />
-                </div>
-                <div class="login-form-group">
-                  <label class="login-label">Departamento / Academia:</label>
-                  <input type="text" id="regDepto" class="login-input" style="padding-left: 14px;" placeholder="Ej. Ciencias Básicas / Sistemas / Mecatrónica" required />
-                </div>
-                <button type="submit" class="btn-login-submit">
-                  <span>Crear Cuenta y Entrar</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              </form>
-            `}
+              </div>
+              <p style="margin: 12px 0 0; font-size: 11.5px; color: var(--text-tertiary); text-align: center; line-height: 1.4;">
+                ¿No tienes cuenta o olvidaste tu clave? Solicita tu alta o restablecimiento con <b>Coordinación Académica FIUAT</b>.
+              </p>
+            </form>
           </div>
         </div>
       </div>
@@ -7682,12 +5870,6 @@ const App = {
     this.showToast("Usuario 'admin' seleccionado. Ingresa tu contraseña de Coordinación para ingresar.", "info");
   },
 
-  switchLoginTab: function(tab) {
-    this.loginTab = tab;
-    const container = document.getElementById("tabContentContainer");
-    if (container) this.renderLoginScreen(container);
-  },
-
   handleLoginFormSubmit: function() {
     const identifier = document.getElementById("loginIdentifier")?.value.trim();
     const password = document.getElementById("loginPassword")?.value;
@@ -7698,134 +5880,11 @@ const App = {
     this.login(identifier, password);
   },
 
-  handleRegisterFormSubmit: async function() {
-    const nombre = document.getElementById("regNombre")?.value.trim();
-    const usuario = document.getElementById("regUsuario")?.value.trim().toLowerCase();
-    const correo = document.getElementById("regCorreo")?.value.trim().toLowerCase();
-    const depto = document.getElementById("regDepto")?.value.trim() || "Facultad de Ingeniería Tampico";
-    const password = document.getElementById("regPassword")?.value;
-
-    if (!nombre || !usuario || !correo || !password) {
-      alert("Por favor completa todos los campos requeridos, incluyendo la contraseña.");
-      return;
-    }
-
-    if (this.teachers.some(t => t.usuario.toLowerCase() === usuario || t.correo.toLowerCase() === correo)) {
-      alert("Ya existe un docente registrado con ese usuario o correo institucional.");
-      return;
-    }
-
-    const newTeacher = {
-      id: "prof-" + usuario + "-" + Date.now(),
-      nombre: nombre,
-      usuario: usuario,
-      correo: correo,
-      password: password,
-      departamento: depto,
-      avatar: "",
-      data: {
-        students: [],
-        courses: [
-          {
-            id: "materia-1-" + Date.now(),
-            nombre: "Materia 1",
-            grupo: "Grupo A",
-            periodo: "2026-1",
-            unidadesCount: 5,
-            firmasMaxConfig: { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 },
-            records: []
-          }
-        ]
-      }
-    };
-
-    this.teachers.push(newTeacher);
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-    if (cloud) {
-      cloud.saveTeacher(newTeacher);
-    }
-    await this._establishSession(newTeacher.id);
-    this.showToast(`¡Bienvenido, ${nombre}! Tu espacio docente ha sido creado.`);
-  },
-
   // Blindaje VULN-3.0-03: Revocación de acceso directo sin credenciales
   quickLogin: function() {
     console.error("Acción denegada: El método directo quickLogin está revocado por políticas de seguridad institucionales.");
     alert("Acceso denegado: Se requiere autenticación formal mediante usuario y contraseña.");
     return false;
-  },
-
-  // Establecimiento seguro de sesión tras autenticación verificada
-  _establishSession: async function(teacherId) {
-    const teacher = this.teachers.find(t => t.id === teacherId);
-    if (!teacher) return;
-
-    // Generar token de sesión criptográfico y firma única (SEC-02)
-    const sessionToken = (window.crypto && crypto.randomUUID) 
-      ? crypto.randomUUID() 
-      : ('tok_' + Date.now() + '_' + Math.random().toString(36).slice(2));
-    const sessionSig = this.generateSessionSignature(teacher.id, sessionToken);
-
-    sessionStorage.setItem("notion_active_teacher_id", teacher.id);
-    sessionStorage.setItem("notion_session_token", sessionToken);
-    sessionStorage.setItem("notion_session_signature", sessionSig);
-    sessionStorage.setItem("fiuat_active_session_token", sessionToken);
-    sessionStorage.setItem("calificaciones_active_teacher_id", teacher.id);
-
-    try { 
-      localStorage.removeItem("notion_active_teacher_id");
-      localStorage.removeItem("notion_teachers_db");
-      localStorage.removeItem("notion_grades_data");
-    } catch(e) {}
-
-    this.isSupervising = false;
-    this.supervisingTeacherId = null;
-
-    if (teacher.role === 'admin') {
-      this.currentUser = teacher;
-      this.data = null;
-      this.activeTab = "admin_dashboard";
-    } else {
-      // Descarga quirúrgica de calificaciones ÚNICAMENTE para este docente (VULN-3.0-02)
-      const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
-      let teacherData = null;
-      if (cloud && cloud.fetchTeacherData) {
-        const freshData = await cloud.fetchTeacherData(teacher.id);
-        if (freshData) teacherData = freshData;
-      }
-      if (!teacherData) {
-        // Respaldo de resiliencia local en sessionStorage
-        try {
-          const bufStr = sessionStorage.getItem("fiuat_active_grades_buffer_" + teacher.id);
-          if (bufStr) {
-            const bufObj = JSON.parse(bufStr);
-            if (bufObj && bufObj.data) teacherData = bufObj.data;
-          }
-        } catch(e) {}
-      }
-      if (!teacherData) {
-        teacherData = teacher.data || { courses: [], students: [] };
-      }
-      teacher.data = teacherData;
-      const activeTeacher = Object.assign({}, teacher, { data: teacherData });
-      this.currentUser = activeTeacher;
-      this.data = teacherData;
-
-      // Sincronizar en el catálogo de profesores en memoria
-      if (Array.isArray(this.teachers)) {
-        const idx = this.teachers.findIndex(t => t.id === teacher.id);
-        if (idx !== -1) {
-          this.teachers[idx] = Object.assign({}, this.teachers[idx], { data: teacherData });
-        }
-      }
-
-      this.activeCourseId = (teacher.data && teacher.data.courses && teacher.data.courses[0]) ? teacher.data.courses[0].id : "";
-      this.activeTab = "gradebook";
-    }
-
-    this.startInactivityTimer();
-    this.render();
-    this.showToast(`Sesión iniciada como ${teacher.nombre}`);
   },
 
   login: async function(identifier, password) {
@@ -7844,155 +5903,67 @@ const App = {
     };
 
     const term = (identifier || "").trim().toLowerCase();
-    const cleanPass = (password || "").trim();
-
-    const isMasterLookup = (
-      term === "admin" ||
-      term === "admin-coordinacion" ||
-      term === "coordinacion" ||
-      term === "dir_academica" ||
-      term.startsWith("coordinacion@")
-    );
-
-    if (isMasterLookup) {
-      this.clearRateLimitState();
-    } else {
-      // Control persistente contra ataques de fuerza bruta (SEC-09)
-      const rateLimit = this.getRateLimitState();
-      const now = Date.now();
-      if (rateLimit.lockoutUntil && now < rateLimit.lockoutUntil) {
-        const remainingSecs = Math.ceil((rateLimit.lockoutUntil - now) / 1000);
-        restoreBtn();
-        this.showLoginError(`Acceso temporalmente bloqueado por múltiples intentos fallidos. Intenta de nuevo en ${remainingSecs} segundos.`);
-        return;
-      }
-    }
-
-    if (!term) {
+    if (!term || !password) {
       restoreBtn();
-      this.showLoginError("Por favor ingresa tu usuario o correo institucional.");
+      this.showLoginError("Por favor ingresa tu usuario y contraseña institucional.");
       return;
     }
 
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
-    let authSuccess = false;
-    let targetTeacherId = null;
-
-    if (cloud) {
-      const res = await cloud.verifyCredentials(term, password);
-      if (res && res.success) {
-        authSuccess = true;
-        targetTeacherId = res.teacherId;
-      } else if (res && res.reason === "wrong_password") {
-        restoreBtn();
-        if (isMasterLookup) {
-          this.showLoginError("Contraseña incorrecta para la Cuenta Maestra.");
-        } else {
-          const rateLimit = this.getRateLimitState();
-          const newAttempts = rateLimit.failedAttempts + 1;
-          if (newAttempts >= 5) {
-            const lockUntil = Date.now() + 60000;
-            this.setRateLimitState(0, lockUntil);
-            this.showLoginError("Has superado el límite de 5 intentos incorrectos. El acceso se ha bloqueado por 60 segundos por seguridad.");
-          } else {
-            this.setRateLimitState(newAttempts, 0);
-            this.showLoginError(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - newAttempts}.`);
-          }
-        }
-        return;
-      } else if (res && (res.reason === "connection_error" || res.reason === "network_error")) {
-        restoreBtn();
-        this.showLoginError("No se pudo conectar con el servidor institucional en la nube (el proyecto de Supabase podría estar pausado por inactividad o sin conexión). Por favor reactiva el proyecto en Supabase o verifica tu conexión.");
-        return;
-      } else {
-        restoreBtn();
-        this.showLoginError("No se encontró ningún usuario o correo institucional registrado.");
-        return;
-      }
-    } else {
-      // Modo local / respaldo
-      let teacher = null;
-      if (isMasterLookup) {
-        teacher = this.teachers.find(t => t.id === "admin-coordinacion" || t.role === "admin" || t.usuario === "admin");
-      }
-      if (!teacher) {
-        teacher = this.teachers.find(t => 
-          (t.id && t.id.toLowerCase() === term) ||
-          (t.usuario && t.usuario.toLowerCase() === term) || 
-          (t.correo && t.correo.toLowerCase() === term)
-        );
-      }
-
-      if (!teacher) {
-        restoreBtn();
-        this.showLoginError("No se encontró ningún usuario o correo institucional registrado.");
-        return;
-      }
-
-      const expectedPass = teacher.password || (teacher.role === 'admin' ? "admin" : "123");
-      const isPassValid = (expectedPass === password) || (expectedPass === cleanPass);
-
-      if (!isPassValid) {
-        restoreBtn();
-        if (isMasterLookup) {
-          this.showLoginError("Contraseña incorrecta para la Cuenta Maestra.");
-        } else {
-          const rateLimit = this.getRateLimitState();
-          const newAttempts = rateLimit.failedAttempts + 1;
-          if (newAttempts >= 5) {
-            const lockUntil = Date.now() + 60000;
-            this.setRateLimitState(0, lockUntil);
-            this.showLoginError("Has superado el límite de 5 intentos incorrectos. El acceso se ha bloqueado por 60 segundos por seguridad.");
-          } else {
-            this.setRateLimitState(newAttempts, 0);
-            this.showLoginError(`Contraseña incorrecta. Intentos restantes antes del bloqueo: ${5 - newAttempts}.`);
-          }
-        }
-        return;
-      }
-
-      authSuccess = true;
-      targetTeacherId = teacher.id;
+    if (typeof SupabaseService === "undefined" || !SupabaseService.isInitialized) {
+      restoreBtn();
+      this.showLoginError("No hay conexión activa con el servidor institucional en la nube (Supabase). Verifica tu conexión a internet e intenta de nuevo.");
+      return;
     }
 
-    if (authSuccess && targetTeacherId) {
-      this.clearRateLimitState();
-      await this._establishSession(targetTeacherId);
+    const res = await SupabaseService.login(term, password);
+    if (res && res.success && res.teacher) {
+      await this._hydrateAuthenticatedSession(res.teacher, !!res.mustChangePassword);
+      this.render();
+      this.showToast(`Sesión iniciada como ${res.teacher.nombre}`);
+      if (this.mustChangePassword) {
+        this.openChangePasswordModal(true);
+      }
+      return;
+    }
+
+    restoreBtn();
+    if (res && res.reason === "locked") {
+      this.showLoginError(`Acceso temporalmente bloqueado por múltiples intentos fallidos. Intenta de nuevo en ${res.retryAfter || 60} segundos.`);
+    } else if (res && res.reason === "wrong_password") {
+      const rem = res.retryAfter > 0 ? ` Intentos restantes antes del bloqueo: ${res.retryAfter}.` : "";
+      this.showLoginError(`Contraseña incorrecta.${rem}`);
+    } else if (res && res.reason === "schema_pending") {
+      this.showLoginError(res.message || "Actualización de seguridad pendiente en Supabase.");
+    } else if (res && res.reason === "connection_error") {
+      this.showLoginError("No se pudo conectar con Supabase. Verifica tu conexión o el estado del proyecto.");
     } else {
-      restoreBtn();
+      this.showLoginError("No se encontró ningún usuario o correo institucional registrado.");
     }
   },
 
   logout: async function() {
     this.stopInactivityTimer();
-    const leavingTeacherId = this.currentUser ? this.currentUser.id : null;
+    const leavingTeacherId = this.getWorkingTeacherId();
     try {
-      // Mini-guardado forzado antes de revocar sesión
       await this.flushSave();
     } catch (e) {
       console.error("Error al guardar calificaciones antes del logout:", e);
     }
-    const cloud = (typeof SupabaseService !== "undefined") ? SupabaseService : ((typeof FirebaseService !== "undefined") ? FirebaseService : null);
-    if (cloud && cloud.stopListening) {
-      cloud.stopListening();
+    if (typeof SupabaseService !== "undefined") {
+      await SupabaseService.logout();
     }
-    this.currentUser = null;
+    _setAuthenticatedUser(null);
+    this.teachers = [];
     this.isSupervising = false;
     this.supervisingTeacherId = null;
     this.data = null;
-    sessionStorage.removeItem("notion_active_teacher_id");
-    sessionStorage.removeItem("notion_session_token");
-    sessionStorage.removeItem("notion_session_signature");
-    sessionStorage.removeItem("fiuat_active_session_token");
-    sessionStorage.removeItem("calificaciones_active_teacher_id");
+    this._lastServerUpdatedAt = null;
+    this.mustChangePassword = false;
+    this._mustChangePasswordModal = false;
+    this.closeChangePasswordModal(true);
     if (leavingTeacherId) {
-      sessionStorage.removeItem("fiuat_active_grades_buffer_" + leavingTeacherId);
+      try { sessionStorage.removeItem("fiuat_active_grades_buffer_" + leavingTeacherId); } catch (e) {}
     }
-    try { 
-      localStorage.removeItem("notion_active_teacher_id"); 
-      localStorage.removeItem("notion_teachers_db");
-      localStorage.removeItem("notion_grades_data");
-    } catch(e) {}
     const dropdown = document.getElementById("teacherDropdown");
     if (dropdown) dropdown.classList.remove("open");
     const banner = document.getElementById("supervisionBannerContainer");
@@ -8006,7 +5977,6 @@ const App = {
   // =========================================================================
 
   superviseTeacher: async function(teacherId) {
-    // Control de Acceso Estricto VULN-05: Solo Coordinación puede supervisar
     if (!this.isAdmin()) {
       alert("Acceso Denegado: Se requieren privilegios de Coordinación Académica para auditar a otros docentes.");
       return;
@@ -8015,21 +5985,22 @@ const App = {
     const teacher = this.teachers.find(t => t.id === teacherId);
     if (!teacher) return;
 
-    // Descarga quirúrgica de calificaciones del docente supervisado (VULN-3.0-02)
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-    let teacherData = teacher.data;
-    if (cloud && cloud.fetchTeacherData) {
+    let teacherData = teacher.data || null;
+    this._lastServerUpdatedAt = null;
+
+    if (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) {
       this.showToast("Cargando calificaciones en vivo desde Supabase...", "info");
-      const freshData = await cloud.fetchTeacherData(teacherId);
-      if (freshData) {
-        teacherData = freshData;
-        teacher.data = freshData;
+      const fresh = await SupabaseService.fetchTeacherData(teacherId);
+      if (fresh && fresh.data) {
+        teacherData = fresh.data;
+        teacher.data = fresh.data;
+        this._lastServerUpdatedAt = fresh.updated_at || null;
       }
     }
 
     this.isSupervising = true;
     this.supervisingTeacherId = teacherId;
-    this.supervisionEditMode = true; // Por defecto habilitado para agilizar captura docente
+    this.supervisionEditMode = true;
     this.data = teacherData || { courses: [], students: [] };
     this.selectedSemester = null;
     this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
@@ -8037,22 +6008,27 @@ const App = {
     this.render();
     this.showToast(`Supervisando a ${teacher.nombre} • Modo Edición Administrativa Activo`);
 
-    // Suscripción en tiempo real a Supabase para ver las notas del profesor en vivo
-    if (cloud && cloud.listenToTeacher) {
-      cloud.listenToTeacher(teacherId, (updated) => {
-        if (this.isSupervising && this.supervisingTeacherId === teacherId) {
-          const idx = this.teachers.findIndex(t => t.id === teacherId);
-          if (idx !== -1) this.teachers[idx] = updated;
-          this.data = updated.data;
-          if (this.activeTab === "gradebook") {
-            const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
-            if (!isTyping) {
-              const container = document.getElementById("tabContentContainer");
-              if (container) this.renderGradebook(container);
+    // Sondeo seguro en vivo sin exponer tabla pública
+    if (typeof SupabaseService !== "undefined" && SupabaseService.listenToTeacher) {
+      SupabaseService.listenToTeacher(
+        teacherId,
+        (res) => {
+          if (this.isSupervising && this.supervisingTeacherId === teacherId && res && res.data) {
+            const isTyping = document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
+            if (!isTyping && !this._isSaving && !this.saveTimer) {
+              const idx = this.teachers.findIndex(t => t.id === teacherId);
+              if (idx !== -1) this.teachers[idx].data = res.data;
+              this.data = res.data;
+              this._lastServerUpdatedAt = res.updated_at || this._lastServerUpdatedAt;
+              if (this.activeTab === "gradebook") {
+                const container = document.getElementById("tabContentContainer");
+                if (container) this.renderGradebook(container);
+              }
             }
           }
-        }
-      });
+        },
+        () => this._lastServerUpdatedAt
+      );
     }
   },
 
@@ -8111,17 +6087,23 @@ const App = {
     }
   },
 
-  exitSupervision: function() {
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-    if (cloud && cloud.stopListening) {
-      cloud.stopListening();
+  exitSupervision: async function() {
+    if (typeof SupabaseService !== "undefined" && SupabaseService.stopListening) {
+      SupabaseService.stopListening();
     }
     this.isSupervising = false;
     this.supervisingTeacherId = null;
     this.supervisionEditMode = true;
     this.selectedSemester = null;
-    this.data = this.currentUser ? (this.currentUser.data || null) : null;
+    this._lastServerUpdatedAt = null;
+    this.data = null;
     this.activeTab = "admin_dashboard";
+    if (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) {
+      const summary = await SupabaseService.fetchAdminTeachersSummary();
+      if (Array.isArray(summary)) {
+        this.teachers = summary.map(t => this.sanitizeTeacher(t));
+      }
+    }
     this.render();
     this.showToast("Has regresado al Panel de Control Maestro.");
   },
@@ -8168,901 +6150,6 @@ const App = {
     }
   },
 
-  renderAdminDashboard: function(container) {
-    if (!this.isAdmin()) {
-      container.innerHTML = `
-        <div style="padding: 60px 20px; text-align: center;">
-          <h2 style="color: var(--color-red); margin-bottom: 12px;">Acceso Denegado</h2>
-          <p style="color: var(--text-secondary); font-size: 14px;">Se requieren privilegios de Coordinación Académica para visualizar este módulo.</p>
-        </div>
-      `;
-      return;
-    }
-
-    const teachersList = this.teachers.filter(t => t.role !== 'admin');
-
-    let totalMaterias = 0;
-    let totalAlumnosMatriculados = 0;
-    let sumaPromedios = 0;
-    let countCursosConAlumnos = 0;
-
-    teachersList.forEach(t => {
-      const courses = (t.data && t.data.courses) ? t.data.courses : [];
-      const students = (t.data && t.data.students) ? t.data.students : [];
-      totalMaterias += courses.length;
-      totalAlumnosMatriculados += students.length;
-
-      courses.forEach(c => {
-        if (c.records && c.records.length > 0) {
-          const stats = this.calculateCourseStats(c);
-          if (stats && stats.avgFinal && !isNaN(Number(stats.avgFinal))) {
-            sumaPromedios += Number(stats.avgFinal);
-            countCursosConAlumnos++;
-          }
-        }
-      });
-    });
-
-    const promedioGeneral = countCursosConAlumnos > 0 ? (sumaPromedios / countCursosConAlumnos).toFixed(1) : "84.5";
-
-    let teachersGridHtml = "";
-    teachersList.forEach(t => {
-      const courses = (t.data && t.data.courses) ? t.data.courses : [];
-      const students = (t.data && t.data.students) ? t.data.students : [];
-      const totalAlumnosMatriculados = courses.reduce((sum, c) => sum + ((c.records && c.records.length) ? c.records.length : 0), 0) || students.length;
-      const totalHorasSemana = courses.length * 4;
-
-      // 1. Vista previa de materias en la cara frontal (máximo 2 materias)
-      let previewFrontHtml = "";
-      if (courses.length === 0) {
-        previewFrontHtml = `<div class="vo-empty-courses">Sin materias registradas aún</div>`;
-      } else {
-        courses.slice(0, 2).forEach(c => {
-          previewFrontHtml += `
-            <div class="admin-course-pill">
-              <span class="pill-cname" title="${c.nombre}">${c.nombre} (${c.grupo || 'Grupo A'})</span>
-              <span class="pill-cmeta">${(c.records || []).length} al.</span>
-            </div>
-          `;
-        });
-        if (courses.length > 2) {
-          previewFrontHtml += `<div class="vo-more-courses">+${courses.length - 2} más en el reverso ↻</div>`;
-        }
-      }
-
-      // 2. Desglose detallado de todas las materias en el dorso (con scroll, aula y días)
-      let coursesBackHtml = "";
-      if (courses.length === 0) {
-        coursesBackHtml = `<div class="vo-empty-courses">No hay materias asignadas en este periodo</div>`;
-      } else {
-        courses.forEach((c, idx) => {
-          const diasTexto = idx % 2 === 0 ? "Lun - Mié - Vie" : "Mar - Jue";
-          const aulaTexto = c.aula ? c.aula : "Aula por asignar";
-          coursesBackHtml += `
-            <div class="vo-course-item">
-              <div class="vo-course-title" title="${c.nombre}">${c.nombre} (${c.grupo || 'Grupo A'})</div>
-              <div class="vo-course-meta">
-                <span class="vo-badge-aula">${aulaTexto}</span>
-                <span class="vo-badge-dias">${diasTexto} • 4 hrs/sem</span>
-                <span style="margin-left: auto; font-weight: 600;">${(c.records || []).length} alumnos</span>
-              </div>
-            </div>
-          `;
-        });
-      }
-
-      const coursesSearchStr = courses.map(c => c.nombre + ' ' + (c.grupo || '')).join(' ').toLowerCase();
-      const cardAvatar = t.role === 'admin'
-        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" width="38" height="38" decoding="async" />`
-        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" width="38" height="38" decoding="async" />`;
-      const deptoDisplay = (t.departamento && !t.departamento.includes("Ã")) ? t.departamento : "Facultad de Ingeniería Tampico";
-
-      teachersGridHtml += `
-        <div class="admin-teacher-card vo-tarjeta" 
-             data-teacher-name="${t.nombre.toLowerCase()}" 
-             data-teacher-courses="${coursesSearchStr}"
-             role="button" 
-             tabindex="0" 
-             aria-pressed="false" 
-             aria-label="Ficha del docente ${t.nombre}. Haz clic para girar y ver opciones de supervisión">
-          <div class="vo-sombra" aria-hidden="true"></div>
-          <div class="vo-giro">
-            <i class="vo-canto" aria-hidden="true"></i>
-
-            <!-- CARA FRONTAL -->
-            <section class="vo-cara vo-frente">
-              <i class="vo-brillo" aria-hidden="true"></i>
-              
-              <div>
-                <div class="admin-teacher-header">
-                  <div class="admin-teacher-avatar">${cardAvatar}</div>
-                  <div style="flex: 1; min-width: 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;">
-                      <div class="admin-teacher-name" title="${t.nombre}">${t.nombre}</div>
-                      <span class="admin-card-badge-status">● Activo</span>
-                    </div>
-                    <div class="admin-teacher-email">${t.correo || t.usuario}</div>
-                    <span class="admin-teacher-depto">${deptoDisplay}</span>
-                  </div>
-                </div>
-
-                <div class="admin-kpi-row">
-                  <div class="admin-kpi-item">
-                    <span class="admin-kpi-val">${courses.length}</span>
-                    <span class="admin-kpi-lbl">Materias</span>
-                  </div>
-                  <div class="admin-kpi-item">
-                    <span class="admin-kpi-val">${totalAlumnosMatriculados}</span>
-                    <span class="admin-kpi-lbl">Alumnos</span>
-                  </div>
-                  <div class="admin-kpi-item">
-                    <span class="admin-kpi-val">${totalHorasSemana}h</span>
-                    <span class="admin-kpi-lbl">Carga/Sem</span>
-                  </div>
-                </div>
-
-                <div class="admin-teacher-courses-preview">
-                  <div style="font-weight: 700; font-size: 11.5px; color: var(--text-primary); margin-bottom: 5px; display: flex; justify-content: space-between;">
-                    <span>Materias Activas</span>
-                    <span style="color: var(--text-tertiary);">${courses.length} asignadas</span>
-                  </div>
-                  <div class="admin-teacher-courses-list">
-                    ${previewFrontHtml}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <button type="button" class="btn-flip-trigger vo-btn-flip" data-flip-dir="next">
-                  <span>Ver detalles, grupos y acciones</span>
-                  <span class="vo-icon-spin" aria-hidden="true">↻</span>
-                </button>
-              </div>
-            </section>
-
-            <!-- CARA POSTERIOR (DORSO) -->
-            <section class="vo-cara vo-dorso" aria-hidden="true">
-              <i class="vo-brillo" aria-hidden="true"></i>
-
-              <div>
-                <div class="vo-dorso-header">
-                  <div class="vo-dorso-title">
-                    <span>Gestión Académica</span>
-                    <span class="badge-role-tag">${t.role === 'admin' ? 'Coordinación' : 'Docente'}</span>
-                  </div>
-                  <div class="vo-dorso-name" title="${t.nombre}">${t.nombre}</div>
-                </div>
-
-                <div class="vo-dorso-courses-scroll">
-                  ${coursesBackHtml}
-                </div>
-              </div>
-
-              <div class="vo-dorso-actions">
-                <button type="button" class="btn-supervise" onclick="event.stopPropagation(); App.superviseTeacher('${t.id}')">
-                  <span>Supervisar / Auditar Calificaciones</span>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-                <button type="button" class="btn btn-default btn-sm btn-manage-account" onclick="event.stopPropagation(); App.openAdminManageTeacherModal('${t.id}')" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 11.5px; padding: 7px 10px; border-radius: var(--radius-md); color: var(--text-secondary);" title="Administrar cuenta y restablecer clave del docente">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                  <span>Administrar Cuenta / Clave</span>
-                </button>
-                <button type="button" class="btn-flip-back vo-btn-flip" data-flip-dir="prev">
-                  <span>↺ Volver al frente</span>
-                </button>
-              </div>
-            </section>
-          </div>
-        </div>
-      `;
-    });
-
-    container.innerHTML = `
-      <div class="admin-dashboard-container">
-        <div class="admin-header-area">
-          <div class="admin-header-brand">
-            <div class="admin-header-logo">
-              <img src="Logos/FI-COLOR-HORIZONTAL-trim.png" alt="FIUAT" />
-            </div>
-            <div class="admin-header-titles">
-              <div class="admin-header-title-wrap">
-                <h1 class="admin-header-title">
-                  Panel Central de Control y Supervisión Docente
-                </h1>
-                <span class="badge-role-admin">DIRECCIÓN FIUAT</span>
-              </div>
-              <p class="admin-header-desc">
-                Supervisión de actas, avance de firmas y calificaciones de todos los profesores de la <b>Facultad de Ingeniería Tampico</b>.
-              </p>
-            </div>
-          </div>
-
-          <div class="admin-header-actions">
-            <button class="btn btn-default" onclick="App.openChangePasswordModal()" style="display: inline-flex; align-items: center; gap: 7px; font-weight: 700; color: var(--uat-orange); border-color: rgba(224, 90, 43, 0.4); background: rgba(224, 90, 43, 0.05); padding: 8px 14px; border-radius: var(--radius-sm);" title="Cambiar la clave de acceso de la Cuenta Maestra de Coordinación">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              <span>Mi Clave de Coordinación</span>
-            </button>
-            <button class="btn btn-primary admin-btn-sync" onclick="App.openSyncRosterModal()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-              <span>Sincronizar Roster Oficial (153 Docentes)</span>
-            </button>
-            <button class="btn btn-default" onclick="App.downloadAllFacultyBackup()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span>Respaldo (.json)</span>
-            </button>
-            <button class="btn btn-default" onclick="App.openRegisterTeacherModal()">
-              <span>+ Nuevo Docente</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Métricas Generales de la Facultad -->
-        <div class="admin-stats-grid">
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon" style="color: var(--uat-blue-night);">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </div>
-            <div>
-              <div class="admin-stat-value">${teachersList.length}</div>
-              <div class="admin-stat-label">Profesores Registrados</div>
-            </div>
-          </div>
-
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon" style="color: var(--uat-orange);">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-            </div>
-            <div>
-              <div class="admin-stat-value">${totalMaterias}</div>
-              <div class="admin-stat-label">Grupos y Materias Activas</div>
-            </div>
-          </div>
-
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon" style="color: #2b7a78;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-            </div>
-            <div>
-              <div class="admin-stat-value">${totalAlumnosMatriculados}</div>
-              <div class="admin-stat-label">Estudiantes Registrados</div>
-            </div>
-          </div>
-
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon" style="color: var(--uat-orange);">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
-            </div>
-            <div>
-              <div class="admin-stat-value">${promedioGeneral} pts</div>
-              <div class="admin-stat-label">Promedio General Facultad</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Barra de Búsqueda de Docentes -->
-        <div class="admin-section-title" style="margin-bottom: 8px;">
-          <span>Directorio Oficial de Docentes (${teachersList.length})</span>
-          <span style="font-size: 12.5px; font-weight: 500; color: var(--text-tertiary);">
-            Haz clic en "Supervisar" en cualquier docente para auditar sus listas en vivo
-          </span>
-        </div>
-
-        <div class="admin-search-wrap" style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; width: 100%;">
-          <input type="text" id="adminTeacherSearch" class="form-control" 
-            placeholder="Buscar docente por nombre o materia (ej. Treviño, Estructuras, Cálculo)..." 
-            oninput="App.filterAdminTeachers(this.value)" autocomplete="off" 
-            style="font-size: 14px; padding: 10px 14px; border-radius: var(--radius-md); flex: 1 1 240px; min-width: 0;" />
-          <span id="adminTeacherCountBadge" style="font-size: 12.5px; color: var(--text-secondary); font-weight: 600;">
-            Mostrando ${teachersList.length} profesores
-          </span>
-        </div>
-
-        <div class="admin-teachers-grid" id="adminTeachersGrid">
-          ${teachersGridHtml}
-        </div>
-      </div>
-    `;
-    this.initTeacherCardsVolteo();
-  },
-
-  filterAdminTeachers: function(query) {
-    const term = (query || "").trim().toLowerCase();
-    const cards = document.querySelectorAll("#adminTeachersGrid .admin-teacher-card");
-    let visible = 0;
-    cards.forEach(card => {
-      const name = card.getAttribute("data-teacher-name") || "";
-      const courses = card.getAttribute("data-teacher-courses") || "";
-      const matches = !term || name.includes(term) || courses.includes(term);
-      card.style.display = matches ? "" : "none";
-      if (matches) visible++;
-    });
-    const badge = document.getElementById("adminTeacherCountBadge");
-    if (badge) badge.textContent = `Mostrando ${visible} profesores`;
-  },
-
-  // =====================================================================
-  // Controlador de Física de Resorte y Volteo 3D (Moxen Ultra-Optimizado)
-  // =====================================================================
-  initTeacherCardsVolteo: function() {
-    const grid = document.getElementById("adminTeachersGrid");
-    if (!grid) return;
-
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const RAD = Math.PI / 180;
-    const plano = a => { a = ((a % 360) + 360) % 360; return a > 180 ? a - 360 : a; };
-
-    const cards = grid.querySelectorAll(".admin-teacher-card");
-    cards.forEach(card => {
-      if (card._moxenVolteo) return; // Ya inicializada
-
-      const giroEl = card.querySelector('.vo-giro');
-      const sombra = card.querySelector('.vo-sombra');
-      const frente = card.querySelector('.vo-frente');
-      const dorso = card.querySelector('.vo-dorso');
-      const brillos = [frente, dorso].map(c => c ? c.querySelector('.vo-brillo') : null);
-      const canto = card.querySelector('.vo-canto');
-      if (frente) frente.classList.add('vo-oscura');
-      if (dorso) dorso.classList.add('vo-oscura');
-
-      let giro = 0, vel = 0, meta = 0, raf = 0, previo = null;
-
-      function pinta() {
-        const a = giro * RAD, s = Math.abs(Math.sin(a)), c = Math.cos(a);
-        const alza = 50 * s;
-        if (giroEl) giroEl.style.transform = 'translateZ(' + alza.toFixed(1) + 'px) rotateY(' + giro.toFixed(1) + 'deg)';
-        if (sombra) {
-          sombra.style.transform = 'scale(' + (1 + alza / 200).toFixed(3) + ')';
-          sombra.style.opacity = (0.85 - alza / 150).toFixed(2);
-        }
-        if (canto) canto.style.opacity = Math.max(0, Math.min(1, (s - 0.75) / 0.2)).toFixed(2);
-        if (frente) frente.style.setProperty('--o', ((1 - Math.max(0, c)) * 0.5).toFixed(2));
-        if (dorso) dorso.style.setProperty('--o', ((1 - Math.max(0, -c)) * 0.5).toFixed(2));
-        if (brillos[0] || brillos[1]) {
-          [plano(giro), plano(giro - 180)].forEach((tAngle, k) => {
-            if (brillos[k]) {
-              const p = Math.max(-1, Math.min(1, tAngle / 90));
-              brillos[k].style.transform = 'translateX(' + (-100 + (p + 1) / 2 * 267).toFixed(1) + '%)';
-              brillos[k].style.opacity = (Math.abs(tAngle) < 90 ? Math.sin(Math.abs(tAngle) * RAD) : 0).toFixed(2);
-            }
-          });
-        }
-        card.classList.toggle('is-dorso', Math.abs(plano(giro - 180)) < 55);
-      }
-
-      function paso(t) {
-        const dt = previo === null ? 1 / 60 : Math.min(0.032, (t - previo) / 1000);
-        previo = t;
-        for (let i = 0; i < 4; i++) {
-          const h = dt / 4;
-          vel += (-95 * (giro - meta) - 11.5 * vel) * h;
-          giro += vel * h;
-        }
-        pinta();
-        if (Math.abs(giro - meta) < 0.05 && Math.abs(vel) < 0.5) {
-          giro = meta;
-          pinta();
-          raf = 0;
-          previo = null;
-          card.classList.remove('is-flipping');
-          if (meta % 360 === 0 && giroEl) {
-            giroEl.style.transform = '';
-          }
-          return;
-        }
-        raf = requestAnimationFrame(paso);
-      }
-
-      const arranca = () => {
-        card.classList.add('is-flipping');
-        if (!raf) raf = requestAnimationFrame(paso);
-      };
-
-      function voltea(lado) {
-        meta += 180 * (lado < 0 ? -1 : 1);
-        const atras = Math.round(meta / 180) % 2 !== 0;
-        card.setAttribute('aria-pressed', String(atras));
-        if (frente) frente.setAttribute('aria-hidden', String(atras));
-        if (dorso) dorso.setAttribute('aria-hidden', String(!atras));
-        if (reduce) {
-          giro = meta;
-          pinta();
-          card.classList.remove('is-flipping');
-          if (meta % 360 === 0 && giroEl) giroEl.style.transform = '';
-          return;
-        }
-        arranca();
-      }
-
-      card.addEventListener('click', e => {
-        if (e.target.closest('button, a, input, select, textarea, .btn-supervise, .btn-manage-account, .no-flip')) {
-          return;
-        }
-        const r = card.getBoundingClientRect();
-        voltea(e.detail === 0 || e.clientX > r.left + r.width / 2 ? 1 : -1);
-      });
-
-      card.querySelectorAll('.vo-btn-flip').forEach(btn => {
-        btn.addEventListener('click', e => {
-          e.stopPropagation();
-          e.preventDefault();
-          const dir = btn.getAttribute('data-flip-dir') === 'prev' ? -1 : 1;
-          voltea(dir);
-        });
-      });
-
-      card.addEventListener('keydown', e => {
-        if (e.target.closest('button, a, input, select, textarea')) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          voltea(1);
-        }
-      });
-
-      // Nota de alto rendimiento: Las 154 tarjetas quedan en reposo puro (0% CPU / 0 RAF en hover/scroll)
-      card._moxenVolteo = { voltea, atras: () => Math.round(meta / 180) % 2 !== 0 };
-    });
-  },
-
-    // Modal de sincronización del Roster Oficial
-  openSyncRosterModal: function() {
-    if (!this.isAdmin()) {
-      alert("Acceso restringido: Esta herramienta solo puede ser ejecutada por Coordinación Académica.");
-      return;
-    }
-    const modal = document.getElementById("syncRosterModal");
-    if (modal) {
-      modal.classList.add("open");
-      const progressWrap = document.getElementById("syncRosterProgressWrap");
-      if (progressWrap) progressWrap.style.display = "none";
-      const startBtn = document.getElementById("btnStartSync");
-      if (startBtn) {
-        startBtn.disabled = false;
-        startBtn.textContent = "Iniciar Sincronización a la Nube";
-      }
-      const cancelBtn = document.getElementById("btnCancelSync");
-      if (cancelBtn) cancelBtn.disabled = false;
-    }
-  },
-
-  closeSyncRosterModal: function() {
-    const modal = document.getElementById("syncRosterModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  executeOfficialRosterSync: async function() {
-    if (!this.isAdmin()) {
-      alert("Acceso restringido: La sincronización de plantilla docente oficial es exclusiva de Coordinación Académica.");
-      return;
-    }
-
-    if (typeof FACULTY_ROSTER === "undefined" || !FACULTY_ROSTER.length) {
-      alert("La plantilla docente ya está sincronizada y protegida al 100% en la nube de Supabase. El archivo local fue desconectado del navegador por seguridad.");
-      return;
-    }
-
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-
-    if (!cloud) {
-      alert("No hay conexión activa con el servidor institucional en la nube.");
-      return;
-    }
-
-    const progressWrap = document.getElementById("syncRosterProgressWrap");
-    const bar = document.getElementById("syncRosterProgressBar");
-    const statusText = document.getElementById("syncRosterStatusText");
-    const startBtn = document.getElementById("btnStartSync");
-    const cancelBtn = document.getElementById("btnCancelSync");
-
-    if (progressWrap) progressWrap.style.display = "block";
-    if (startBtn) startBtn.disabled = true;
-    if (cancelBtn) cancelBtn.disabled = true;
-
-    // Asegurar que el Administrador siempre esté incluido
-    const fullRosterWithAdmin = [...FACULTY_ROSTER];
-    if (typeof INITIAL_ADMIN !== 'undefined' && !fullRosterWithAdmin.some(t => t.id === INITIAL_ADMIN.id || t.role === 'admin')) {
-      fullRosterWithAdmin.unshift(JSON.parse(JSON.stringify(INITIAL_ADMIN)));
-    }
-
-    const success = await cloud.syncFullFacultyRoster(fullRosterWithAdmin, (current, total) => {
-      const pct = Math.round((current / total) * 100);
-      if (bar) bar.style.width = pct + "%";
-      if (statusText) statusText.textContent = `Sincronizando a Supabase: ${current} de ${total} profesores (${pct}%)...`;
-    });
-
-    if (success) {
-      if (statusText) statusText.textContent = "¡153 Profesores y 18,702 inscripciones sincronizadas en Supabase!";
-      await this.loadDataFromCloud();
-      this.render();
-      setTimeout(() => {
-        this.closeSyncRosterModal();
-        this.showToast("Roster Oficial de 153 profesores activo en Supabase (PostgreSQL)");
-      }, 1200);
-    } else {
-      if (statusText) statusText.textContent = "Ocurrió un error al sincronizar con Supabase.";
-      if (cancelBtn) cancelBtn.disabled = false;
-    }
-  },
-
-  downloadAllFacultyBackup: async function() {
-    const dataStr = JSON.stringify(this.teachers, null, 2);
-    const filename = `Respaldo_Facultad_FIUAT_${new Date().toISOString().slice(0,10)}.json`;
-    await Exporter.saveFileSafe(
-      dataStr,
-      filename,
-      'application/json',
-      'Respaldo Global de Profesores (*.json)',
-      '.json'
-    );
-  },
-
-  openSwitchTeacherModal: function() {
-    if (!this.isAdmin()) {
-      alert("Acceso restringido: Esta función es exclusiva de Coordinación Académica.");
-      return;
-    }
-
-    const dropdown = document.getElementById("teacherDropdown");
-    if (dropdown) dropdown.classList.remove("open");
-
-    const searchInput = document.getElementById("switchTeacherSearch");
-    if (searchInput) searchInput.value = "";
-
-    this.renderSwitchTeacherList(this.teachers);
-
-    const modal = document.getElementById("switchTeacherModal");
-    if (modal) modal.classList.add("open");
-  },
-
-  renderSwitchTeacherList: function(teachers) {
-    const list = document.getElementById("switchTeacherList");
-    if (!list) return;
-
-    list.innerHTML = teachers.map(t => {
-      const isCurrent = this.currentUser && this.currentUser.id === t.id;
-      const coursesCount = (t.data && t.data.courses) ? t.data.courses.length : 0;
-      const studentsCount = (t.data && t.data.students) ? t.data.students.length : 0;
-      const cardAvatar = t.role === 'admin'
-        ? `<img src="Logos/Escudo Imagotipo.png" alt="UAT" width="38" height="38" decoding="async" />`
-        : `<img src="Logos/FI-SOLO-COLOR.png" alt="FI" width="38" height="38" decoding="async" />`;
-      const escId = this.escapeHtml(t.id);
-      const escNombre = this.escapeHtml(t.nombre);
-      const escUsuario = this.escapeHtml(t.usuario);
-      return `
-        <div class="demo-teacher-card" style="margin-bottom: 0; ${isCurrent ? 'border-color: var(--uat-orange); background: var(--bg-hover);' : ''}" onclick="App.switchTeacher('${escId}')">
-          <div class="demo-avatar">${cardAvatar}</div>
-          <div style="flex: 1; min-width: 0;">
-            <div class="demo-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${escNombre} ${isCurrent ? '<span style="color: var(--uat-orange); font-size: 11px;">(Activo)</span>' : ''}
-            </div>
-            <div class="demo-sub">
-              ${t.role === 'admin' ? 'Coordinación y Dirección' : `${escUsuario} • ${coursesCount} materias • ${studentsCount} alumnos`}
-            </div>
-          </div>
-          <button class="btn btn-default btn-sm" style="pointer-events: none;">
-            ${isCurrent ? 'Activo' : 'Entrar'}
-          </button>
-        </div>
-      `;
-    }).join('');
-  },
-
-  filterSwitchTeacherList: function(query) {
-    const term = (query || "").trim().toLowerCase();
-    const filtered = this.teachers.filter(t => 
-      !term || 
-      t.nombre.toLowerCase().includes(term) || 
-      t.usuario.toLowerCase().includes(term) ||
-      (t.departamento && t.departamento.toLowerCase().includes(term))
-    );
-    this.renderSwitchTeacherList(filtered);
-  },
-
-  closeSwitchTeacherModal: function() {
-    const modal = document.getElementById("switchTeacherModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  switchTeacher: async function(teacherId) {
-    if (!this.isAdmin()) {
-      alert("Acceso restringido: Solo Coordinación Académica puede cambiar de profesor.");
-      return;
-    }
-    this.closeSwitchTeacherModal();
-    await this._establishSession(teacherId);
-  },
-
-  openRegisterTeacherModal: function() {
-    if (!this.isAdmin()) {
-      alert("Acceso restringido: Solo Coordinación Académica puede registrar nuevos docentes manualmente.");
-      return;
-    }
-    this.closeSwitchTeacherModal();
-    const modal = document.getElementById("registerTeacherModal");
-    if (modal) modal.classList.add("open");
-  },
-
-  closeRegisterTeacherModal: function() {
-    const modal = document.getElementById("registerTeacherModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  submitRegisterTeacher: async function() {
-    const nombre = document.getElementById("regTeacherNombre")?.value.trim();
-    const usuario = document.getElementById("regTeacherUsuario")?.value.trim().toLowerCase();
-    const correo = document.getElementById("regTeacherCorreo")?.value.trim().toLowerCase();
-    const depto = document.getElementById("regTeacherDepto")?.value.trim() || "Facultad de Ingeniería Tampico";
-    const password = document.getElementById("regTeacherPassword")?.value;
-
-    if (!nombre || !usuario || !correo || !password) {
-      alert("Por favor completa todos los campos requeridos, incluyendo la contraseña.");
-      return;
-    }
-
-    if (this.teachers.some(t => t.usuario.toLowerCase() === usuario || t.correo.toLowerCase() === correo)) {
-      alert("Ya existe un docente registrado con ese usuario o correo institucional.");
-      return;
-    }
-
-    const newTeacher = {
-      id: "prof-" + usuario + "-" + Date.now(),
-      nombre: nombre,
-      usuario: usuario,
-      correo: correo,
-      password: password,
-      departamento: depto,
-      avatar: "",
-      data: {
-        students: [],
-        courses: [
-          {
-            id: "materia-" + Date.now(),
-            nombre: "Materia 1",
-            grupo: "Grupo A",
-            periodo: "2026-1",
-            unidadesCount: 5,
-            firmasMaxConfig: { u1: 10, u2: 10, u3: 10, u4: 10, u5: 10 },
-            records: []
-          }
-        ]
-      }
-    };
-
-    this.teachers.push(newTeacher);
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : ((typeof FirebaseService !== "undefined" && FirebaseService.isInitialized) ? FirebaseService : null);
-    if (cloud) {
-      if (cloud.createTeacher) {
-        await cloud.createTeacher(newTeacher);
-      } else {
-        await cloud.saveTeacher(newTeacher);
-      }
-    }
-    this.closeRegisterTeacherModal();
-    await this._establishSession(newTeacher.id);
-    this.showToast(`Profesor ${nombre} registrado con éxito.`);
-  },
-
-  // =========================================================================
-  // MÓDULO DE GESTIÓN DE CONTRASEÑA PERSONAL (DOCENTES Y ADMINISTRACIÓN)
-  // =========================================================================
-
-  openChangePasswordModal: function() {
-    const dropdown = document.getElementById("teacherDropdown");
-    if (dropdown) dropdown.classList.remove("open");
-
-    const cur = document.getElementById("changePassCurrent");
-    const nw = document.getElementById("changePassNew");
-    const conf = document.getElementById("changePassConfirm");
-    if (cur) cur.value = "";
-    if (nw) nw.value = "";
-    if (conf) conf.value = "";
-
-    const modal = document.getElementById("changePasswordModal");
-    if (modal) modal.classList.add("open");
-  },
-
-  closeChangePasswordModal: function() {
-    const modal = document.getElementById("changePasswordModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  submitChangePassword: async function() {
-    if (!this.currentUser) return;
-
-    const currentPass = (document.getElementById("changePassCurrent")?.value || "").trim();
-    const newPass = (document.getElementById("changePassNew")?.value || "").trim();
-    const confirmPass = (document.getElementById("changePassConfirm")?.value || "").trim();
-
-    if (!currentPass || !newPass || !confirmPass) {
-      alert("Por favor completa todos los campos.");
-      return;
-    }
-
-    if (newPass.length < 4) {
-      alert("La nueva contraseña debe contener al menos 4 caracteres.");
-      return;
-    }
-
-    if (newPass !== confirmPass) {
-      alert("La nueva contraseña y su confirmación no coinciden.");
-      return;
-    }
-
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
-    if (cloud) {
-      const verifyRes = await cloud.verifyCredentials(this.currentUser.usuario || this.currentUser.id, currentPass);
-      if (!verifyRes || !verifyRes.success) {
-        alert("La contraseña actual es incorrecta.");
-        return;
-      }
-
-      this.showToast("Actualizando contraseña en la base de datos...", "info");
-      let updatedInCloud = false;
-      if (cloud.updatePassword) {
-        updatedInCloud = await cloud.updatePassword(this.currentUser.id, newPass, currentPass);
-      } else {
-        updatedInCloud = await cloud.saveTeacher(Object.assign({}, this.currentUser, { password: newPass }));
-      }
-
-      if (!updatedInCloud) {
-        alert("Error al actualizar la contraseña en Supabase. Verifica tu conexión e intenta de nuevo.");
-        return;
-      }
-    } else {
-      const expectedOld = this.currentUser.password || (this.currentUser.role === 'admin' ? "admin" : "123");
-      if (currentPass !== expectedOld) {
-        alert("La contraseña actual es incorrecta.");
-        return;
-      }
-    }
-
-    this.currentUser.password = newPass;
-
-    // Actualizar en el catálogo de profesores en memoria
-    const tIndex = this.teachers.findIndex(t => t.id === this.currentUser.id);
-    if (tIndex !== -1) {
-      this.teachers[tIndex].password = newPass;
-    }
-
-    // Limpiar campos del formulario
-    const cPass = document.getElementById("changePassCurrent");
-    const nPass = document.getElementById("changePassNew");
-    const cfPass = document.getElementById("changePassConfirm");
-    if (cPass) cPass.value = "";
-    if (nPass) nPass.value = "";
-    if (cfPass) cfPass.value = "";
-
-    this.closeChangePasswordModal();
-    this.showToast("¡Tu contraseña ha sido actualizada con éxito en la base de datos!");
-  },
-
-  // =========================================================================
-  // ADMINISTRACIÓN DE CUENTAS Y RESTABLECIMIENTO DE CLAVES (CUENTA MAESTRA)
-  // =========================================================================
-
-  openAdminManageTeacherModal: function(teacherId) {
-    if (!this.isAdmin()) {
-      alert("Acceso denegado: Se requieren privilegios de Coordinación Académica para administrar cuentas.");
-      return;
-    }
-
-    const teacher = this.teachers.find(t => t.id === teacherId);
-    if (!teacher) {
-      alert("Docente no encontrado.");
-      return;
-    }
-
-    const idInput = document.getElementById("adminManageTeacherId");
-    const nameDiv = document.getElementById("adminManageTeacherNombre");
-    const userDiv = document.getElementById("adminManageTeacherUsuario");
-    const deptoDiv = document.getElementById("adminManageTeacherDepto");
-    const newPassInput = document.getElementById("adminManageNewPass");
-    const confPassInput = document.getElementById("adminManageConfirmPass");
-    const adminPassInput = document.getElementById("adminManageAdminPass");
-
-    if (idInput) idInput.value = teacher.id;
-    if (nameDiv) nameDiv.textContent = teacher.nombre;
-    if (userDiv) userDiv.textContent = `Usuario: @${teacher.usuario} • ${teacher.correo || 'Sin correo registrado'}`;
-    if (deptoDiv) deptoDiv.textContent = teacher.departamento || "Facultad de Ingeniería Tampico";
-    if (newPassInput) newPassInput.value = "";
-    if (confPassInput) confPassInput.value = "";
-    if (adminPassInput) adminPassInput.value = "";
-
-    const modal = document.getElementById("adminManageTeacherModal");
-    if (modal) modal.classList.add("open");
-  },
-
-  closeAdminManageTeacherModal: function() {
-    const adminPassInput = document.getElementById("adminManageAdminPass");
-    if (adminPassInput) adminPassInput.value = "";
-    const modal = document.getElementById("adminManageTeacherModal");
-    if (modal) modal.classList.remove("open");
-  },
-
-  adminQuickResetDefault: function() {
-    const newPassInput = document.getElementById("adminManageNewPass");
-    const confPassInput = document.getElementById("adminManageConfirmPass");
-    if (newPassInput) newPassInput.value = "123";
-    if (confPassInput) confPassInput.value = "123";
-    this.showToast("Contraseña preestablecida en '123'. Haz clic en 'Guardar Nueva Contraseña' para confirmar.");
-  },
-
-  toggleAdminPasswordVisibility: function(inputId) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-    input.type = input.type === "password" ? "text" : "password";
-  },
-
-  submitAdminResetPassword: async function() {
-    if (!this.isAdmin()) {
-      alert("Acceso denegado: Operación reservada para Coordinación Académica.");
-      return;
-    }
-
-    const teacherId = (document.getElementById("adminManageTeacherId")?.value || "").trim();
-    const newPass = (document.getElementById("adminManageNewPass")?.value || "").trim();
-    const confPass = (document.getElementById("adminManageConfirmPass")?.value || "").trim();
-    const adminPass = (document.getElementById("adminManageAdminPass")?.value || "").trim();
-
-    if (!teacherId) {
-      alert("Error: Identificador del docente inválido.");
-      return;
-    }
-
-    if (!adminPass) {
-      alert("Debes ingresar tu contraseña de administrador para autorizar esta operación.");
-      document.getElementById("adminManageAdminPass")?.focus();
-      return;
-    }
-
-    if (!newPass || !confPass) {
-      alert("Por favor ingresa y confirma la nueva contraseña.");
-      return;
-    }
-
-    if (newPass.length < 3) {
-      alert("La contraseña debe tener al menos 3 caracteres.");
-      return;
-    }
-
-    if (newPass !== confPass) {
-      alert("La nueva contraseña y su confirmación no coinciden.");
-      return;
-    }
-
-    const teacher = this.teachers.find(t => t.id === teacherId);
-    const teacherName = teacher ? teacher.nombre : "del docente";
-
-    this.showToast("Validando credenciales de administrador y actualizando contraseña...", "info");
-
-    const cloud = (typeof SupabaseService !== "undefined" && SupabaseService.isInitialized) ? SupabaseService : null;
-    let saved = false;
-
-    if (cloud && cloud.adminResetTeacherPassword) {
-      const adminId = this.currentUser ? this.currentUser.id : "admin-coordinacion";
-      saved = await cloud.adminResetTeacherPassword(adminId, adminPass, teacherId, newPass);
-    } else {
-      // Modo local / respaldo sin nube
-      const currentAdminPass = this.currentUser ? (this.currentUser.password || "admin") : "admin";
-      if (adminPass === currentAdminPass) {
-        saved = true;
-      }
-    }
-
-    if (!saved) {
-      const errDetail = (cloud && cloud.lastError) ? cloud.lastError : "La contraseña de administrador es incorrecta o no tienes autorización en la base de datos.";
-      alert("Error al restablecer contraseña: " + errDetail);
-      return;
-    }
-
-    // Actualizar en memoria local de la aplicación solo si la base de datos confirmó el cambio
-    if (teacher) {
-      teacher.password = newPass;
-    }
-
-    this.closeAdminManageTeacherModal();
-    this.showToast(`¡Contraseña de ${teacherName} restablecida exitosamente!`);
-  },
-
   setupEventListeners: function() {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -9073,6 +6160,10 @@ const App = {
         this.closeRegisterTeacherModal();
         this.closeChangePasswordModal();
         this.closeAdminManageTeacherModal();
+        this.closeStudentMobileModal();
+        this.closeOfficialCalendarModal();
+        this.closeEditAttendanceModal();
+        this.closeExcelAttendanceImportModal();
       }
     });
 
@@ -9093,7 +6184,7 @@ const App = {
       }, { passive: true });
     });
 
-    // Blindaje reactivo: Mini-guardado inmediato ante suspensión de pestaña, cambio de app en celular o cierre
+    // Blindaje reactivo: guardar al ocultar pestaña y advertir si hay cambios pendientes al cerrar
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") {
         App.flushSave();
@@ -9102,8 +6193,12 @@ const App = {
     window.addEventListener("pagehide", () => {
       App.flushSave();
     });
-    window.addEventListener("beforeunload", () => {
-      App.flushSave();
+    window.addEventListener("beforeunload", (e) => {
+      if (App.saveTimer !== null || App._isSaving) {
+        App.flushSave();
+        e.preventDefault();
+        e.returnValue = "";
+      }
     });
 
     // Ajuste dinámico de altura de tabla estilo Excel en redimensionamiento de ventana
@@ -9113,7 +6208,13 @@ const App = {
   }
 };
 
-window.addEventListener("DOMContentLoaded", () => {
-  App.init();
-});
+if (typeof window !== "undefined") {
+  window.addEventListener("DOMContentLoaded", () => {
+    App.init();
+  });
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = App;
+}
 

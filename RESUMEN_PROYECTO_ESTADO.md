@@ -1,10 +1,10 @@
 # 📌 RESUMEN DE ESTADO, CONTEXTO Y BITÁCORA DIARIA DEL PROYECTO
-**Última actualización:** 1 de Octubre de 2026  
+**Última actualización:** 24 de Noviembre de 2026  
 **Proyecto:** Sistema de Calificaciones FIUAT • Control Docente y Supervisión Académica  
 **Organización:** Facultad de Ingeniería Tampico (Universidad Autónoma de Tamaulipas)  
 **Repositorio GitHub:** [https://github.com/BrandonDuenas-17/Calificaciones-FITUAT.git](https://github.com/BrandonDuenas-17/Calificaciones-FITUAT.git)  
 **Rama activa:** `main`  
-**Versión en Producción (Vercel):** `2026.10.01.v37` (URL: [https://calificaciones-fituat.vercel.app/](https://calificaciones-fituat.vercel.app/))  
+**Versión en Producción (Vercel):** `2026.11.24.v73` (URL: [https://calificaciones-fituat.vercel.app/](https://calificaciones-fituat.vercel.app/))  
 
 ---
 
@@ -16,15 +16,31 @@ Codificadas en `AGENTS.md` y `.agents/rules/project_rules.md` para todo agente d
    - Verificación continua del conteo íntegro de **154 docentes** y sus 771 materias antes y después de cualquier cambio.
 2. **Preservación y Fortalecimiento de la Seguridad:**
    - CERO bypasses o contraseñas hardcodeadas (prohibido aceptar `"admin"` o `"123"` fuera de validación contra la base de datos).
-   - Defensa en profundidad: control de acceso estricto por rol (`isAdmin()`), protección contra escalación por consola con `Object.freeze`, firmas criptográficas efímeras (SEC-02), bloqueo por fuerza bruta (5 intentos = 60s), cierre por inactividad (20 min) y sanitización anti-fórmulas en CSV/Excel (CWE-1236).
+   - Defensa en profundidad: sesiones verificadas en PostgreSQL (`teacher_sessions`), revocación total de acceso directo `anon` a `public.teachers`, control de acceso estricto por rol (`isAdmin()`), protección contra escalación por consola (`_allowSessionWrite` + `Object.freeze`), bloqueo por fuerza bruta en servidor (5 intentos = 60s), cierre por inactividad (20 min) y sanitización anti-fórmulas en CSV/Excel (CWE-1236).
    - Toda actualización de credenciales debe ser confirmada afirmativamente por la base de datos remota antes de notificar éxito.
 3. **GitOps y Despliegue Limpio en GitHub:**
    - Commits semánticos y verificados. Push obligatorio a `origin/main` dejando el árbol de trabajo completamente limpio (`working tree clean`).
-   - Cache-busting sistemático (`vXX`) en `index.html` para todos los archivos estáticos modificados (`app.js`, `styles.css`, `supabase_service.js`).
+   - Cache-busting sistemático (`vXX`) en `index.html` para todos los archivos estáticos modificados (`app.js`, `styles.css`, `supabase_service.js`, `math_engine.js`, `attendance_importer.js`, `admin_panel.js`, `exporter.js`).
 
 ---
 
 ## 🗓️ 2. Bitácora Diaria de Cambios y Contexto (Historial por Día)
+
+### 📅 24 de Noviembre de 2026 (Versión v73)
+
+#### Remediación Integral de Auditoría (19/19 Hallazgos de Seguridad, Datos y Arquitectura)
+* **Seguridad en Supabase (`supabase_schema.sql` + `supabase_service.js`):**
+  - Se revocó todo acceso directo (`SELECT`, `INSERT`, `UPDATE`, `DELETE` y Realtime) de `anon`/`authenticated` sobre `public.teachers`.
+  - Se implementaron sesiones con token aleatorio en servidor (`teacher_sessions`) y rate-limit en servidor (`login_attempts`, 5 intentos = 60s incluso para `admin`).
+  - Todas las operaciones pasan por RPCs `SECURITY DEFINER` autenticados: `login_teacher` (con migración transparente a bcrypt y cambio obligatorio si clave es `"123"`), `validate_session`, `logout_teacher`, `get_teacher_data`, `save_teacher_grades` (con bloqueo optimista `updated_at`), `change_teacher_password`, `admin_reset_teacher_password`, `admin_create_teacher`, `get_admin_teachers_summary` y `admin_export_all_teachers`.
+* **Blindaje del Frontend y Vercel:**
+  - Se cerró el bypass de escalación en `App.currentUser`, se eliminó `sample_data.js` (2.6 MB con matrículas reales) de producción, se deshabilitó el auto-registro público del login, se aplicó `escapeHtml`/`textContent` en Panel Maestro y toasts, se añadieron cabeceras de seguridad en `vercel.json` y se creó `.vercelignore`.
+* **Correcciones Funcionales y Modularización:**
+  - `restoreBackup` ahora conserva asistencias, sesiones, ponderaciones, límites de faltas y fechas de unidad.
+  - Se corrigió el aislamiento de edición en Modo Supervisión, las fechas vespertinas en hora local Tampico (`MathEngine.getLocalDateISO`), la consistencia de casillas vacías en Pase Diario y Excel, las fórmulas dinámicas en `renderConfig` y el indicador real en el Panel Maestro.
+  - Se extrajeron `math_engine.js`, `attendance_importer.js` y `admin_panel.js`, se consolidó el CSS de Freeze Panes fuera de `index.html`, se borró código muerto y se creó la suite `tests/gradebook.test.mjs` (7/7 pruebas OK).
+
+---
 
 ### 📅 1 de Octubre de 2026 (Versión v37)
 

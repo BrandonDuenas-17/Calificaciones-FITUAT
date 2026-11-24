@@ -238,11 +238,6 @@ const Exporter = {
     );
   },
 
-  // Imprimir reporte formal o guardar como PDF
-  printReport: function(course, studentsMap) {
-    window.print();
-  },
-
   // Exportar Sábana Completa de Asistencias a Excel (.xlsx)
   exportAttendanceToExcel: function(course, studentsMap, unit) {
     if (!course) return;
@@ -271,21 +266,15 @@ const Exporter = {
       "Estatus Derecho"
     ];
 
-    const asistCfg = course.asistenciaConfig || {};
-    const limiteFaltasActivo = !!asistCfg.limiteFaltasActivo;
-    const consecuenciaActiva = (asistCfg.consecuenciaActiva !== undefined)
-      ? !!asistCfg.consecuenciaActiva
-      : (!!asistCfg.modoExceder && asistCfg.modoExceder !== "ninguna");
-    const ambitoLimite = asistCfg.ambitoLimite || "unidad";
-    const maxFaltas = Number(asistCfg.maxFaltas) || Number(asistCfg.maxFaltasPorUnidad) || 3;
-    const modoExceder = consecuenciaActiva ? (asistCfg.modoExceder || "alerta_sd") : "ninguna";
-    const isSemestre = (ambitoLimite === "semestre");
+    const policy = (typeof MathEngine !== "undefined")
+      ? MathEngine.getAttendancePolicy(course)
+      : { limiteFaltasActivo: false, consecuenciaActiva: false, maxFaltas: 3, modoExceder: "ninguna", isSemestre: false };
 
     const rows = records.map((rec, idx) => {
       const student = studentsMap[rec.matricula] || { nombre: "NO REGISTRADO" };
       let p = 0, f = 0, r = 0, j = 0;
       const sessionVals = sessions.map(s => {
-        const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || 'P';
+        const st = (rec.attendanceDays && rec.attendanceDays[s.id]) || '';
         if (st === 'P') p++;
         else if (st === 'F') f++;
         else if (st === 'R') r++;
@@ -293,28 +282,23 @@ const Exporter = {
         return st;
       });
 
+      const totalMarked = p + f + r + j;
       const effectiveP = p + (r * 0.5) + j;
-      const pct = sessions.length > 0 ? Math.round((effectiveP / sessions.length) * 100) : 100;
+      const pct = totalMarked > 0 ? Math.min(100, Math.max(0, Math.round((effectiveP / totalMarked) * 100))) : 100;
       const effectiveF = f + Math.floor(r / 2);
 
-      let semFaltas = 0;
-      const numU = Number(course?.unidadesCount) || 5;
-      for (let u = 1; u <= numU; u++) {
-        if (u === currentUnit) {
-          semFaltas += effectiveF;
-        } else if (rec.faltas && rec.faltas[`u${u}`] !== undefined && rec.faltas[`u${u}`] !== "") {
-          semFaltas += Number(rec.faltas[`u${u}`]) || 0;
-        }
-      }
+      const semFaltas = (typeof MathEngine !== "undefined")
+        ? MathEngine.getStudentSemesterFaltas(rec, course, currentUnit, effectiveF)
+        : effectiveF;
 
-      const faltasEvaluadas = isSemestre ? semFaltas : effectiveF;
-      const isExceeded = limiteFaltasActivo && consecuenciaActiva && (faltasEvaluadas > maxFaltas);
+      const faltasEvaluadas = policy.isSemestre ? semFaltas : effectiveF;
+      const isExceeded = policy.limiteFaltasActivo && policy.consecuenciaActiva && (faltasEvaluadas > policy.maxFaltas);
 
       let estatus = "APROBADO";
       if (isExceeded) {
-        if (modoExceder === "perder_asistencia") estatus = "SIN PUNTOS ASISTENCIA";
-        else if (modoExceder === "alerta_sd") estatus = "SIN DERECHO (SD)";
-        else if (modoExceder === "reprobar_cero") estatus = "SIN DERECHO (CALIF 0)";
+        if (policy.modoExceder === "perder_asistencia") estatus = "SIN PUNTOS ASISTENCIA";
+        else if (policy.modoExceder === "alerta_sd") estatus = "SIN DERECHO (SD)";
+        else if (policy.modoExceder === "reprobar_cero") estatus = "SIN DERECHO (CALIF 0)";
         else estatus = "SIN DERECHO / SIN ASIST";
       }
 
@@ -371,3 +355,7 @@ const Exporter = {
     }
   }
 };
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = Exporter;
+}

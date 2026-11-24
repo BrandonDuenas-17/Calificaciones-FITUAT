@@ -1,52 +1,57 @@
-// supabase_service.js - Módulo de integración con Supabase (PostgreSQL + Realtime)
-// Reemplaza a Firebase Firestore para la persistencia en la nube y supervisión en tiempo real
+// supabase_service.js - Cliente RPC autenticado contra Supabase (PostgreSQL)
+// Todas las operaciones pasan por funciones SECURITY DEFINER validadas con token de sesión.
 
 const SUPABASE_CONFIG = {
-  // Credenciales activas de Supabase (Facultad de Ingeniería Tampico)
-  url: localStorage.getItem("supabase_url") || "https://xjlqzwigqmevbffaavjl.supabase.co",
-  anonKey: localStorage.getItem("supabase_anon_key") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqbHF6d2lncW1ldmJmZmFhdmpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MzI2NzcsImV4cCI6MjEwNTQwODY3N30.T4U1JRUH4DiGAZWhaFd83Q1em2NUHWxMCpibeX2-OFs"
+  url: "https://xjlqzwigqmevbffaavjl.supabase.co",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqbHF6d2lncW1ldmJmZmFhdmpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MzI2NzcsImV4cCI6MjEwNTQwODY3N30.T4U1JRUH4DiGAZWhaFd83Q1em2NUHWxMCpibeX2-OFs"
 };
+
+const SESSION_TOKEN_KEY = "fiuat_server_session_token";
 
 const SupabaseService = {
   client: null,
   isInitialized: false,
   isOnline: navigator.onLine,
   status: "connecting", // "connected", "offline", "error"
-  activeChannel: null,
-  _rpcSaveAvailable: null,
+  lastError: null,
+  _pollInterval: null,
+
+  getSessionToken: function() {
+    try {
+      return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  },
+
+  setSessionToken: function(token) {
+    try {
+      if (token) {
+        sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+      } else {
+        sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      }
+    } catch (e) {}
+  },
 
   init: async function() {
     if (typeof supabase === "undefined") {
-      console.warn("Supabase SDK no detectado. Operando en modo de respaldo local.");
-      this.status = "offline";
-      return false;
-    }
-
-    const cleanUrl = (SUPABASE_CONFIG.url || "").trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
-    const cleanKey = (SUPABASE_CONFIG.anonKey || "").trim();
-
-    const isPlaceholder = !cleanUrl || 
-                          cleanUrl.includes("your-project-id") || 
-                          !cleanKey || 
-                          cleanKey.includes("your-anon-key");
-
-    if (isPlaceholder) {
-      console.warn("Supabase: Credenciales pendientes de configurar. Se usarán datos locales hasta que ingreses tu URL y Anon Key.");
+      console.warn("Supabase SDK no detectado.");
       this.status = "offline";
       return false;
     }
 
     try {
-      this.client = supabase.createClient(cleanUrl, cleanKey, {
+      this.client = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false
         }
       });
 
-      // Prueba de conexión con límite estricto de 3.5 segundos (Fail-Fast)
-      const probePromise = this.client.from("teachers").select("id").limit(1);
-      const timeoutPromise = new Promise((_, reject) => 
+      // Health-check fail-fast (3.5s) sin consultar la tabla teachers
+      const probePromise = this.client.rpc("ping_service");
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Supabase connection timeout (3.5s)")), 3500)
       );
 
@@ -55,7 +60,9 @@ const SupabaseService = {
         data: null
       }));
 
-      if (probeResult.error && probeResult.error.code !== "PGRST116") {
+      // Si ping_service aún no existe en BD (PGRST202), el servidor respondió y está en línea
+      const isSchemaPending = probeResult.error && (probeResult.error.code === "PGRST202" || String(probeResult.error.message || "").includes("ping_service"));
+      if (probeResult.error && !isSchemaPending) {
         console.warn("Supabase no disponible o proyecto en pausa:", probeResult.error.message || probeResult.error);
         this.isInitialized = false;
         this.status = "offline";
@@ -65,7 +72,6 @@ const SupabaseService = {
       this.isInitialized = true;
       this.status = navigator.onLine ? "connected" : "offline";
 
-      // Monitoreo de conexión a internet
       window.addEventListener("online", () => {
         this.isOnline = true;
         this.checkConnection();
@@ -92,208 +98,179 @@ const SupabaseService = {
     }
   },
 
-  // Obtener directorio oficial de profesores desde Supabase (incluye materias/alumnos para supervisión y omite contraseñas)
-  fetchTeachers: async function() {
-    if (!this.isInitialized || !this.client) return null;
+  // Inicio de sesión autenticado vía RPC (rate-limit + bcrypt + emisión de token en Postgres)
+  login: async function(identifier, password) {
+    this.lastError = null;
+    if (!this.isInitialized || !this.client) {
+      return { success: false, reason: "connection_error" };
+    }
 
     try {
-      const { data, error } = await this.client
-        .from("teachers")
-        .select("id, nombre, usuario, correo, departamento, role, avatar, data, updated_at")
-        .order("nombre", { ascending: true });
+      const { data, error } = await this.client.rpc("login_teacher", {
+        p_identifier: (identifier || "").trim().toLowerCase(),
+        p_password: password || ""
+      });
 
       if (error) {
-        console.error("Error al obtener profesores de Supabase:", error);
+        if (error.code === "PGRST202" || String(error.message || "").includes("login_teacher")) {
+          this.lastError = "Actualización de seguridad pendiente en Supabase (ejecuta supabase_schema.sql).";
+          return { success: false, reason: "schema_pending", message: this.lastError };
+        }
+        this.lastError = error.message;
+        return { success: false, reason: "connection_error", message: error.message };
+      }
+
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) {
+        return { success: false, reason: "user_not_found" };
+      }
+
+      if (row.success && row.session_token && row.id) {
+        this.setSessionToken(row.session_token);
+        return {
+          success: true,
+          sessionToken: row.session_token,
+          mustChangePassword: !!row.must_change_password,
+          teacherId: row.id,
+          teacher: {
+            id: row.id,
+            nombre: row.nombre,
+            usuario: row.usuario,
+            correo: row.correo,
+            departamento: row.departamento,
+            role: row.role || "docente",
+            avatar: row.avatar || ""
+          }
+        };
+      }
+
+      return {
+        success: false,
+        reason: row.reason || "wrong_password",
+        retryAfter: Number(row.retry_after) || 0
+      };
+    } catch (e) {
+      console.error("Error en login_teacher:", e);
+      this.lastError = e.message;
+      return { success: false, reason: "connection_error", message: e.message };
+    }
+  },
+
+  // Validar sesión existente contra la tabla teacher_sessions en Postgres
+  validateSession: async function() {
+    const token = this.getSessionToken();
+    if (!token || !this.isInitialized || !this.client) return null;
+
+    try {
+      const { data, error } = await this.client.rpc("validate_session", { p_token: token });
+      if (error) return null;
+
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.valid || !row.id) {
+        this.setSessionToken("");
         return null;
       }
 
-      return data || [];
+      return {
+        mustChangePassword: !!row.must_change_password,
+        teacher: {
+          id: row.id,
+          nombre: row.nombre,
+          usuario: row.usuario,
+          correo: row.correo,
+          departamento: row.departamento,
+          role: row.role || "docente",
+          avatar: row.avatar || ""
+        }
+      };
     } catch (e) {
-      console.error("Error de red al consultar Supabase:", e);
       return null;
     }
   },
 
-  // Obtener calificaciones y cursos ÚNICAMENTE del docente autenticado bajo demanda (VULN-3.0-02)
-  fetchTeacherData: async function(teacherId) {
-    if (!this.isInitialized || !this.client || !teacherId) return null;
+  // Revocar sesión en servidor
+  logout: async function() {
+    this.stopListening();
+    const token = this.getSessionToken();
+    this.setSessionToken("");
+    if (!token || !this.isInitialized || !this.client) return true;
 
     try {
-      const { data, error } = await this.client
-        .from("teachers")
-        .select("id, data, updated_at")
-        .eq("id", teacherId)
-        .maybeSingle();
+      await this.client.rpc("logout_teacher", { p_token: token });
+    } catch (e) {}
+    return true;
+  },
+
+  // Obtener resumen ligero de docentes (Solo Coordinación; sin descargar 18,702 registros)
+  fetchAdminTeachersSummary: async function() {
+    const token = this.getSessionToken();
+    if (!token || !this.isInitialized || !this.client) return null;
+
+    try {
+      const { data, error } = await this.client.rpc("get_admin_teachers_summary", { p_token: token });
+      if (error) {
+        console.error("Error al obtener resumen docente:", error);
+        return null;
+      }
+
+      return (data || []).map(row => ({
+        id: row.id,
+        nombre: row.nombre,
+        usuario: row.usuario,
+        correo: row.correo,
+        departamento: row.departamento,
+        role: row.role || "docente",
+        avatar: row.avatar || "",
+        updated_at: row.updated_at,
+        coursesCount: Number(row.courses_count) || 0,
+        studentsCount: Number(row.students_count) || 0,
+        coursesPreview: Array.isArray(row.courses_preview) ? row.courses_preview : []
+      }));
+    } catch (e) {
+      console.error("Error de red al consultar resumen docente:", e);
+      return null;
+    }
+  },
+
+  // Descarga quirúrgica de calificaciones de un docente (solo dueño o admin)
+  fetchTeacherData: async function(teacherId) {
+    const token = this.getSessionToken();
+    if (!token || !this.isInitialized || !this.client || !teacherId) return null;
+
+    try {
+      const { data, error } = await this.client.rpc("get_teacher_data", {
+        p_token: token,
+        p_teacher_id: teacherId
+      });
 
       if (error) {
         console.error("Error al obtener calificaciones del docente:", error);
         return null;
       }
 
-      return data ? data.data : null;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.ok) return null;
+
+      return {
+        data: row.data || { courses: [], students: [] },
+        updated_at: row.updated_at || null
+      };
     } catch (e) {
       console.error("Error de red al consultar calificaciones del docente:", e);
       return null;
     }
   },
 
-  // Verificación segura de credenciales para inicio de sesión en Supabase
-  verifyCredentials: async function(identifier, password) {
-    if (!this.isInitialized || !this.client) return null;
+  // Guardar calificaciones autenticado con bloqueo optimista (anti-IDOR y anti-sobrescritura)
+  saveTeacher: async function(teacher, expectedUpdatedAt = null) {
+    if (!teacher || !teacher.id) return { ok: false, reason: "invalid_teacher" };
+    const token = this.getSessionToken();
 
-    try {
-      const term = (identifier || "").trim().toLowerCase();
-      const cleanPass = (password || "").trim();
-
-      const isMasterLookup = (
-        term === "admin" ||
-        term === "admin-coordinacion" ||
-        term === "coordinacion" ||
-        term === "dir_academica" ||
-        term.startsWith("coordinacion@")
-      );
-
-      // Verificación estricta de Cuenta Maestra contra la base de datos (sin bypasses)
-      if (isMasterLookup) {
-        const { data: adminRows, error: adminErr } = await this.client
-          .from("teachers")
-          .select("id, password, nombre, usuario, correo, role")
-          .or("id.eq.admin-coordinacion,role.eq.admin,usuario.eq.admin")
-          .limit(1);
-
-        if (adminErr) {
-          console.error("Error al consultar cuenta admin en Supabase:", adminErr);
-          return { success: false, reason: "connection_error", message: adminErr.message };
-        }
-
-        if (adminRows && adminRows.length > 0) {
-          const adm = adminRows[0];
-          const dbPass = (adm.password || "").trim();
-          const expectedPass = dbPass || "admin";
-          const isDirectMatch = (cleanPass === expectedPass || password === adm.password);
-
-          if (isDirectMatch) {
-            return {
-              success: true,
-              teacherId: adm.id,
-              teacher: {
-                id: adm.id,
-                nombre: adm.nombre,
-                usuario: adm.usuario,
-                correo: adm.correo,
-                role: adm.role
-              }
-            };
-          } else {
-            return { success: false, reason: "wrong_password" };
-          }
-        }
-      }
-
-      // 1. Intento primario vía RPC seguro (ejecutado dentro de PostgreSQL)
-      try {
-        const { data: rpcData, error: rpcError } = await this.client.rpc("verify_teacher_credentials", {
-          p_identifier: term,
-          p_password: password
-        });
-
-        if (!rpcError && rpcData && rpcData.length > 0) {
-          const res = rpcData[0];
-          if (res.success && res.id) {
-            return {
-              success: true,
-              teacherId: res.id,
-              teacher: {
-                id: res.id,
-                nombre: res.nombre,
-                usuario: res.usuario,
-                correo: res.correo,
-                role: res.role
-              }
-            };
-          } else if (res.id) {
-            return { success: false, reason: "wrong_password" };
-          } else {
-            return { success: false, reason: "user_not_found" };
-          }
-        }
-        if (rpcError && rpcError.message && (rpcError.message.includes("Failed to fetch") || rpcError.message.includes("NetworkError") || rpcError.code === "PGRST301")) {
-          return { success: false, reason: "connection_error", message: rpcError.message };
-        }
-      } catch (rpcEx) {
-        if (rpcEx.message && (rpcEx.message.includes("Failed to fetch") || rpcEx.message.includes("NetworkError"))) {
-          return { success: false, reason: "connection_error", message: rpcEx.message };
-        }
-      }
-
-      // 2. Consulta filtrada de respaldo
-      const { data, error } = await this.client
-        .from("teachers")
-        .select("id, password, nombre, usuario, correo, role")
-        .or(`usuario.ilike.${term},correo.ilike.${term},id.eq.${term}`)
-        .limit(1);
-
-      if (error) {
-        console.error("Error al consultar credenciales en Supabase:", error);
-        return { success: false, reason: "connection_error", message: error.message };
-      }
-
-      if (!data || data.length === 0) {
-        return { success: false, reason: "user_not_found" };
-      }
-
-      const teacher = data[0];
-      const validPass = teacher.password || (teacher.role === 'admin' ? "admin" : "123");
-      if (validPass !== password && validPass !== cleanPass) {
-        return { success: false, reason: "wrong_password" };
-      }
-
-      return { success: true, teacherId: teacher.id, teacher: teacher };
-    } catch (e) {
-      console.error("Error al verificar credenciales:", e);
-      return { success: false, reason: "connection_error", message: e.message };
-    }
-  },
-
-  // Sembrar catálogo inicial si la tabla teachers está vacía
-  seedInitialDataIfEmpty: async function(initialTeachers) {
-    if (!this.isInitialized || !this.client || !initialTeachers || initialTeachers.length === 0) return;
-
-    try {
-      const { data, error } = await this.client.from("teachers").select("id").limit(1);
-      if (!error && (!data || data.length === 0)) {
-        console.log("Supabase vacío. Sembrando catálogo inicial...");
-        const records = initialTeachers.map(t => ({
-          id: t.id,
-          nombre: t.nombre,
-          usuario: t.usuario,
-          correo: t.correo || "",
-          password: t.password || "123",
-          departamento: t.departamento || "Facultad de Ingeniería Tampico",
-          role: t.role || "docente",
-          avatar: t.avatar || "",
-          data: t.data || { courses: [], students: [] },
-          updated_at: new Date().toISOString()
-        }));
-
-        await this.client.from("teachers").upsert(records, { onConflict: "id" });
-        console.log("Catálogo inicial sembrado con éxito en Supabase.");
-      }
-    } catch (e) {
-      console.error("Error al sembrar datos iniciales en Supabase:", e);
-    }
-  },
-
-  // Guardar o actualizar un docente en Supabase
-  saveTeacher: async function(teacher) {
-    if (!teacher || !teacher.id) return false;
-
-    if (!this.isInitialized || !this.client) {
-      // Si aún no está conectado a Supabase, confirmamos guardado local
+    if (!token || !this.isInitialized || !this.client) {
       if (typeof App !== "undefined" && App.setCloudSaveStatus) {
-        App.setCloudSaveStatus("saved");
+        App.setCloudSaveStatus("error", "Sin sesión activa en la nube");
       }
-      return false;
+      return { ok: false, reason: "offline" };
     }
 
     try {
@@ -301,135 +278,81 @@ const SupabaseService = {
         App.setCloudSaveStatus("saving");
       }
 
-      // BLINDAJE VULN-3.0-01 (Anti-IDOR):
-      // 1. Intento primario vía función RPC segura en PostgreSQL (si está disponible)
       const payloadData = teacher.data || { courses: [], students: [] };
-      if (this._rpcSaveAvailable !== false) {
-        try {
-          const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("save_teacher_grades", {
-            p_teacher_id: teacher.id,
-            p_data: payloadData
-          });
-          if (!rpcErr && rpcSuccess === true) {
-            this._rpcSaveAvailable = true;
-            this.status = "connected";
-            this.notifyStatusChange();
-            if (typeof App !== "undefined" && App.setCloudSaveStatus) {
-              App.setCloudSaveStatus("saved");
-            }
-            return true;
-          }
-          if (rpcErr && (rpcErr.code === "PGRST202" || rpcErr.message?.includes("not found"))) {
-            this._rpcSaveAvailable = false;
-          }
-        } catch (rpcEx) {
-          this._rpcSaveAvailable = false;
-        }
-      }
-
-      // 2. Respaldo directo en tabla (solo columnas data y updated_at)
-      const payload = {
-        data: payloadData,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await this.client
-        .from("teachers")
-        .update(payload)
-        .eq("id", teacher.id);
+      const { data, error } = await this.client.rpc("save_teacher_grades", {
+        p_token: token,
+        p_teacher_id: teacher.id,
+        p_data: payloadData,
+        p_expected_updated_at: expectedUpdatedAt || null
+      });
 
       if (error) throw error;
 
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("Respuesta vacía del servidor");
+
+      if (row.conflict) {
+        if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+          App.setCloudSaveStatus("error", "Conflicto: otro dispositivo guardó cambios más recientes");
+        }
+        return { ok: false, conflict: true, updated_at: row.updated_at, reason: "conflict" };
+      }
+
+      if (!row.ok) {
+        const msg = row.reason === "unauthorized" ? "Sesión expirada. Vuelve a iniciar sesión." : (row.reason || "No autorizado");
+        if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+          App.setCloudSaveStatus("error", msg);
+        }
+        return { ok: false, conflict: false, reason: row.reason };
+      }
+
       this.status = "connected";
       this.notifyStatusChange();
-
       if (typeof App !== "undefined" && App.setCloudSaveStatus) {
         App.setCloudSaveStatus("saved");
       }
-      return true;
+      return { ok: true, conflict: false, updated_at: row.updated_at };
     } catch (error) {
       console.error("Error al guardar calificaciones en Supabase:", error);
       this.status = navigator.onLine ? "error" : "offline";
       this.notifyStatusChange();
-
       if (typeof App !== "undefined" && App.setCloudSaveStatus) {
         App.setCloudSaveStatus("error", error.message);
       }
-      return false;
+      return { ok: false, conflict: false, reason: error.message };
     }
   },
 
-  // Registrar un nuevo docente en Supabase (Solo Coordinación Académica)
-  createTeacher: async function(teacher) {
-    if (!this.isInitialized || !this.client || !teacher || !teacher.id) return false;
-
-    try {
-      const payload = {
-        id: teacher.id,
-        nombre: teacher.nombre,
-        usuario: teacher.usuario,
-        correo: teacher.correo || "",
-        password: teacher.password || "123",
-        departamento: teacher.departamento || "Facultad de Ingeniería Tampico",
-        role: teacher.role || "docente",
-        avatar: teacher.avatar || "",
-        data: teacher.data || { courses: [], students: [] },
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await this.client
-        .from("teachers")
-        .insert([payload]);
-
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      console.error("Error al registrar docente en Supabase:", error);
+  // Cambio de contraseña propia con bcrypt en servidor
+  updatePassword: async function(oldPassword, newPassword) {
+    this.lastError = null;
+    const token = this.getSessionToken();
+    if (!token || !this.isInitialized || !this.client || !newPassword) {
+      this.lastError = "No hay sesión activa en el servidor.";
       return false;
     }
-  },
-
-  // Actualizar contraseña de forma segura (SEC-01 / SEC-03)
-  updatePassword: async function(teacherId, newPassword, oldPassword) {
-    if (!this.isInitialized || !this.client || !teacherId || !newPassword) return false;
-
-    const cleanNewPass = (newPassword || "").trim();
-    const cleanOldPass = (oldPassword || "").trim();
-    const cleanId = (teacherId || "").trim();
 
     try {
-      // 1. Validar autenticidad de la contraseña actual antes de aplicar mutación
-      const auth = await this.verifyCredentials(cleanId, cleanOldPass);
-      if (!auth || !auth.success) {
-        console.warn("updatePassword: La contraseña actual no es válida.");
-        this.lastError = "La contraseña actual ingresada es incorrecta.";
+      const { data, error } = await this.client.rpc("change_teacher_password", {
+        p_token: token,
+        p_old_password: oldPassword || "",
+        p_new_password: (newPassword || "").trim()
+      });
+
+      if (error) {
+        this.lastError = error.message;
         return false;
       }
 
-      // 2. Aplicar actualización directa en Supabase
-      let updateRes = await this.client
-        .from("teachers")
-        .update({
-          password: cleanNewPass,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", cleanId)
-        .select("id");
-
-      if (!updateRes.error && (!updateRes.data || updateRes.data.length === 0)) {
-        updateRes = await this.client
-          .from("teachers")
-          .update({
-            password: cleanNewPass,
-            updated_at: new Date().toISOString()
-          })
-          .or(`id.eq.${cleanId},usuario.eq.${cleanId}`)
-          .select("id");
-      }
-
-      if (updateRes.error) {
-        console.error("Error al actualizar contraseña en base de datos:", updateRes.error);
-        this.lastError = updateRes.error.message;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.ok) {
+        const map = {
+          wrong_password: "La contraseña actual ingresada es incorrecta.",
+          password_too_short: "La nueva contraseña debe tener al menos 6 caracteres.",
+          default_password_forbidden: "No puedes volver a usar '123' como contraseña.",
+          unauthorized: "Tu sesión expiró. Vuelve a iniciar sesión."
+        };
+        this.lastError = map[row?.reason] || "No se pudo actualizar la contraseña.";
         return false;
       }
 
@@ -441,71 +364,37 @@ const SupabaseService = {
     }
   },
 
-  // Restablecer contraseña de cualquier docente con autenticación de administrador (SEC-501)
-  adminResetTeacherPassword: async function(adminId, adminPassword, targetTeacherId, newPassword) {
+  // Restablecimiento de clave de un docente (solo Coordinación)
+  adminResetTeacherPassword: async function(adminPassword, targetTeacherId, newPassword) {
     this.lastError = null;
-    if (!this.isInitialized || !this.client || !targetTeacherId || !newPassword || !adminPassword) {
+    const token = this.getSessionToken();
+    if (!token || !this.isInitialized || !this.client || !targetTeacherId || !newPassword || !adminPassword) {
       this.lastError = "Parámetros incompletos para restablecer la contraseña.";
-      console.warn("adminResetTeacherPassword: Se requiere la contraseña del administrador para autorizar el reseteo.");
       return false;
     }
 
-    const cleanAdminPass = (adminPassword || "").trim();
-    const cleanNewPass = (newPassword || "").trim();
-    const cleanTargetId = (targetTeacherId || "").trim();
-
-    // 1. Intento primario vía RPC seguro en PostgreSQL (si el procedimiento existe)
     try {
-      const { data: rpcSuccess, error: rpcErr } = await this.client.rpc("admin_reset_teacher_password", {
-        p_admin_id: adminId || "admin-coordinacion",
-        p_admin_password: cleanAdminPass,
-        p_target_teacher_id: cleanTargetId,
-        p_new_password: cleanNewPass
+      const { data, error } = await this.client.rpc("admin_reset_teacher_password", {
+        p_token: token,
+        p_admin_password: (adminPassword || "").trim(),
+        p_target_teacher_id: (targetTeacherId || "").trim(),
+        p_new_password: (newPassword || "").trim()
       });
 
-      if (!rpcErr && rpcSuccess === true) {
-        return true;
-      }
-    } catch (rpcEx) {
-      // Procedimiento no disponible en Supabase, continuar con fallback autenticado
-    }
-
-    // 2. Fallback verificado: Validar autorización de administrador en base de datos
-    try {
-      const verifyId = adminId || "admin-coordinacion";
-      const auth = await this.verifyCredentials(verifyId, cleanAdminPass);
-
-      if (!auth || !auth.success || !auth.teacher || auth.teacher.role !== "admin") {
-        this.lastError = "La contraseña de administrador es incorrecta.";
-        console.warn("adminResetTeacherPassword: Las credenciales de administrador no son válidas.");
+      if (error) {
+        this.lastError = error.message;
         return false;
       }
 
-      // 3. Aplicar actualización de contraseña al docente objetivo en la tabla teachers
-      let updateRes = await this.client
-        .from("teachers")
-        .update({
-          password: cleanNewPass,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", cleanTargetId)
-        .select("id");
-
-      // Si por alguna razón el ID no coincidió directamente, intentar por usuario o correo
-      if (!updateRes.error && (!updateRes.data || updateRes.data.length === 0)) {
-        updateRes = await this.client
-          .from("teachers")
-          .update({
-            password: cleanNewPass,
-            updated_at: new Date().toISOString()
-          })
-          .or(`id.eq.${cleanTargetId},usuario.eq.${cleanTargetId},correo.eq.${cleanTargetId}`)
-          .select("id");
-      }
-
-      if (updateRes.error) {
-        console.error("Error al actualizar contraseña del docente en Supabase:", updateRes.error);
-        this.lastError = "Error en la base de datos al guardar la nueva contraseña: " + (updateRes.error.message || "");
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.ok) {
+        const map = {
+          wrong_admin_password: "La contraseña de administrador es incorrecta.",
+          forbidden: "Se requieren privilegios de Coordinación Académica.",
+          target_not_found: "Docente no encontrado en la base de datos.",
+          password_too_short: "La nueva contraseña debe tener al menos 3 caracteres."
+        };
+        this.lastError = map[row?.reason] || "No se pudo restablecer la contraseña.";
         return false;
       }
 
@@ -517,132 +406,104 @@ const SupabaseService = {
     }
   },
 
-  // Eliminar un docente de Supabase
-  deleteTeacher: async function(teacherId) {
-    if (!this.isInitialized || !this.client || !teacherId) return false;
+  // Alta de nuevo docente (solo Coordinación)
+  createTeacher: async function(teacher) {
+    this.lastError = null;
+    const token = this.getSessionToken();
+    if (!token || !this.isInitialized || !this.client || !teacher || !teacher.id) {
+      this.lastError = "Sin autorización o datos incompletos.";
+      return false;
+    }
 
     try {
-      const { error } = await this.client
-        .from("teachers")
-        .delete()
-        .eq("id", teacherId);
+      const { data, error } = await this.client.rpc("admin_create_teacher", {
+        p_token: token,
+        p_id: teacher.id,
+        p_nombre: teacher.nombre,
+        p_usuario: teacher.usuario,
+        p_correo: teacher.correo || "",
+        p_password: teacher.password || "",
+        p_departamento: teacher.departamento || "Facultad de Ingeniería Tampico",
+        p_data: teacher.data || { courses: [], students: [] }
+      });
 
-      return !error;
-    } catch (e) {
-      console.error("Error al eliminar docente en Supabase:", e);
+      if (error) {
+        this.lastError = error.message;
+        return false;
+      }
+
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.ok) {
+        const map = {
+          duplicate_teacher: "Ya existe un docente con ese usuario o correo.",
+          forbidden: "Solo Coordinación Académica puede registrar nuevos docentes.",
+          invalid_input: "Completa todos los campos (contraseña mínimo 4 caracteres)."
+        };
+        this.lastError = map[row?.reason] || "No se pudo registrar el docente.";
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error al registrar docente:", error);
+      this.lastError = error.message;
       return false;
     }
   },
 
-  // Escuchar cambios en vivo de un profesor (Modo Supervisión para Coordinación FIUAT)
-  listenToTeacher: function(teacherId, onUpdate) {
-    if (!this.isInitialized || !this.client || !teacherId) return null;
-
-    this.stopListening();
+  // Respaldo global autenticado para Coordinación (sin contraseñas)
+  exportAllTeachers: async function() {
+    const token = this.getSessionToken();
+    if (!token || !this.isInitialized || !this.client) return null;
 
     try {
-      this.activeChannel = this.client
-        .channel(`supervision-${teacherId}-${Date.now()}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "teachers",
-            filter: `id=eq.${teacherId}`
-          },
-          payload => {
-            if (payload && payload.new && onUpdate) {
-              onUpdate(payload.new);
-            }
-          }
-        )
-        .subscribe(status => {
-          if (status === "SUBSCRIBED") {
-            console.log(`Canal Realtime Supabase activo para supervisar: ${teacherId}`);
-          }
-        });
-
-      return this.activeChannel;
+      const { data, error } = await this.client.rpc("admin_export_all_teachers", { p_token: token });
+      if (error) {
+        console.error("Error al exportar respaldo global:", error);
+        return null;
+      }
+      return data || [];
     } catch (e) {
-      console.error("Error al suscribirse al canal Realtime de Supabase:", e);
+      console.error("Error de red al exportar respaldo global:", e);
       return null;
     }
   },
 
-  // Detener la escucha en tiempo real
-  stopListening: function() {
-    if (this.activeChannel && this.client) {
-      this.client.removeChannel(this.activeChannel);
-      this.activeChannel = null;
-    }
-  },
+  // Sondeo seguro en Modo Supervisión (sin abrir SELECT público para Realtime)
+  listenToTeacher: function(teacherId, onUpdate, getLastUpdatedAt) {
+    this.stopListening();
+    if (!this.isInitialized || !this.client || !teacherId) return null;
 
-  // Sincronizar el Roster Oficial completo a Supabase en lotes
-  syncFullFacultyRoster: async function(roster, onProgress) {
-    if (!this.isInitialized || !this.client || !roster || roster.length === 0) return false;
-
-    try {
-      const batchSize = 50;
-      let totalSaved = 0;
-
-      for (let i = 0; i < roster.length; i += batchSize) {
-        const chunk = roster.slice(i, i + batchSize).map(t => ({
-          id: t.id,
-          nombre: t.nombre,
-          usuario: t.usuario,
-          correo: t.correo || "",
-          password: t.password || "123",
-          departamento: t.departamento || "Facultad de Ingeniería Tampico",
-          role: t.role || "docente",
-          avatar: t.avatar || "",
-          data: t.data || { courses: [], students: [] },
-          updated_at: new Date().toISOString()
-        }));
-
-        const { error } = await this.client
-          .from("teachers")
-          .upsert(chunk, { onConflict: "id" });
-
-        if (error) throw error;
-
-        totalSaved += chunk.length;
-        if (onProgress) {
-          onProgress(totalSaved, roster.length);
-        }
+    this._pollInterval = setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      const res = await this.fetchTeacherData(teacherId);
+      if (!res) return;
+      const known = typeof getLastUpdatedAt === "function" ? getLastUpdatedAt() : null;
+      if (res.updated_at && res.updated_at !== known && typeof onUpdate === "function") {
+        onUpdate(res);
       }
-      return true;
-    } catch (e) {
-      console.error("Error al sincronizar roster oficial en Supabase:", e);
-      return false;
+    }, 12000);
+
+    return this._pollInterval;
+  },
+
+  stopListening: function() {
+    if (this._pollInterval) {
+      clearInterval(this._pollInterval);
+      this._pollInterval = null;
     }
   },
 
-  // Actualizar credenciales en caliente desde la interfaz
-  setCredentials: function(url, anonKey) {
-    if (url) {
-      const cleanUrl = url.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
-      localStorage.setItem("supabase_url", cleanUrl);
-      SUPABASE_CONFIG.url = cleanUrl;
-    }
-    if (anonKey) {
-      const cleanKey = anonKey.trim();
-      localStorage.setItem("supabase_anon_key", cleanKey);
-      SUPABASE_CONFIG.anonKey = cleanKey;
-    }
-    return this.init();
-  },
-
-  // Probar conectividad en segundo plano y reconectar dinámicamente si Supabase despierta
+  // Reconexión dinámica en segundo plano
   checkConnection: async function() {
     if (!this.client) return false;
     try {
-      const probePromise = this.client.from("teachers").select("id").limit(1);
-      const timeoutPromise = new Promise((_, reject) => 
+      const probePromise = this.client.rpc("ping_service");
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Timeout")), 3000)
       );
       const probeResult = await Promise.race([probePromise, timeoutPromise]).catch(err => ({ error: err }));
-      const isOk = !probeResult.error || (probeResult.error && probeResult.error.code === "PGRST116");
+      const isOk = !probeResult.error || probeResult.error.code === "PGRST202";
       if (isOk) {
         const wasOffline = !this.isInitialized || this.status !== "connected";
         this.isInitialized = true;
@@ -659,7 +520,3 @@ const SupabaseService = {
     return false;
   }
 };
-
-// Alias para compatibilidad total
-const CloudService = SupabaseService;
-const FirebaseService = SupabaseService;

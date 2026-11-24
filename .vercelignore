@@ -1,0 +1,50 @@
+# Documentación, reportes de seguridad, esquemas SQL y herramientas internas
+*.md
+supabase_schema.sql
+CalendarioEscolarAdministrativo2026.pdf
+CUENTAS_DOCENTES_FIUAT.csv
+faculty_roster.js
+sample_data.js
+*.xlsx
+.agents/
+.impeccable/
+stitch_academic_gradebook_interface/
+tests/
+
+# Imágenes sin uso en producción (se conservan en Git, no se publican)
+Logos/Calidad.png
+Logos/Escudo Imagotipo blanco.png
+Logos/ESCUDO-NEGRO-trim.png
+Logos/FI-blanco-HORIZONTAL-trim-black.png
+Logos/FI-blanco-HORIZONTAL-trim.png
+Logos/FI-blanco-VERTICAL-trim-black.png
+Logos/FI-blanco-VERTICAL-trim.png
+Logos/FI-COLOR-VERTICAL-trim.png
+Logos/fiuat-2024-blanco.png
+Logos/fiuat-2024-negro.png
+Logos/fiuat-2024-trimmed.png
+Logos/ImagenUAT-Logo.png
+Logos/LOGO 70 ANIVERSARIO FIT.png
+Logos/Organizacion y normatividad.png
+Logos/UAT Horizontal blanco.png
+Logos/UAT Horizontal.png
+Logos/UAT isotipo blanco.png
+Logos/UAT isotipo.png
+Logos/UAT Vertical blanco.png
+Logos/UAT Vertical.png
+Logos/UAT-Horizontal-blanco-black.png
+Logos/UAT-Horizontal-blanco.png
+Logos/UAT-Horizontal.png
+Logos/UAT.png
+
+# Variantes de fuente no cargadas por styles.css
+fonts/VisbyCF-BoldOblique.otf
+fonts/VisbyCF-DemiBoldOblique.otf
+fonts/VisbyCF-ExtraBold.otf
+fonts/VisbyCF-ExtraBoldOblique.otf
+fonts/VisbyCF-HeavyOblique.otf
+fonts/VisbyCF-LightOblique.otf
+fonts/VisbyCF-MediumOblique.otf
+fonts/VisbyCF-RegularOblique.otf
+fonts/VisbyCF-Thin.otf
+fonts/VisbyCF-ThinOblique.otf

@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.11.04.v72";
+      const CURRENT_APP_VERSION = "2026.11.24.v73";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,273 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=72">
-  <style id="freezePanesCriticalStyles">
-    /* Inmovilización de Paneles Estilo Excel (Freeze Panes Inmediato) */
-    html, body {
-      height: 100vh !important;
-      max-height: 100vh !important;
-      overflow: hidden !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-
-    body {
-      display: flex !important;
-      flex-direction: column !important;
-      height: 100vh !important;
-      max-height: 100vh !important;
-      overflow: hidden !important;
-    }
-
-    .notion-header {
-      flex: 0 0 auto !important;
-      flex-shrink: 0 !important;
-      width: 100% !important;
-      z-index: 100 !important;
-    }
-
-    #supervisionBannerContainer {
-      flex: 0 0 auto !important;
-    }
-
-    .main-content {
-      flex: 1 1 0 !important;
-      min-height: 0 !important;
-      height: auto !important;
-      max-height: none !important;
-      display: flex !important;
-      flex-direction: column !important;
-      padding: 8px 16px !important;
-      box-sizing: border-box !important;
-      overflow: hidden !important;
-    }
-
-    @media (max-width: 768px) {
-      .main-content {
-        padding: 8px 8px calc(64px + env(safe-area-inset-bottom, 0px)) 8px !important;
-      }
-    }
-
-    .main-content.has-table-view {
-      overflow: hidden !important;
-    }
-
-    .main-content:not(.has-table-view) {
-      overflow-y: auto !important;
-      overscroll-behavior-y: contain !important;
-      -webkit-overflow-scrolling: touch !important;
-      will-change: scroll-position;
-      transform: translateZ(0);
-    }
-
-    .page-title-area {
-      flex: 0 0 auto !important;
-      flex-shrink: 0 !important;
-      margin-bottom: 6px !important;
-    }
-
-    .page-title {
-      font-size: 19px !important;
-      margin: 0 !important;
-    }
-
-    .page-desc {
-      font-size: 12px !important;
-      margin-top: 2px !important;
-    }
-
-    .table-toolbar {
-      flex: 0 0 auto !important;
-      flex-shrink: 0 !important;
-      margin-bottom: 6px !important;
-      gap: 8px !important;
-    }
-
-    .notion-table-wrapper,
-    .attendance-sabana-wrapper {
-      flex: 1 1 0 !important;
-      min-height: 200px !important;
-      height: auto !important;
-      max-height: none !important;
-      overflow: auto !important;
-      position: relative !important;
-      border: 1px solid var(--border-color) !important;
-      border-radius: var(--radius-sm) !important;
-      background: var(--bg-primary) !important;
-      -webkit-overflow-scrolling: touch !important;
-    }
-
-    .attendance-main-area {
-      flex: 1 1 0 !important;
-      min-height: 0 !important;
-      display: flex !important;
-      flex-direction: column !important;
-      overflow: auto !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      box-sizing: border-box !important;
-    }
-
-    .attendance-main-area > .notion-table-wrapper {
-      flex: 1 1 0 !important;
-      min-height: 0 !important;
-      height: 100% !important;
-      max-height: 100% !important;
-      overflow: auto !important;
-      margin: 0 !important;
-    }
-
-    /* Scrollbars visibles y amigables */
-    .notion-table-wrapper::-webkit-scrollbar,
-    .attendance-sabana-wrapper::-webkit-scrollbar {
-      width: 9px !important;
-      height: 9px !important;
-    }
-
-    .notion-table-wrapper::-webkit-scrollbar-thumb,
-    .attendance-sabana-wrapper::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.28) !important;
-      border-radius: 6px !important;
-    }
-
-    .notion-table-wrapper::-webkit-scrollbar-thumb:hover,
-    .attendance-sabana-wrapper::-webkit-scrollbar-thumb:hover {
-      background: var(--uat-orange) !important;
-    }
-
-    .notion-table-wrapper::-webkit-scrollbar-track,
-    .attendance-sabana-wrapper::-webkit-scrollbar-track {
-      background: var(--bg-secondary) !important;
-    }
-
-    @media (max-height: 720px) {
-      .main-content.has-table-view {
-        overflow-y: auto !important;
-      }
-      .notion-table-wrapper,
-      .attendance-sabana-wrapper {
-        min-height: 320px !important;
-      }
-    }
-
-    /* 1. Encabezados de tabla congelados verticalmente (Freeze Top Row) */
-    .notion-table thead {
-      position: static !important;
-    }
-
-    .notion-table thead th {
-      position: sticky !important;
-      top: 0 !important;
-      z-index: 35 !important;
-      background-color: var(--bg-secondary) !important;
-      background-clip: padding-box !important;
-      border-bottom: 3px solid var(--uat-orange) !important;
-      border-right: 1px solid var(--border-color) !important;
-      box-shadow: 0 3px 6px rgba(15, 23, 42, 0.08) !important;
-    }
-
-    [data-theme="dark"] .notion-table thead th {
-      background-color: #252528 !important;
-      color: #ffffff !important;
-      border-bottom: 3px solid var(--uat-orange) !important;
-      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6) !important;
-    }
-
-    /* 2. Columna 1 (Matrícula) congelada a la izquierda */
-    .notion-table .col-sticky-1 {
-      position: sticky !important;
-      left: 0 !important;
-      z-index: 20 !important;
-      background-color: var(--bg-primary) !important;
-      background-clip: padding-box !important;
-      width: 130px !important;
-      min-width: 130px !important;
-      max-width: 130px !important;
-    }
-
-    /* 3. Columna 2 (Alumno) congelada a la izquierda */
-    .notion-table .col-sticky-2 {
-      position: sticky !important;
-      left: 130px !important;
-      z-index: 20 !important;
-      background-color: var(--bg-primary) !important;
-      background-clip: padding-box !important;
-      width: 270px !important;
-      min-width: 270px !important;
-      max-width: 270px !important;
-      box-shadow: 4px 0 8px rgba(15, 23, 42, 0.06) !important;
-    }
-
-    /* 4. Esquinas superiores izquierdas (Intersección con mayor prioridad) */
-    .notion-table thead th.col-sticky-1 {
-      position: sticky !important;
-      top: 0 !important;
-      left: 0 !important;
-      z-index: 65 !important;
-      background-color: var(--bg-secondary) !important;
-      background-clip: padding-box !important;
-    }
-
-    .notion-table thead th.col-sticky-2 {
-      position: sticky !important;
-      top: 0 !important;
-      left: 130px !important;
-      z-index: 65 !important;
-      background-color: var(--bg-secondary) !important;
-      background-clip: padding-box !important;
-      box-shadow: 4px 3px 8px rgba(15, 23, 42, 0.08) !important;
-    }
-
-    /* 5. Pie de tabla congelado a la izquierda */
-    .notion-table tfoot .col-sticky-footer {
-      position: sticky !important;
-      left: 0 !important;
-      z-index: 20 !important;
-      background-color: var(--bg-secondary) !important;
-      box-shadow: 4px 0 8px rgba(15, 23, 42, 0.06) !important;
-    }
-
-    /* Hover de filas manteniendo fondo sólido en columnas fijas */
-    .notion-table tr:hover td.col-sticky-1,
-    .notion-table tr:hover td.col-sticky-2 {
-      background-color: var(--bg-hover) !important;
-    }
-
-    /* Modo Oscuro para columnas congeladas */
-    [data-theme="dark"] .notion-table .col-sticky-1,
-    [data-theme="dark"] .notion-table .col-sticky-2 {
-      background-color: var(--bg-primary) !important;
-    }
-
-    [data-theme="dark"] .notion-table .col-sticky-2,
-    [data-theme="dark"] .notion-table tfoot .col-sticky-footer {
-      box-shadow: 4px 0 10px rgba(0, 0, 0, 0.5) !important;
-    }
-
-    [data-theme="dark"] .notion-table thead th.col-sticky-1,
-    [data-theme="dark"] .notion-table thead th.col-sticky-2 {
-      background-color: #252528 !important;
-    }
-
-    [data-theme="dark"] .notion-table tr:hover td.col-sticky-1,
-    [data-theme="dark"] .notion-table tr:hover td.col-sticky-2 {
-      background-color: var(--bg-hover) !important;
-    }
-
-    /* Modo Enfoque / Maximizar Calificador */
-    body.gradebook-focus-mode .page-title-area {
-      display: none !important;
-    }
-
-    body.gradebook-focus-mode .table-toolbar {
-      margin-bottom: 4px !important;
-    }
-
-    body.gradebook-focus-mode .main-content {
-      padding-top: 4px !important;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css?v=73">
   <!-- SheetJS para generación de archivos Excel (.xlsx) nativos -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
 </head>
@@ -636,62 +370,6 @@
     </div>
   </div>
 
-  <!-- Modal Generar Calendario de Asistencias -->
-  <div class="modal-backdrop" id="attendanceCalendarModal">
-    <div class="modal-content" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3>📅 Generar Calendario de Clases</h3>
-        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeAttendanceCalendarModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
-          Genera automáticamente las fechas de clase para la unidad actual eligiendo los días de la semana en que impartes la materia.
-        </p>
-        <div class="form-group">
-          <label>Fecha de Inicio:</label>
-          <input type="date" id="calendarStartDate" class="form-control" />
-        </div>
-        <div class="form-group">
-          <label>Cantidad de Clases a Generar:</label>
-          <input type="number" id="calendarTotalClasses" class="form-control" min="1" max="50" value="8" />
-        </div>
-        <div class="form-group">
-          <label>Días de Clase a la Semana:</label>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px;">
-            <label class="checkbox-label" style="font-size: 12.5px;">
-              <input type="checkbox" id="calDay1" checked /> <span>Lunes</span>
-            </label>
-            <label class="checkbox-label" style="font-size: 12.5px;">
-              <input type="checkbox" id="calDay2" /> <span>Martes</span>
-            </label>
-            <label class="checkbox-label" style="font-size: 12.5px;">
-              <input type="checkbox" id="calDay3" checked /> <span>Miércoles</span>
-            </label>
-            <label class="checkbox-label" style="font-size: 12.5px;">
-              <input type="checkbox" id="calDay4" /> <span>Jueves</span>
-            </label>
-            <label class="checkbox-label" style="font-size: 12.5px;">
-              <input type="checkbox" id="calDay5" checked /> <span>Viernes</span>
-            </label>
-            <label class="checkbox-label" style="font-size: 12.5px;">
-              <input type="checkbox" id="calDay6" /> <span>Sábado</span>
-            </label>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="checkbox-label" style="font-size: 12px; color: var(--text-secondary);">
-            <input type="checkbox" id="calMarkAllPresent" checked />
-            <span>Inicializar a todos los alumnos como <b>Presente (P)</b></span>
-          </label>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-default" onclick="App.closeAttendanceCalendarModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="App.submitGenerateAttendanceCalendar()">Generar Fechas</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Modal Calendario Escolar Administrativo Oficial UAT 2026 -->
   <div class="modal-backdrop" id="officialCalendarModal">
     <div class="modal-content modal-content-lg" style="max-width: 960px; max-height: 90vh; overflow-y: auto;">
@@ -900,37 +578,6 @@
     </div>
   </div>
 
-  <!-- Modal de Sincronización del Roster Oficial a Supabase -->
-  <div class="modal-backdrop" id="syncRosterModal">
-    <div class="modal-content" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3>Sincronizar Roster Oficial a Supabase</h3>
-        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeSyncRosterModal()">✕</button>
-      </div>
-      <div class="modal-body" style="text-align: center; padding: 24px;">
-        <div style="display: flex; justify-content: center; margin-bottom: 16px;">
-          <img src="Logos/Escudo Imagotipo.png" alt="Universidad Autónoma de Tamaulipas" style="height: 58px; width: auto; object-fit: contain;" />
-        </div>
-        <h4 style="font-size: 16px; margin-bottom: 8px; font-weight: 700;">Roster Oficial de la Facultad de Ingeniería</h4>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
-          Se importarán <b>153 Profesores</b>, <b>353 Materias/Grupos</b> y <b>18,702 Inscripciones</b> directamente a Supabase (PostgreSQL).
-        </p>
-        <div id="syncRosterProgressWrap" style="display: none; margin-bottom: 16px;">
-          <div style="background: var(--border-color); border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 8px;">
-            <div id="syncRosterProgressBar" style="width: 0%; height: 100%; background: var(--uat-orange);"></div>
-          </div>
-          <div id="syncRosterStatusText" style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">Iniciando...</div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="btnCancelSync" class="btn btn-default" onclick="App.closeSyncRosterModal()">Cerrar</button>
-        <button id="btnStartSync" class="btn btn-primary" onclick="App.executeOfficialRosterSync()">Iniciar Sincronización a la Nube</button>
-      </div>
-    </div>
-  </div>
-
-
-
   <!-- Modal para Registrar Nuevo Docente -->
   <div class="modal-backdrop" id="registerTeacherModal">
     <div class="modal-content" style="max-width: 480px;">
@@ -972,27 +619,30 @@
     <div class="modal-content" style="max-width: 440px;">
       <div class="modal-header">
         <h3>Cambiar mi Contraseña</h3>
-        <button class="btn btn-default btn-sm" style="border:none;" onclick="App.closeChangePasswordModal()">✕</button>
+        <button id="btnCloseChangePassModal" class="btn btn-default btn-sm" style="border:none;" onclick="App.closeChangePasswordModal()">✕</button>
       </div>
       <div class="modal-body">
+        <div id="forcePasswordChangeBanner" style="display: none; background: rgba(224, 90, 43, 0.1); border: 1px solid rgba(224, 90, 43, 0.35); color: #a84b15; padding: 10px 12px; border-radius: 6px; font-size: 12.5px; margin-bottom: 12px; line-height: 1.45;">
+          <b>🔒 Seguridad obligatoria:</b> Estás usando la contraseña inicial predeterminada (<code>123</code>). Define una contraseña personal de al menos 6 caracteres para proteger tus calificaciones.
+        </div>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
           Ingresa tu contraseña actual y define una nueva clave personal para proteger tu cuenta docente.
         </p>
         <div class="form-group">
           <label>Contraseña Actual:</label>
-          <input type="password" id="changePassCurrent" class="form-control" placeholder="Ingresa tu contraseña actual" />
+          <input type="password" id="changePassCurrent" class="form-control" placeholder="Ingresa tu contraseña actual" autocomplete="current-password" />
         </div>
         <div class="form-group">
           <label>Nueva Contraseña:</label>
-          <input type="password" id="changePassNew" class="form-control" placeholder="Mínimo 4 caracteres" />
+          <input type="password" id="changePassNew" class="form-control" placeholder="Mínimo 6 caracteres (distinta a 123)" autocomplete="new-password" />
         </div>
         <div class="form-group">
           <label>Confirmar Nueva Contraseña:</label>
-          <input type="password" id="changePassConfirm" class="form-control" placeholder="Repite la nueva contraseña" />
+          <input type="password" id="changePassConfirm" class="form-control" placeholder="Repite la nueva contraseña" autocomplete="new-password" />
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-default" onclick="App.closeChangePasswordModal()">Cancelar</button>
+        <button id="btnCancelChangePassModal" class="btn btn-default" onclick="App.closeChangePasswordModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="App.submitChangePassword()">Actualizar Contraseña</button>
       </div>
     </div>
@@ -1135,9 +785,11 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="supabase_service.js?v=72"></script>
-  <script src="sample_data.js?v=72"></script>
-  <script src="exporter.js?v=72"></script>
-  <script src="app.js?v=72"></script>
+  <script src="math_engine.js?v=73"></script>
+  <script src="supabase_service.js?v=73"></script>
+  <script src="exporter.js?v=73"></script>
+  <script src="app.js?v=73"></script>
+  <script src="attendance_importer.js?v=73"></script>
+  <script src="admin_panel.js?v=73"></script>
 </body>
 </html>
