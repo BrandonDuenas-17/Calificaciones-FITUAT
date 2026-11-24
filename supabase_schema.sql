@@ -742,8 +742,8 @@ begin
     coalesce(t.role, 'docente') as role,
     coalesce(t.avatar, '') as avatar,
     t.updated_at,
-    coalesce(jsonb_array_length(t.data->'courses'), 0)::integer as courses_count,
-    coalesce(jsonb_array_length(t.data->'students'), 0)::integer as students_count,
+    case when jsonb_typeof(t.data->'courses') = 'array' then jsonb_array_length(t.data->'courses') else 0 end::integer as courses_count,
+    case when jsonb_typeof(t.data->'students') = 'array' then jsonb_array_length(t.data->'students') else 0 end::integer as students_count,
     coalesce((
       select jsonb_agg(
         jsonb_build_object(
@@ -752,10 +752,12 @@ begin
           'grupo', coalesce(c->>'grupo', 'Grupo A'),
           'aula', coalesce(c->>'aula', ''),
           'periodo', coalesce(c->>'periodo', ''),
-          'recordsCount', coalesce(jsonb_array_length(c->'records'), 0)
+          'recordsCount', case when jsonb_typeof(c->'records') = 'array' then jsonb_array_length(c->'records') else 0 end
         )
       )
-      from jsonb_array_elements(coalesce(t.data->'courses', '[]'::jsonb)) as c
+      from jsonb_array_elements(
+        case when jsonb_typeof(t.data->'courses') = 'array' then t.data->'courses' else '[]'::jsonb end
+      ) as c
     ), '[]'::jsonb) as courses_preview
   from public.teachers t
   order by t.nombre asc;
