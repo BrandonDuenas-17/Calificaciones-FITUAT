@@ -712,6 +712,11 @@ Object.assign(App, {
       return;
     }
 
+    // Sincronizar marca de tiempo tras actualizar contraseña en teachers
+    if (!this.isSupervising) {
+      this._lastServerUpdatedAt = null;
+    }
+
     this._mustChangePasswordModal = false;
     this.mustChangePassword = false;
 

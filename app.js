@@ -31,7 +31,12 @@ const App = {
   },
   data: null, // Apunta a las calificaciones del docente activo o supervisado
   _lastServerUpdatedAt: null, // Control de concurrencia optimista (updated_at de Supabase)
+  _lastSavedPayloadJson: null, // Snapshot JSON del último estado confirmado en esta sesión
   _isSaving: false,
+  _savePromise: null,
+  _pendingSave: false,
+  _pendingForceOverwrite: false,
+  _hasUnsavedChanges: false,
   mustChangePassword: false,
   _mustChangePasswordModal: false,
   activeCourseId: "",
@@ -261,6 +266,8 @@ const App = {
       _setAuthenticatedUser(activeTeacher);
       this.teachers = [activeTeacher];
       this.data = teacherData;
+      this._lastSavedPayloadJson = JSON.stringify(teacherData);
+      this._hasUnsavedChanges = false;
 
       if (!this.data.courses || !this.data.courses.some(c => c.id === this.activeCourseId)) {
         this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
@@ -276,6 +283,8 @@ const App = {
     _setAuthenticatedUser(null);
     this.data = null;
     this._lastServerUpdatedAt = null;
+    this._lastSavedPayloadJson = null;
+    this._hasUnsavedChanges = false;
     this.activeCourseId = null;
     this.mustChangePassword = false;
   },
@@ -343,7 +352,7 @@ const App = {
 
   saveTimer: null,
 
-  // Guardado autenticado en Supabase con control de concurrencia optimista
+  // Guardado autenticado en Supabase con cola serializada y control de concurrencia optimista
   saveData: async function(forceOverwrite = false) {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
@@ -358,85 +367,159 @@ const App = {
     const targetTeacherId = this.getWorkingTeacherId();
     if (!targetTeacherId || !this.data) return false;
 
-    const clonedData = JSON.parse(JSON.stringify(this.data));
-
-    // Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
-    try {
-      sessionStorage.setItem("fiuat_active_grades_buffer_" + targetTeacherId, JSON.stringify({
-        data: clonedData,
-        timestamp: Date.now()
-      }));
-    } catch (e) {}
-
-    // Sincronizar en memoria el arreglo de profesores
-    if (Array.isArray(this.teachers)) {
-      const tIndex = this.teachers.findIndex(t => t.id === targetTeacherId);
-      if (tIndex !== -1) {
-        this.teachers[tIndex] = Object.assign({}, this.teachers[tIndex], { data: clonedData });
-      }
-    }
-
-    // Actualizar currentUser únicamente si no estamos supervisando a otro docente
-    if (!this.isSupervising && this.currentUser && this.currentUser.id === targetTeacherId) {
-      _setAuthenticatedUser(Object.assign({}, this.currentUser, { data: clonedData }));
-    }
-
-    if (typeof SupabaseService === "undefined" || !SupabaseService.isInitialized) {
-      return false;
+    // Si ya hay un guardado en vuelo (ej. red Wi-Fi universitaria con latencia alta),
+    // encolar para ejecutarse en serie al terminar el actual usando el nuevo updated_at
+    if (this._isSaving) {
+      this._pendingSave = true;
+      if (forceOverwrite) this._pendingForceOverwrite = true;
+      return this._savePromise ? await this._savePromise : false;
     }
 
     this._isSaving = true;
-    try {
-      const res = await SupabaseService.saveTeacher(
-        { id: targetTeacherId, data: clonedData },
-        forceOverwrite ? null : this._lastServerUpdatedAt
-      );
+    this._savePromise = (async () => {
+      try {
+        let nextForce = forceOverwrite;
+        let lastResult = false;
 
-      if (res && res.ok) {
-        if (res.updated_at) this._lastServerUpdatedAt = res.updated_at;
-        return true;
-      }
+        do {
+          this._pendingSave = false;
+          this._pendingForceOverwrite = false;
+          this._hasUnsavedChanges = false;
 
-      if (res && res.conflict) {
-        const reloadCloud = confirm(
-          "⚠️ Conflicto de edición simultánea:\n\n" +
-          "Se guardaron cambios más recientes en Supabase desde otro dispositivo o sesión.\n\n" +
-          "• Aceptar: Recargar los datos más recientes de la nube (recomendado).\n" +
-          "• Cancelar: Mantener tus cambios actuales y sobrescribir la nube."
-        );
-        if (reloadCloud) {
-          const fresh = await SupabaseService.fetchTeacherData(targetTeacherId);
-          if (fresh && fresh.data) {
-            this.data = fresh.data;
-            this._lastServerUpdatedAt = fresh.updated_at;
-            this.render();
-            this.showToast("Datos actualizados desde la nube.", "info");
+          const currentTeacherId = this.getWorkingTeacherId();
+          if (!currentTeacherId || !this.data) break;
+
+          const clonedData = JSON.parse(JSON.stringify(this.data));
+          const payloadJson = JSON.stringify(clonedData);
+
+          // Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
+          try {
+            sessionStorage.setItem("fiuat_active_grades_buffer_" + currentTeacherId, JSON.stringify({
+              data: clonedData,
+              timestamp: Date.now()
+            }));
+          } catch (e) {}
+
+          // Sincronizar en memoria el arreglo de profesores
+          if (Array.isArray(this.teachers)) {
+            const tIndex = this.teachers.findIndex(t => t.id === currentTeacherId);
+            if (tIndex !== -1) {
+              this.teachers[tIndex] = Object.assign({}, this.teachers[tIndex], { data: clonedData });
+            }
           }
-          return false;
-        }
-        return await this.saveData(true);
-      }
 
-      if (res && res.reason === "unauthorized") {
-        alert("Tu sesión en el servidor ha expirado. Inicia sesión nuevamente para continuar guardando.");
-        await this.logout();
+          // Actualizar currentUser únicamente si no estamos supervisando a otro docente
+          if (!this.isSupervising && this.currentUser && this.currentUser.id === currentTeacherId) {
+            _setAuthenticatedUser(Object.assign({}, this.currentUser, { data: clonedData }));
+          }
+
+          if (typeof SupabaseService === "undefined" || !SupabaseService.isInitialized) {
+            lastResult = false;
+            break;
+          }
+
+          // Omitir petición de red si el contenido no ha cambiado respecto al último guardado confirmado
+          if (!nextForce && this._lastServerUpdatedAt && payloadJson === this._lastSavedPayloadJson) {
+            this.setCloudSaveStatus("saved");
+            lastResult = true;
+            continue;
+          }
+
+          const previousSavedJson = this._lastSavedPayloadJson;
+          let res = await SupabaseService.saveTeacher(
+            { id: currentTeacherId, data: clonedData },
+            nextForce ? null : this._lastServerUpdatedAt
+          );
+
+          // Si el servidor reporta conflicto, verificar si realmente cambiaron las calificaciones en otro dispositivo
+          // o si fue un falso positivo por latencia/reintento de red Wi-Fi o cambio de contraseña en esta misma sesión
+          if (res && res.conflict) {
+            const fresh = await SupabaseService.fetchTeacherData(currentTeacherId);
+            if (fresh && fresh.data) {
+              const remoteJson = JSON.stringify(fresh.data);
+              if (remoteJson === payloadJson) {
+                this._lastServerUpdatedAt = fresh.updated_at || res.updated_at || this._lastServerUpdatedAt;
+                this._lastSavedPayloadJson = payloadJson;
+                this.setCloudSaveStatus("saved");
+                lastResult = true;
+                continue;
+              }
+              if (previousSavedJson && remoteJson === previousSavedJson) {
+                this._lastServerUpdatedAt = fresh.updated_at || res.updated_at || null;
+                res = await SupabaseService.saveTeacher(
+                  { id: currentTeacherId, data: clonedData },
+                  this._lastServerUpdatedAt
+                );
+              } else {
+                const reloadCloud = confirm(
+                  "⚠️ Conflicto de edición simultánea:\n\n" +
+                  "Se guardaron cambios más recientes en Supabase desde otro dispositivo o sesión.\n\n" +
+                  "• Aceptar: Recargar los datos más recientes de la nube (recomendado).\n" +
+                  "• Cancelar: Mantener tus cambios actuales y sobrescribir la nube."
+                );
+                if (reloadCloud) {
+                  this.data = fresh.data;
+                  this._lastServerUpdatedAt = fresh.updated_at;
+                  this._lastSavedPayloadJson = remoteJson;
+                  this._pendingSave = false;
+                  this._hasUnsavedChanges = false;
+                  this.render();
+                  this.showToast("Datos actualizados desde la nube.", "info");
+                  lastResult = false;
+                  break;
+                }
+                res = await SupabaseService.saveTeacher(
+                  { id: currentTeacherId, data: clonedData },
+                  null
+                );
+              }
+            }
+          }
+
+          if (res && res.ok) {
+            if (res.updated_at) this._lastServerUpdatedAt = res.updated_at;
+            this._lastSavedPayloadJson = payloadJson;
+            lastResult = true;
+          } else {
+            if (res && res.reason === "unauthorized") {
+              alert("Tu sesión en el servidor ha expirado. Inicia sesión nuevamente para continuar guardando.");
+              await this.logout();
+              lastResult = false;
+              break;
+            }
+            lastResult = false;
+          }
+
+          nextForce = this._pendingForceOverwrite;
+        } while (this._pendingSave);
+
+        return lastResult;
+      } finally {
+        this._isSaving = false;
+        this._savePromise = null;
       }
-      return false;
-    } finally {
-      this._isSaving = false;
-    }
+    })();
+
+    return await this._savePromise;
   },
 
-  // Mini-guardado forzado e instantáneo (sin espera de debounce)
+  // Mini-guardado forzado e instantáneo solo cuando existen cambios pendientes
   flushSave: async function() {
+    const hadTimer = !!this.saveTimer;
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
+    if (!hadTimer && !this._hasUnsavedChanges) {
+      if (this._savePromise) {
+        await this._savePromise;
+      }
+      return;
+    }
     await this.saveData();
   },
 
-  // Manejo de salida o desenfoque de celda (blur): confirma y mini-guarda de inmediato
+  // Manejo de salida o desenfoque de celda (blur): confirma y mini-guarda si hubo edición
   handleCellBlur: function(inputEl) {
     if (inputEl) {
       inputEl.classList.remove("cell-saved-flash");
@@ -451,11 +534,13 @@ const App = {
 
   // Guardado optimizado con debounce para escritura fluida en celdas (directo a Supabase)
   debouncedSave: function() {
+    this._hasUnsavedChanges = true;
     this.setCloudSaveStatus("saving");
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(async () => {
+      this.saveTimer = null;
       await this.saveData();
-    }, 300);
+    }, 350);
   },
 
   clearCurrentCourseData: function() {
@@ -6002,6 +6087,8 @@ const App = {
     this.supervisingTeacherId = teacherId;
     this.supervisionEditMode = true;
     this.data = teacherData || { courses: [], students: [] };
+    this._lastSavedPayloadJson = JSON.stringify(this.data);
+    this._hasUnsavedChanges = false;
     this.selectedSemester = null;
     this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
     this.activeTab = "gradebook";
@@ -6015,11 +6102,12 @@ const App = {
         (res) => {
           if (this.isSupervising && this.supervisingTeacherId === teacherId && res && res.data) {
             const isTyping = document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
-            if (!isTyping && !this._isSaving && !this.saveTimer) {
+            if (!isTyping && !this._isSaving && !this.saveTimer && !this._hasUnsavedChanges) {
               const idx = this.teachers.findIndex(t => t.id === teacherId);
               if (idx !== -1) this.teachers[idx].data = res.data;
               this.data = res.data;
               this._lastServerUpdatedAt = res.updated_at || this._lastServerUpdatedAt;
+              this._lastSavedPayloadJson = JSON.stringify(res.data);
               if (this.activeTab === "gradebook") {
                 const container = document.getElementById("tabContentContainer");
                 if (container) this.renderGradebook(container);
