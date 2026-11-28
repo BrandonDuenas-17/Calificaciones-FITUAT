@@ -11,10 +11,57 @@ const SESSION_TOKEN_KEY = "fiuat_server_session_token";
 const SupabaseService = {
   client: null,
   isInitialized: false,
-  isOnline: navigator.onLine,
+  isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
   status: "connecting", // "connected", "offline", "error"
   lastError: null,
   _pollInterval: null,
+  _reconnectTimer: null,
+  _listenersBound: false,
+
+  _rpcWithTimeout: async function(fnName, params = {}, timeoutMs = 12000) {
+    if (!this.client) {
+      return { data: null, error: new Error("Cliente Supabase no inicializado") };
+    }
+    let timer = null;
+    try {
+      const rpcPromise = this.client.rpc(fnName, params);
+      const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Tiempo de espera agotado (${Math.round(timeoutMs / 1000)}s) en la red Wi-Fi`)), timeoutMs);
+      });
+      return await Promise.race([rpcPromise, timeoutPromise]);
+    } catch (err) {
+      return { data: null, error: err };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  },
+
+  scheduleReconnect: function() {
+    if (this._reconnectTimer || typeof window === "undefined") return;
+    this._reconnectTimer = setInterval(async () => {
+      if (this.isInitialized && this.status === "connected") {
+        clearInterval(this._reconnectTimer);
+        this._reconnectTimer = null;
+        return;
+      }
+      await this.checkConnection();
+    }, 5000);
+  },
+
+  stopReconnect: function() {
+    if (this._reconnectTimer) {
+      clearInterval(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+  },
+
+  ensureConnected: async function() {
+    if (this.isInitialized && this.client) return true;
+    if (this.client) {
+      return await this.checkConnection();
+    }
+    return await this.init();
+  },
 
   getSessionToken: function() {
     try {
@@ -42,52 +89,52 @@ const SupabaseService = {
     }
 
     try {
-      this.client = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false
-        }
-      });
+      if (!this.client) {
+        this.client = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false
+          }
+        });
+      }
 
-      // Health-check fail-fast (3.5s) sin consultar la tabla teachers
-      const probePromise = this.client.rpc("ping_service");
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Supabase connection timeout (3.5s)")), 3500)
-      );
+      if (!this._listenersBound && typeof window !== "undefined" && window.addEventListener) {
+        this._listenersBound = true;
+        window.addEventListener("online", () => {
+          this.isOnline = true;
+          this.checkConnection();
+        });
 
-      const probeResult = await Promise.race([probePromise, timeoutPromise]).catch(err => ({
-        error: err,
-        data: null
-      }));
+        window.addEventListener("offline", () => {
+          this.isOnline = false;
+          this.status = "offline";
+          this.notifyStatusChange();
+          this.scheduleReconnect();
+        });
+      }
+
+      // Health-check fail-fast (5s) sin consultar la tabla teachers
+      const probeResult = await this._rpcWithTimeout("ping_service", {}, 5000);
 
       // Si ping_service aún no existe en BD (PGRST202), el servidor respondió y está en línea
       const isSchemaPending = probeResult.error && (probeResult.error.code === "PGRST202" || String(probeResult.error.message || "").includes("ping_service"));
       if (probeResult.error && !isSchemaPending) {
-        console.warn("Supabase no disponible o proyecto en pausa:", probeResult.error.message || probeResult.error);
+        console.warn("Supabase no disponible o portal Wi-Fi pendiente:", probeResult.error.message || probeResult.error);
         this.isInitialized = false;
         this.status = "offline";
+        this.scheduleReconnect();
         return false;
       }
 
       this.isInitialized = true;
-      this.status = navigator.onLine ? "connected" : "offline";
-
-      window.addEventListener("online", () => {
-        this.isOnline = true;
-        this.checkConnection();
-      });
-
-      window.addEventListener("offline", () => {
-        this.isOnline = false;
-        this.status = "offline";
-        this.notifyStatusChange();
-      });
-
+      this.status = (typeof navigator === "undefined" || navigator.onLine) ? "connected" : "offline";
+      this.stopReconnect();
       return true;
     } catch (err) {
       console.error("Error al inicializar Supabase Client:", err);
       this.isInitialized = false;
       this.status = "error";
+      this.scheduleReconnect();
       return false;
     }
   },
@@ -102,14 +149,17 @@ const SupabaseService = {
   login: async function(identifier, password) {
     this.lastError = null;
     if (!this.isInitialized || !this.client) {
-      return { success: false, reason: "connection_error" };
+      const connected = await this.ensureConnected();
+      if (!connected || !this.client) {
+        return { success: false, reason: "connection_error" };
+      }
     }
 
     try {
-      const { data, error } = await this.client.rpc("login_teacher", {
+      const { data, error } = await this._rpcWithTimeout("login_teacher", {
         p_identifier: (identifier || "").trim().toLowerCase(),
         p_password: password || ""
-      });
+      }, 12000);
 
       if (error) {
         if (error.code === "PGRST202" || String(error.message || "").includes("login_teacher")) {
@@ -124,9 +174,15 @@ const SupabaseService = {
       if (!row) {
         return { success: false, reason: "user_not_found" };
       }
+      if (typeof row !== "object" || typeof row.success !== "boolean") {
+        this.lastError = "La red Wi-Fi interceptó la respuesta (verifica el portal cautivo de la UAT).";
+        return { success: false, reason: "connection_error", message: this.lastError };
+      }
 
       if (row.success && row.session_token && row.id) {
         this.setSessionToken(row.session_token);
+        this.status = "connected";
+        this.notifyStatusChange();
         return {
           success: true,
           sessionToken: row.session_token,
@@ -159,14 +215,22 @@ const SupabaseService = {
   // Validar sesión existente contra la tabla teacher_sessions en Postgres
   validateSession: async function() {
     const token = this.getSessionToken();
-    if (!token || !this.isInitialized || !this.client) return null;
+    if (!token) return null;
+    if (!this.isInitialized || !this.client) {
+      const connected = await this.ensureConnected();
+      if (!connected || !this.client) return null;
+    }
 
     try {
-      const { data, error } = await this.client.rpc("validate_session", { p_token: token });
+      const { data, error } = await this._rpcWithTimeout("validate_session", { p_token: token }, 10000);
       if (error) return null;
 
       const row = Array.isArray(data) ? data[0] : data;
-      if (!row || !row.valid || !row.id) {
+      if (!row || typeof row !== "object" || typeof row.valid !== "boolean") {
+        // Respuesta interceptada por portal cautivo o corte temporal: NO borrar token válido
+        return null;
+      }
+      if (!row.valid || !row.id) {
         this.setSessionToken("");
         return null;
       }
@@ -191,12 +255,13 @@ const SupabaseService = {
   // Revocar sesión en servidor
   logout: async function() {
     this.stopListening();
+    this.stopReconnect();
     const token = this.getSessionToken();
     this.setSessionToken("");
     if (!token || !this.isInitialized || !this.client) return true;
 
     try {
-      await this.client.rpc("logout_teacher", { p_token: token });
+      await this._rpcWithTimeout("logout_teacher", { p_token: token }, 5000);
     } catch (e) {}
     return true;
   },
@@ -204,16 +269,20 @@ const SupabaseService = {
   // Obtener resumen ligero de docentes (Solo Coordinación; sin descargar 18,702 registros)
   fetchAdminTeachersSummary: async function() {
     const token = this.getSessionToken();
-    if (!token || !this.isInitialized || !this.client) return null;
+    if (!token) return null;
+    if (!this.isInitialized || !this.client) {
+      await this.ensureConnected();
+    }
+    if (!this.isInitialized || !this.client) return null;
 
     try {
-      const { data, error } = await this.client.rpc("get_admin_teachers_summary", { p_token: token });
-      if (error) {
-        console.error("Error al obtener resumen docente:", error);
+      const { data, error } = await this._rpcWithTimeout("get_admin_teachers_summary", { p_token: token }, 12000);
+      if (error || !Array.isArray(data)) {
+        if (error) console.error("Error al obtener resumen docente:", error);
         return null;
       }
 
-      return (data || []).map(row => ({
+      return data.map(row => ({
         id: row.id,
         nombre: row.nombre,
         usuario: row.usuario,
@@ -235,13 +304,17 @@ const SupabaseService = {
   // Descarga quirúrgica de calificaciones de un docente (solo dueño o admin)
   fetchTeacherData: async function(teacherId) {
     const token = this.getSessionToken();
-    if (!token || !this.isInitialized || !this.client || !teacherId) return null;
+    if (!token || !teacherId) return null;
+    if (!this.isInitialized || !this.client) {
+      await this.ensureConnected();
+    }
+    if (!this.isInitialized || !this.client) return null;
 
     try {
-      const { data, error } = await this.client.rpc("get_teacher_data", {
+      const { data, error } = await this._rpcWithTimeout("get_teacher_data", {
         p_token: token,
         p_teacher_id: teacherId
-      });
+      }, 12000);
 
       if (error) {
         console.error("Error al obtener calificaciones del docente:", error);
@@ -249,7 +322,7 @@ const SupabaseService = {
       }
 
       const row = Array.isArray(data) ? data[0] : data;
-      if (!row || !row.ok) return null;
+      if (!row || typeof row !== "object" || !row.ok) return null;
 
       return {
         data: row.data || { courses: [], students: [] },
@@ -266,9 +339,20 @@ const SupabaseService = {
     if (!teacher || !teacher.id) return { ok: false, reason: "invalid_teacher" };
     const token = this.getSessionToken();
 
-    if (!token || !this.isInitialized || !this.client) {
+    if (!token) {
       if (typeof App !== "undefined" && App.setCloudSaveStatus) {
         App.setCloudSaveStatus("error", "Sin sesión activa en la nube");
+      }
+      return { ok: false, reason: "offline" };
+    }
+
+    if (!this.isInitialized || !this.client) {
+      await this.ensureConnected();
+    }
+    if (!this.isInitialized || !this.client) {
+      this.scheduleReconnect();
+      if (typeof App !== "undefined" && App.setCloudSaveStatus) {
+        App.setCloudSaveStatus("error", "Reconectando con la red Wi-Fi...");
       }
       return { ok: false, reason: "offline" };
     }
@@ -279,22 +363,21 @@ const SupabaseService = {
       }
 
       const payloadData = teacher.data || { courses: [], students: [] };
-      const { data, error } = await this.client.rpc("save_teacher_grades", {
+      const { data, error } = await this._rpcWithTimeout("save_teacher_grades", {
         p_token: token,
         p_teacher_id: teacher.id,
         p_data: payloadData,
         p_expected_updated_at: expectedUpdatedAt || null
-      });
+      }, 12000);
 
       if (error) throw error;
 
       const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error("Respuesta vacía del servidor");
+      if (!row || typeof row !== "object" || (typeof row.ok !== "boolean" && typeof row.conflict !== "boolean")) {
+        throw new Error("Respuesta inválida de la red Wi-Fi (verifica tu conexión o portal cautivo)");
+      }
 
       if (row.conflict) {
-        if (typeof App !== "undefined" && App.setCloudSaveStatus) {
-          App.setCloudSaveStatus("error", "Conflicto: otro dispositivo guardó cambios más recientes");
-        }
         return { ok: false, conflict: true, updated_at: row.updated_at, reason: "conflict" };
       }
 
@@ -307,6 +390,7 @@ const SupabaseService = {
       }
 
       this.status = "connected";
+      this.stopReconnect();
       this.notifyStatusChange();
       if (typeof App !== "undefined" && App.setCloudSaveStatus) {
         App.setCloudSaveStatus("saved");
@@ -314,8 +398,9 @@ const SupabaseService = {
       return { ok: true, conflict: false, updated_at: row.updated_at };
     } catch (error) {
       console.error("Error al guardar calificaciones en Supabase:", error);
-      this.status = navigator.onLine ? "error" : "offline";
+      this.status = (typeof navigator !== "undefined" && navigator.onLine) ? "error" : "offline";
       this.notifyStatusChange();
+      this.scheduleReconnect();
       if (typeof App !== "undefined" && App.setCloudSaveStatus) {
         App.setCloudSaveStatus("error", error.message);
       }
@@ -498,16 +583,13 @@ const SupabaseService = {
   checkConnection: async function() {
     if (!this.client) return false;
     try {
-      const probePromise = this.client.rpc("ping_service");
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), 3000)
-      );
-      const probeResult = await Promise.race([probePromise, timeoutPromise]).catch(err => ({ error: err }));
-      const isOk = !probeResult.error || probeResult.error.code === "PGRST202";
+      const probeResult = await this._rpcWithTimeout("ping_service", {}, 4000);
+      const isOk = (!probeResult.error && probeResult.data === true) || (probeResult.error && probeResult.error.code === "PGRST202");
       if (isOk) {
         const wasOffline = !this.isInitialized || this.status !== "connected";
         this.isInitialized = true;
         this.status = "connected";
+        this.stopReconnect();
         this.notifyStatusChange();
         if (wasOffline && typeof App !== "undefined" && App.onCloudReconnected) {
           App.onCloudReconnected();

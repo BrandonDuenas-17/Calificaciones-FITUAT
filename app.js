@@ -37,6 +37,8 @@ const App = {
   _pendingSave: false,
   _pendingForceOverwrite: false,
   _hasUnsavedChanges: false,
+  _autoRetryTimer: null,
+  _lastFocusSyncAt: 0,
   mustChangePassword: false,
   _mustChangePasswordModal: false,
   activeCourseId: "",
@@ -174,8 +176,260 @@ const App = {
   onCloudReconnected: async function() {
     this.updateCloudStatusBadge();
     this.showToast("🟢 Conexión con Supabase restablecida exitosamente", "success");
+    if (this.currentUser && this.data) {
+      if (this._hasUnsavedChanges || this.saveTimer || this._pendingSave) {
+        await this.saveData();
+      } else {
+        await this.syncFromCloudIfNewer(true);
+      }
+      return;
+    }
     await this.loadDataFromCloud();
     this.render();
+  },
+
+  scheduleAutoRetrySave: function() {
+    if (this._autoRetryTimer || typeof window === "undefined") return;
+    this._autoRetryTimer = setInterval(async () => {
+      if (!this.currentUser || !this._hasUnsavedChanges) {
+        this.stopAutoRetrySave();
+        return;
+      }
+      if (!this._isSaving) {
+        const ok = await this.saveData();
+        if (ok) {
+          this.stopAutoRetrySave();
+        }
+      }
+    }, 4000);
+  },
+
+  stopAutoRetrySave: function() {
+    if (this._autoRetryTimer) {
+      clearInterval(this._autoRetryTimer);
+      this._autoRetryTimer = null;
+    }
+  },
+
+  // Sincronización silenciosa al volver a la pestaña (previene conflictos entre pestañas o salones)
+  syncFromCloudIfNewer: async function(forceCheck = false) {
+    if (!this.currentUser || !this.data) return false;
+    if (this._hasUnsavedChanges || this.saveTimer || this._pendingSave) {
+      if (!this._isSaving) {
+        await this.saveData();
+      }
+      return false;
+    }
+    if (this._isSaving) return false;
+
+    const now = Date.now();
+    if (!forceCheck && now - this._lastFocusSyncAt < 4000) return false;
+    this._lastFocusSyncAt = now;
+
+    const targetId = this.getWorkingTeacherId();
+    if (!targetId || typeof SupabaseService === "undefined") return false;
+
+    const fresh = await SupabaseService.fetchTeacherData(targetId);
+    if (!fresh || !fresh.data) return false;
+
+    // Re-verificar que el docente no haya empezado a escribir mientras se consultaba
+    if (this._hasUnsavedChanges || this._isSaving || this.saveTimer) return false;
+
+    const remoteJson = JSON.stringify(fresh.data);
+    if (fresh.updated_at && fresh.updated_at !== this._lastServerUpdatedAt) {
+      this._lastServerUpdatedAt = fresh.updated_at;
+      if (remoteJson !== this._lastSavedPayloadJson) {
+        this.data = fresh.data;
+        this._lastSavedPayloadJson = remoteJson;
+        if (Array.isArray(this.teachers)) {
+          const idx = this.teachers.findIndex(t => t.id === targetId);
+          if (idx !== -1) this.teachers[idx].data = fresh.data;
+        }
+        const isTyping = typeof document !== "undefined" && document.activeElement &&
+          (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
+        if (!isTyping) {
+          this.render();
+        }
+        return true;
+      }
+    }
+    return false;
+  },
+
+  // Fusión 3-vías no destructiva (combina cambios locales y remotos sin perder calificaciones ni lanzar popups)
+  mergeTeacherData: function(baseData, localData, remoteData) {
+    if (!remoteData || typeof remoteData !== "object") return JSON.parse(JSON.stringify(localData || { courses: [], students: [] }));
+    if (!localData || typeof localData !== "object") return JSON.parse(JSON.stringify(remoteData));
+
+    const clone = (v) => JSON.parse(JSON.stringify(v));
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const merged = clone(remoteData);
+    const base = (baseData && typeof baseData === "object") ? baseData : null;
+
+    // 1. Fusionar Directorio de Alumnos (students)
+    const baseStudentsMap = {};
+    ((base && base.students) || []).forEach(s => { if (s && s.matricula) baseStudentsMap[s.matricula] = s; });
+    const localStudentsMap = {};
+    (localData.students || []).forEach(s => { if (s && s.matricula) localStudentsMap[s.matricula] = s; });
+
+    const mergedStudentsMap = {};
+    (merged.students || []).forEach(s => {
+      if (!s || !s.matricula) return;
+      // Si fue eliminado explícitamente en local (existía en base y ya no está en local), omitirlo
+      if (base && baseStudentsMap[s.matricula] && !localStudentsMap[s.matricula]) return;
+      mergedStudentsMap[s.matricula] = s;
+    });
+
+    (localData.students || []).forEach(localS => {
+      if (!localS || !localS.matricula) return;
+      const baseS = baseStudentsMap[localS.matricula];
+      if (!baseS || !eq(localS, baseS) || !mergedStudentsMap[localS.matricula]) {
+        mergedStudentsMap[localS.matricula] = clone(localS);
+      }
+    });
+    merged.students = Object.values(mergedStudentsMap);
+
+    // 2. Fusionar Materias / Cursos (courses)
+    const baseCoursesMap = {};
+    ((base && base.courses) || []).forEach(c => { if (c && c.id) baseCoursesMap[c.id] = c; });
+    const localCoursesMap = {};
+    (localData.courses || []).forEach(c => { if (c && c.id) localCoursesMap[c.id] = c; });
+
+    const mergedCourses = [];
+    const seenCourseIds = new Set();
+
+    (merged.courses || []).forEach(remoteC => {
+      if (!remoteC || !remoteC.id) return;
+      if (base && baseCoursesMap[remoteC.id] && !localCoursesMap[remoteC.id]) {
+        return; // Curso eliminado explícitamente en local
+      }
+      const localC = localCoursesMap[remoteC.id];
+      if (!localC) {
+        seenCourseIds.add(remoteC.id);
+        mergedCourses.push(remoteC);
+        return;
+      }
+
+      const baseC = baseCoursesMap[remoteC.id] || null;
+      const targetC = clone(remoteC);
+
+      // Propiedades de configuración de la materia
+      [
+        "nombre", "grupo", "periodo", "aula", "unidadesCount",
+        "firmasMaxConfig", "participacionMaxConfig", "gradingWeights",
+        "asistenciaConfig", "asistenciaTotalClasses", "unitDates",
+        "lockedUnits", "_attendanceBlankCleared"
+      ].forEach(prop => {
+        if (localC[prop] !== undefined && (!baseC || !eq(localC[prop], baseC[prop]))) {
+          targetC[prop] = clone(localC[prop]);
+        }
+      });
+
+      // Sesiones de asistencia
+      if (Array.isArray(localC.attendanceSessions) && (!baseC || !eq(localC.attendanceSessions, baseC.attendanceSessions))) {
+        const sessMap = {};
+        (targetC.attendanceSessions || []).forEach(s => { if (s && s.id) sessMap[s.id] = s; });
+        const baseSessMap = {};
+        ((baseC && baseC.attendanceSessions) || []).forEach(s => { if (s && s.id) baseSessMap[s.id] = s; });
+        const localSessMap = {};
+        localC.attendanceSessions.forEach(s => { if (s && s.id) localSessMap[s.id] = s; });
+
+        Object.keys(sessMap).forEach(sId => {
+          if (baseC && baseSessMap[sId] && !localSessMap[sId]) delete sessMap[sId];
+        });
+        localC.attendanceSessions.forEach(s => {
+          if (s && s.id && (!baseSessMap[s.id] || !eq(s, baseSessMap[s.id]) || !sessMap[s.id])) {
+            sessMap[s.id] = clone(s);
+          }
+        });
+        targetC.attendanceSessions = Object.values(sessMap);
+      }
+
+      // Registros de calificaciones de alumnos (records)
+      const baseRecMap = {};
+      ((baseC && baseC.records) || []).forEach(r => { if (r && r.matricula) baseRecMap[r.matricula] = r; });
+      const localRecMap = {};
+      (localC.records || []).forEach(r => { if (r && r.matricula) localRecMap[r.matricula] = r; });
+
+      const mergedRecords = [];
+      const seenMats = new Set();
+
+      (targetC.records || []).forEach(remoteR => {
+        if (!remoteR || !remoteR.matricula) return;
+        if (baseC && baseRecMap[remoteR.matricula] && !localRecMap[remoteR.matricula]) {
+          return; // Alumno dado de baja en local
+        }
+        const localR = localRecMap[remoteR.matricula];
+        if (!localR) {
+          seenMats.add(remoteR.matricula);
+          mergedRecords.push(remoteR);
+          return;
+        }
+
+        const baseR = baseRecMap[remoteR.matricula] || null;
+        const targetR = clone(remoteR);
+
+        // Objetos anidados por unidad o sesión (firmas, examenes, asistencia, faltas, attendanceDays, etc.)
+        [
+          "firmas", "examenes", "asistencia", "faltas",
+          "participacion", "asistenciaAuto", "attendanceDays", "participationDays"
+        ].forEach(mapField => {
+          const lObj = localR[mapField] || {};
+          const bObj = (baseR && baseR[mapField]) ? baseR[mapField] : {};
+          if (!targetR[mapField] || typeof targetR[mapField] !== "object") targetR[mapField] = {};
+          const allKeys = new Set([...Object.keys(lObj), ...Object.keys(bObj)]);
+          allKeys.forEach(k => {
+            const lVal = lObj[k];
+            const bVal = bObj[k];
+            if (baseR) {
+              if (!eq(lVal, bVal)) {
+                if (lVal === undefined) delete targetR[mapField][k];
+                else targetR[mapField][k] = clone(lVal);
+              }
+            } else if (lVal !== undefined && lVal !== null && lVal !== "") {
+              targetR[mapField][k] = clone(lVal);
+            }
+          });
+        });
+
+        // Campos escalares (proyecto, puntosExtra)
+        ["proyecto", "puntosExtra"].forEach(scField => {
+          if (baseR) {
+            if (!eq(localR[scField], baseR[scField])) {
+              targetR[scField] = localR[scField];
+            }
+          } else if (localR[scField] !== undefined && localR[scField] !== null && localR[scField] !== 0) {
+            targetR[scField] = localR[scField];
+          }
+        });
+
+        seenMats.add(remoteR.matricula);
+        mergedRecords.push(targetR);
+      });
+
+      // Agregar alumnos nuevos inscritos localmente
+      (localC.records || []).forEach(localR => {
+        if (localR && localR.matricula && !seenMats.has(localR.matricula)) {
+          seenMats.add(localR.matricula);
+          mergedRecords.push(clone(localR));
+        }
+      });
+
+      targetC.records = mergedRecords;
+      seenCourseIds.add(remoteC.id);
+      mergedCourses.push(targetC);
+    });
+
+    // Agregar cursos nuevos creados localmente
+    (localData.courses || []).forEach(localC => {
+      if (localC && localC.id && !seenCourseIds.has(localC.id)) {
+        seenCourseIds.add(localC.id);
+        mergedCourses.push(clone(localC));
+      }
+    });
+
+    merged.courses = mergedCourses;
+    return merged;
   },
 
   sanitizeTeacher: function(t) {
@@ -243,22 +497,29 @@ const App = {
       const fetched = await SupabaseService.fetchTeacherData(cleanTeacher.id);
       let teacherData = fetched ? fetched.data : null;
       this._lastServerUpdatedAt = fetched ? fetched.updated_at : null;
+      let hasDirtyLocalBuffer = false;
 
-      if (!teacherData) {
-        try {
-          const bufStr = sessionStorage.getItem("fiuat_active_grades_buffer_" + cleanTeacher.id);
-          if (bufStr) {
-            const bufObj = JSON.parse(bufStr);
-            if (bufObj && bufObj.data) teacherData = bufObj.data;
+      try {
+        const bufStr = sessionStorage.getItem("fiuat_active_grades_buffer_" + cleanTeacher.id);
+        if (bufStr) {
+          const bufObj = JSON.parse(bufStr);
+          if (bufObj && bufObj.data) {
+            if (!teacherData) {
+              teacherData = bufObj.data;
+            } else if (bufObj.dirty && JSON.stringify(bufObj.data) !== JSON.stringify(teacherData)) {
+              // Preservar calificaciones capturadas durante un microcorte de Wi-Fi antes de recargar
+              teacherData = this.mergeTeacherData(null, bufObj.data, teacherData);
+              hasDirtyLocalBuffer = true;
+            }
           }
-        } catch (e) {}
-      }
+        }
+      } catch (e) {}
       if (!teacherData) teacherData = { courses: [], students: [] };
 
       if (Array.isArray(teacherData.courses)) {
         teacherData.courses.forEach((c, idx) => {
           if (!c.grupo) c.grupo = "Grupo " + String.fromCharCode(65 + (idx % 26));
-          if (!c.id) c.id = "curso-" + Date.now() + "-" + idx;
+          if (!c.id) c.id = "curso-oficial-" + idx;
         });
       }
 
@@ -266,13 +527,18 @@ const App = {
       _setAuthenticatedUser(activeTeacher);
       this.teachers = [activeTeacher];
       this.data = teacherData;
-      this._lastSavedPayloadJson = JSON.stringify(teacherData);
-      this._hasUnsavedChanges = false;
+      this._lastSavedPayloadJson = hasDirtyLocalBuffer && fetched && fetched.data
+        ? JSON.stringify(fetched.data)
+        : JSON.stringify(teacherData);
+      this._hasUnsavedChanges = hasDirtyLocalBuffer;
 
       if (!this.data.courses || !this.data.courses.some(c => c.id === this.activeCourseId)) {
         this.activeCourseId = (this.data.courses && this.data.courses[0]) ? this.data.courses[0].id : "";
       }
       this.activeTab = "gradebook";
+      if (hasDirtyLocalBuffer) {
+        this.debouncedSave();
+      }
     }
 
     this.startInactivityTimer();
@@ -389,13 +655,14 @@ const App = {
           const currentTeacherId = this.getWorkingTeacherId();
           if (!currentTeacherId || !this.data) break;
 
-          const clonedData = JSON.parse(JSON.stringify(this.data));
-          const payloadJson = JSON.stringify(clonedData);
+          let clonedData = JSON.parse(JSON.stringify(this.data));
+          let payloadJson = JSON.stringify(clonedData);
 
-          // Respaldo de resiliencia local en sessionStorage (sin credenciales sensibles)
+          // Respaldo de resiliencia local en sessionStorage (marcado dirty hasta confirmar en Supabase)
           try {
             sessionStorage.setItem("fiuat_active_grades_buffer_" + currentTeacherId, JSON.stringify({
               data: clonedData,
+              dirty: true,
               timestamp: Date.now()
             }));
           } catch (e) {}
@@ -413,13 +680,31 @@ const App = {
             _setAuthenticatedUser(Object.assign({}, this.currentUser, { data: clonedData }));
           }
 
-          if (typeof SupabaseService === "undefined" || !SupabaseService.isInitialized) {
+          if (typeof SupabaseService === "undefined") {
+            this._hasUnsavedChanges = true;
             lastResult = false;
             break;
           }
 
+          if (!SupabaseService.isInitialized) {
+            const reconnected = SupabaseService.ensureConnected ? await SupabaseService.ensureConnected() : false;
+            if (!reconnected) {
+              this._hasUnsavedChanges = true;
+              this.scheduleAutoRetrySave();
+              lastResult = false;
+              break;
+            }
+          }
+
           // Omitir petición de red si el contenido no ha cambiado respecto al último guardado confirmado
           if (!nextForce && this._lastServerUpdatedAt && payloadJson === this._lastSavedPayloadJson) {
+            try {
+              sessionStorage.setItem("fiuat_active_grades_buffer_" + currentTeacherId, JSON.stringify({
+                data: clonedData,
+                dirty: false,
+                timestamp: Date.now()
+              }));
+            } catch (e) {}
             this.setCloudSaveStatus("saved");
             lastResult = true;
             continue;
@@ -431,8 +716,7 @@ const App = {
             nextForce ? null : this._lastServerUpdatedAt
           );
 
-          // Si el servidor reporta conflicto, verificar si realmente cambiaron las calificaciones en otro dispositivo
-          // o si fue un falso positivo por latencia/reintento de red Wi-Fi o cambio de contraseña en esta misma sesión
+          // Si el servidor reporta conflicto, resolver automáticamente mediante verificación y fusión 3-vías no destructiva
           if (res && res.conflict) {
             const fresh = await SupabaseService.fetchTeacherData(currentTeacherId);
             if (fresh && fresh.data) {
@@ -440,6 +724,13 @@ const App = {
               if (remoteJson === payloadJson) {
                 this._lastServerUpdatedAt = fresh.updated_at || res.updated_at || this._lastServerUpdatedAt;
                 this._lastSavedPayloadJson = payloadJson;
+                try {
+                  sessionStorage.setItem("fiuat_active_grades_buffer_" + currentTeacherId, JSON.stringify({
+                    data: clonedData,
+                    dirty: false,
+                    timestamp: Date.now()
+                  }));
+                } catch (e) {}
                 this.setCloudSaveStatus("saved");
                 lastResult = true;
                 continue;
@@ -451,34 +742,58 @@ const App = {
                   this._lastServerUpdatedAt
                 );
               } else {
-                const reloadCloud = confirm(
-                  "⚠️ Conflicto de edición simultánea:\n\n" +
-                  "Se guardaron cambios más recientes en Supabase desde otro dispositivo o sesión.\n\n" +
-                  "• Aceptar: Recargar los datos más recientes de la nube (recomendado).\n" +
-                  "• Cancelar: Mantener tus cambios actuales y sobrescribir la nube."
-                );
-                if (reloadCloud) {
-                  this.data = fresh.data;
-                  this._lastServerUpdatedAt = fresh.updated_at;
-                  this._lastSavedPayloadJson = remoteJson;
-                  this._pendingSave = false;
-                  this._hasUnsavedChanges = false;
-                  this.render();
-                  this.showToast("Datos actualizados desde la nube.", "info");
-                  lastResult = false;
-                  break;
+                // Fusión inteligente 3-vías: preserva los cambios remotos y aplica encima las celdas editadas localmente
+                let baseData = null;
+                if (previousSavedJson) {
+                  try { baseData = JSON.parse(previousSavedJson); } catch (e) {}
                 }
+                const mergedData = this.mergeTeacherData(baseData, clonedData, fresh.data);
+                clonedData = mergedData;
+                payloadJson = JSON.stringify(mergedData);
+                this.data = JSON.parse(payloadJson);
+                this._lastServerUpdatedAt = fresh.updated_at || res.updated_at || null;
+
+                if (Array.isArray(this.teachers)) {
+                  const tIdx = this.teachers.findIndex(t => t.id === currentTeacherId);
+                  if (tIdx !== -1) {
+                    this.teachers[tIdx] = Object.assign({}, this.teachers[tIdx], { data: JSON.parse(payloadJson) });
+                  }
+                }
+                if (!this.isSupervising && this.currentUser && this.currentUser.id === currentTeacherId) {
+                  _setAuthenticatedUser(Object.assign({}, this.currentUser, { data: JSON.parse(payloadJson) }));
+                }
+
                 res = await SupabaseService.saveTeacher(
                   { id: currentTeacherId, data: clonedData },
-                  null
+                  this._lastServerUpdatedAt
                 );
+
+                const isTyping = typeof document !== "undefined" && document.activeElement &&
+                  (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
+                if (!isTyping) {
+                  this.render();
+                }
               }
+            } else {
+              // Si falló la descarga de verificación por microcorte de red, reintentar sin perder cambios
+              this._hasUnsavedChanges = true;
+              this.scheduleAutoRetrySave();
+              lastResult = false;
+              break;
             }
           }
 
           if (res && res.ok) {
             if (res.updated_at) this._lastServerUpdatedAt = res.updated_at;
             this._lastSavedPayloadJson = payloadJson;
+            this.stopAutoRetrySave();
+            try {
+              sessionStorage.setItem("fiuat_active_grades_buffer_" + currentTeacherId, JSON.stringify({
+                data: clonedData,
+                dirty: false,
+                timestamp: Date.now()
+              }));
+            } catch (e) {}
             lastResult = true;
           } else {
             if (res && res.reason === "unauthorized") {
@@ -487,6 +802,9 @@ const App = {
               lastResult = false;
               break;
             }
+            // Error transitorio de red Wi-Fi: conservar bandera dirty y programar reintento automático
+            this._hasUnsavedChanges = true;
+            this.scheduleAutoRetrySave();
             lastResult = false;
           }
 
@@ -1862,7 +2180,7 @@ const App = {
         else if (isLimiteBaja) tema += ' (Límite Baja)';
 
         const sess = {
-          id: 'sess_' + dateStr.replace(/-/g, '') + '_' + Math.random().toString(36).substring(2, 6),
+          id: 'sess_uat_' + dateStr.replace(/-/g, ''),
           unidad: assignedUnit,
           fecha: dateStr,
           tema: tema,
@@ -1890,7 +2208,7 @@ const App = {
           else if (isLimiteBaja) tema += ' (Límite Baja)';
 
           const sess = {
-            id: 'sess_' + dateStr.replace(/-/g, '') + '_' + Math.random().toString(36).substring(2, 6),
+            id: 'sess_uat_' + dateStr.replace(/-/g, ''),
             unidad: u,
             fecha: dateStr,
             tema: tema,
@@ -1913,7 +2231,9 @@ const App = {
       this.recalculateAttendanceForUnit(course, u);
     }
 
-    this.debouncedSave();
+    if (force && (!this.isSupervising || this.supervisionEditMode)) {
+      this.debouncedSave();
+    }
     return true;
   },
 
@@ -5994,10 +6314,14 @@ const App = {
       return;
     }
 
-    if (typeof SupabaseService === "undefined" || !SupabaseService.isInitialized) {
+    if (typeof SupabaseService === "undefined") {
       restoreBtn();
       this.showLoginError("No hay conexión activa con el servidor institucional en la nube (Supabase). Verifica tu conexión a internet e intenta de nuevo.");
       return;
+    }
+
+    if (!SupabaseService.isInitialized && SupabaseService.ensureConnected) {
+      await SupabaseService.ensureConnected();
     }
 
     const res = await SupabaseService.login(term, password);
@@ -6028,13 +6352,15 @@ const App = {
 
   logout: async function() {
     this.stopInactivityTimer();
+    this.stopAutoRetrySave();
     const leavingTeacherId = this.getWorkingTeacherId();
     try {
       await this.flushSave();
     } catch (e) {
       console.error("Error al guardar calificaciones antes del logout:", e);
     }
-    if (typeof SupabaseService !== "undefined") {
+    const stillDirty = !!this._hasUnsavedChanges;
+    if (typeof SupabaseService !== "undefined" && typeof SupabaseService.logout === "function") {
       await SupabaseService.logout();
     }
     _setAuthenticatedUser(null);
@@ -6043,10 +6369,15 @@ const App = {
     this.supervisingTeacherId = null;
     this.data = null;
     this._lastServerUpdatedAt = null;
+    this._lastSavedPayloadJson = null;
+    this._hasUnsavedChanges = false;
+    this._pendingSave = false;
+    this._pendingForceOverwrite = false;
     this.mustChangePassword = false;
     this._mustChangePasswordModal = false;
     this.closeChangePasswordModal(true);
-    if (leavingTeacherId) {
+    // Si el guardado final se completó, limpiar buffer local; si no había Wi-Fi, conservarlo para auto-recuperación al volver a entrar
+    if (leavingTeacherId && !stillDirty) {
       try { sessionStorage.removeItem("fiuat_active_grades_buffer_" + leavingTeacherId); } catch (e) {}
     }
     const dropdown = document.getElementById("teacherDropdown");
@@ -6272,17 +6603,22 @@ const App = {
       }, { passive: true });
     });
 
-    // Blindaje reactivo: guardar al ocultar pestaña y advertir si hay cambios pendientes al cerrar
+    // Blindaje reactivo: guardar al ocultar pestaña, sincronizar al volver y advertir si hay cambios pendientes al cerrar
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") {
         App.flushSave();
+      } else if (document.visibilityState === "visible") {
+        App.syncFromCloudIfNewer();
       }
+    });
+    window.addEventListener("focus", () => {
+      App.syncFromCloudIfNewer();
     });
     window.addEventListener("pagehide", () => {
       App.flushSave();
     });
     window.addEventListener("beforeunload", (e) => {
-      if (App.saveTimer !== null || App._isSaving) {
+      if (App.saveTimer !== null || App._isSaving || App._hasUnsavedChanges) {
         App.flushSave();
         e.preventDefault();
         e.returnValue = "";

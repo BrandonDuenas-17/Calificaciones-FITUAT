@@ -18,7 +18,7 @@
   <!-- Invalidador proactivo de caché: fuerza refresco inmediato si el cliente tiene código desfasado -->
   <script>
     (function() {
-      const CURRENT_APP_VERSION = "2026.11.27.v74";
+      const CURRENT_APP_VERSION = "2026.11.27.v75";
       const storedVersion = localStorage.getItem("fiuat_client_version");
       if (storedVersion !== CURRENT_APP_VERSION) {
         localStorage.setItem("fiuat_client_version", CURRENT_APP_VERSION);
@@ -31,7 +31,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=74">
+  <link rel="stylesheet" href="styles.css?v=75">
   <!-- SheetJS para generación de archivos Excel (.xlsx) nativos -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
 </head>
@@ -785,11 +785,11 @@
 
   <!-- Supabase JS Client v2 (Nativo para navegador) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-  <script src="math_engine.js?v=74"></script>
-  <script src="supabase_service.js?v=74"></script>
-  <script src="exporter.js?v=74"></script>
-  <script src="app.js?v=74"></script>
-  <script src="attendance_importer.js?v=74"></script>
-  <script src="admin_panel.js?v=74"></script>
+  <script src="math_engine.js?v=75"></script>
+  <script src="supabase_service.js?v=75"></script>
+  <script src="exporter.js?v=75"></script>
+  <script src="app.js?v=75"></script>
+  <script src="attendance_importer.js?v=75"></script>
+  <script src="admin_panel.js?v=75"></script>
 </body>
 </html>
